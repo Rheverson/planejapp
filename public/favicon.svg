@@ -1,0 +1,17 @@
+<svg width="300" height="300" viewBox="0 0 300 300" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- O fundo azul com cantos arredondados -->
+  <rect width="300" height="300" rx="20" fill="#235ee7"/>
+  
+  <!-- A letra 'P' branca, centralizada e em negrito -->
+  <text 
+    x="50%" 
+    y="50%" 
+    dominant-baseline="central" 
+    text-anchor="middle" 
+    fill="white" 
+    font-size="180" 
+    font-weight="700" 
+    font-family="Arial, Helvetica, sans-serif">
+    P
+  </text>
+</svg>

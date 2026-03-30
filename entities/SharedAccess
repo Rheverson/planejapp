@@ -1,0 +1,72 @@
+{
+  "name": "SharedAccess",
+  "type": "object",
+  "properties": {
+    "shared_with_email": {
+      "type": "string",
+      "description": "Email da pessoa com quem est\u00e1 compartilhando"
+    },
+    "relationship_type": {
+      "type": "string",
+      "enum": [
+        "esposa",
+        "esposo",
+        "namorada",
+        "namorado",
+        "noiva",
+        "noivo",
+        "irmao",
+        "irma",
+        "pai",
+        "mae",
+        "filho",
+        "filha",
+        "outro"
+      ],
+      "description": "Tipo de relacionamento"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "accepted",
+        "rejected"
+      ],
+      "default": "pending",
+      "description": "Status do compartilhamento"
+    },
+    "permissions": {
+      "type": "object",
+      "properties": {
+        "view_transactions": {
+          "type": "boolean",
+          "default": true
+        },
+        "add_transactions": {
+          "type": "boolean",
+          "default": true
+        },
+        "edit_transactions": {
+          "type": "boolean",
+          "default": false
+        },
+        "delete_transactions": {
+          "type": "boolean",
+          "default": false
+        },
+        "view_accounts": {
+          "type": "boolean",
+          "default": true
+        },
+        "manage_accounts": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    }
+  },
+  "required": [
+    "shared_with_email",
+    "relationship_type"
+  ]
+}

@@ -1,0 +1,37 @@
+{
+  "name": "CategoryPattern",
+  "type": "object",
+  "properties": {
+    "keyword": {
+      "type": "string",
+      "description": "Palavra-chave ou padr\u00e3o identificado"
+    },
+    "category": {
+      "type": "string",
+      "description": "Categoria associada"
+    },
+    "transaction_type": {
+      "type": "string",
+      "enum": [
+        "income",
+        "expense"
+      ],
+      "description": "Tipo de transa\u00e7\u00e3o"
+    },
+    "confidence": {
+      "type": "number",
+      "default": 1,
+      "description": "N\u00edvel de confian\u00e7a baseado em uso"
+    },
+    "usage_count": {
+      "type": "integer",
+      "default": 1,
+      "description": "Quantidade de vezes utilizado"
+    }
+  },
+  "required": [
+    "keyword",
+    "category",
+    "transaction_type"
+  ]
+}

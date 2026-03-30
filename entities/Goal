@@ -1,0 +1,36 @@
+{
+  "name": "Goal",
+  "type": "object",
+  "properties": {
+    "category": {
+      "type": "string",
+      "description": "Categoria da meta"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "income",
+        "expense"
+      ],
+      "description": "Tipo: entrada ou sa\u00edda"
+    },
+    "target_amount": {
+      "type": "number",
+      "description": "Valor alvo da meta"
+    },
+    "month": {
+      "type": "string",
+      "description": "M\u00eas da meta (formato YYYY-MM)"
+    },
+    "color": {
+      "type": "string",
+      "description": "Cor da meta"
+    }
+  },
+  "required": [
+    "category",
+    "type",
+    "target_amount",
+    "month"
+  ]
+}
