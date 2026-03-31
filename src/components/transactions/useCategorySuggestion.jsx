@@ -1,8 +1,7 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
-// Padrões padrão para bootstrap inicial
 const defaultPatterns = {
   expense: {
     "mercado": "alimentação",
@@ -63,20 +62,19 @@ export function useCategorySuggestion(description, transactionType) {
   const [confidence, setConfidence] = useState(0);
   const queryClient = useQueryClient();
 
-  // Buscar padrões do usuário
   const { data: userPatterns = [] } = useQuery({
     queryKey: ['categoryPatterns'],
-    queryFn: () => base44.entities.CategoryPattern.list()
+    queryFn: () => base44.entities.CategoryPattern.list(),
+    // Evita re-fetch desnecessário que causava o loop
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
   });
 
-  // Mutation para salvar/atualizar padrão
   const saveMutation = useMutation({
     mutationFn: async ({ keyword, category, type }) => {
-      // Verificar se já existe
       const existing = userPatterns.find(
         p => p.keyword.toLowerCase() === keyword.toLowerCase() && p.transaction_type === type
       );
-
       if (existing) {
         return base44.entities.CategoryPattern.update(existing.id, {
           category,
@@ -98,11 +96,10 @@ export function useCategorySuggestion(description, transactionType) {
     }
   });
 
-  // Combinar padrões padrão com padrões do usuário
-  const combinedPatterns = useMemo(() => {
-    const patterns = { ...defaultPatterns[transactionType] };
-    
-    // Padrões do usuário têm prioridade
+  // Guarda combinedPatterns em ref para não ser dependência do useEffect
+  const combinedPatternsRef = useRef({});
+  combinedPatternsRef.current = useMemo(() => {
+    const patterns = { ...(defaultPatterns[transactionType] || {}) };
     userPatterns
       .filter(p => p.transaction_type === transactionType)
       .forEach(p => {
@@ -112,85 +109,62 @@ export function useCategorySuggestion(description, transactionType) {
           userDefined: true
         };
       });
-
     return patterns;
   }, [userPatterns, transactionType]);
 
-  // Função para encontrar sugestão
-  const findSuggestion = useCallback((desc) => {
-    if (!desc || desc.length < 2) {
-      setSuggestion(null);
-      setConfidence(0);
-      return;
-    }
-
-    const normalizedDesc = desc.toLowerCase().trim();
-    let bestMatch = null;
-    let bestConfidence = 0;
-
-    // Buscar correspondência
-    Object.entries(combinedPatterns).forEach(([keyword, value]) => {
-      if (normalizedDesc.includes(keyword)) {
-        const isObject = typeof value === 'object';
-        const cat = isObject ? value.category : value;
-        const conf = isObject ? value.confidence : 0.7;
-        
-        // Priorizar matches mais longos e padrões do usuário
-        const matchScore = keyword.length / normalizedDesc.length;
-        const finalConf = isObject && value.userDefined ? 
-          Math.min(conf + 0.2, 1) : conf;
-        
-        if (finalConf > bestConfidence || 
-            (finalConf === bestConfidence && keyword.length > (bestMatch?.length || 0))) {
-          bestMatch = cat;
-          bestConfidence = finalConf;
-        }
-      }
-    });
-
-    setSuggestion(bestMatch);
-    setConfidence(bestConfidence);
-  }, [combinedPatterns]);
-
-  // Efeito para atualizar sugestão quando descrição muda
+  // useEffect depende só de description — sem funções como dependência
   useEffect(() => {
     const timer = setTimeout(() => {
-      findSuggestion(description);
+      if (!description || description.length < 2) {
+        setSuggestion(null);
+        setConfidence(0);
+        return;
+      }
+
+      const normalizedDesc = description.toLowerCase().trim();
+      let bestMatch = null;
+      let bestConfidence = 0;
+
+      Object.entries(combinedPatternsRef.current).forEach(([keyword, value]) => {
+        if (normalizedDesc.includes(keyword)) {
+          const isObject = typeof value === "object";
+          const cat  = isObject ? value.category : value;
+          const conf = isObject ? value.confidence : 0.7;
+          const finalConf = isObject && value.userDefined
+            ? Math.min(conf + 0.2, 1)
+            : conf;
+
+          if (
+            finalConf > bestConfidence ||
+            (finalConf === bestConfidence && keyword.length > (bestMatch?.length || 0))
+          ) {
+            bestMatch = cat;
+            bestConfidence = finalConf;
+          }
+        }
+      });
+
+      setSuggestion(bestMatch);
+      setConfidence(bestConfidence);
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [description, findSuggestion]);
+  }, [description]); // ← só description, sem findSuggestion/combinedPatterns
 
-  // Função para confirmar categoria (aprende com a escolha)
   const confirmCategory = useCallback((category, desc) => {
     if (!desc || desc.length < 3) return;
-
-    // Extrair palavras-chave significativas
-    const words = desc.toLowerCase().split(' ').filter(w => w.length >= 3);
-    
+    const words = desc.toLowerCase().split(" ").filter(w => w.length >= 3);
     if (words.length > 0) {
-      // Salvar a descrição completa como padrão
       saveMutation.mutate({
         keyword: desc.toLowerCase().trim(),
         category,
         type: transactionType
       });
-
-      // Também salvar a primeira palavra significativa
       if (words[0] !== desc.toLowerCase().trim()) {
-        saveMutation.mutate({
-          keyword: words[0],
-          category,
-          type: transactionType
-        });
+        saveMutation.mutate({ keyword: words[0], category, type: transactionType });
       }
     }
-  }, [saveMutation, transactionType]);
+  }, [transactionType]); // removido saveMutation das deps para estabilizar
 
-  return {
-    suggestion,
-    confidence,
-    confirmCategory,
-    isLoading: saveMutation.isPending
-  };
+  return { suggestion, confidence, confirmCategory, isLoading: saveMutation.isPending };
 }
