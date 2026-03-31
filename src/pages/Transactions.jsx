@@ -7,6 +7,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Plus, TrendingUp, Trash2 } from "lucide-react";
 import { startOfMonth, endOfMonth, isWithinInterval, parseISO } from "date-fns";
 import { toast } from "sonner";
+import { useSearchParams } from "react-router-dom";
+import { useMonth } from "@/lib/MonthContext";
 import RealizarPrevisaoModal from "@/components/transactions/RealizarPrevisaoModal";
 import TransactionItem from "@/components/transactions/TransactionItem";
 import TransactionForm from "@/components/transactions/TransactionForm";
@@ -24,12 +26,21 @@ export default function Transactions() {
   const canAdd = !isViewingSharedProfile || sharedPermissions?.add_transactions;
   const canDelete = !isViewingSharedProfile || sharedPermissions?.delete_transactions;
   const queryClient = useQueryClient();
-  const [selectedDate, setSelectedDate] = useState(new Date());
+  const { selectedDate, setSelectedDate } = useMonth();
+  const [searchParams] = useSearchParams();
+  const [filter, setFilter] = useState(searchParams.get("filter") || "all");
   const [showForm, setShowForm] = useState(false);
-  const [filter, setFilter] = useState("all");
+  const [editTransaction, setEditTransaction] = useState(null); // <- novo
   const [searchQuery, setSearchQuery] = useState("");
   const [deleteId, setDeleteId] = useState(null);
   const [realizarPrevisao, setRealizarPrevisao] = useState(null);
+
+  React.useEffect(() => {
+    const monthParam = searchParams.get("month");
+    if (monthParam) setSelectedDate(new Date(monthParam + "-02"));
+    const filterParam = searchParams.get("filter");
+    if (filterParam) setFilter(filterParam);
+  }, []);
 
   const { data: accounts = [] } = useQuery({
     queryKey: ['accounts', activeOwnerId],
@@ -60,6 +71,21 @@ export default function Transactions() {
       queryClient.invalidateQueries({ queryKey: ['transactions', activeOwnerId] });
       setShowForm(false);
       toast.success("Transação criada!");
+    },
+    onError: (err) => toast.error("Erro: " + err.message)
+  });
+
+  // <- mutation de edição nova
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, data }) => {
+      const { error } = await supabase.from('transactions').update(data).eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['transactions', activeOwnerId] });
+      setEditTransaction(null);
+      setShowForm(false);
+      toast.success("Transação atualizada!");
     },
     onError: (err) => toast.error("Erro: " + err.message)
   });
@@ -129,6 +155,21 @@ export default function Transactions() {
     onError: (err) => toast.error("Erro: " + err.message)
   });
 
+  // <- abre form de edição
+  const handleEdit = (transaction) => {
+    setEditTransaction(transaction);
+    setShowForm(true);
+  };
+
+  // <- submit que decide criar ou editar
+  const handleSubmit = (data) => {
+    if (editTransaction) {
+      updateMutation.mutate({ id: editTransaction.id, data });
+    } else {
+      createMutation.mutate(data);
+    }
+  };
+
   const monthStart = startOfMonth(selectedDate);
   const monthEnd = endOfMonth(selectedDate);
 
@@ -156,7 +197,6 @@ export default function Transactions() {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 pb-24 transition-colors duration-200">
 
-      {/* ✅ Cabeçalho azul igual ao de Contas */}
       <div className="bg-gradient-to-br from-blue-600 via-blue-700 to-blue-800 text-white sticky top-0 z-20">
         <div className="px-5 pt-12 pb-4">
           {isViewingSharedProfile && (
@@ -186,6 +226,29 @@ export default function Transactions() {
             onChange={(e) => setSearchQuery(e.target.value)}
             className="rounded-xl bg-white/10 border-white/20 text-white placeholder:text-blue-200"
           />
+          {/* Filtros */}
+          <div className="flex gap-2 pt-3 overflow-x-auto">
+            {[
+              { value: "all",      label: "Todos" },
+              { value: "realized", label: "Realizados" },
+              { value: "planned",  label: "Previstos" },
+              { value: "income",   label: "Entradas" },
+              { value: "expense",  label: "Saídas" },
+            ].map(({ value, label }) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setFilter(value)}
+                className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
+                  filter === value
+                    ? "bg-white text-blue-700"
+                    : "bg-white/20 text-white hover:bg-white/30"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -193,19 +256,14 @@ export default function Transactions() {
         {filteredTransactions.length > 0 ? (
           <div className="space-y-3">
             {filteredTransactions.map((transaction) => (
-              <motion.div key={transaction.id} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} className="relative flex items-center gap-2">
-                <div className="flex-1">
-                  <TransactionItem
-                    transaction={transaction}
-                    onRegistrar={(t) => setRealizarPrevisao(t)}
-                    onDuplicar={(t, meses) => duplicarMutation.mutate({ transaction: t, meses })}
-                  />
-                </div>
-                {canDelete && (
-                  <button onClick={() => setDeleteId(transaction.id)} className="p-2 bg-red-50 dark:bg-red-900/20 rounded-lg hover:bg-red-100">
-                    <Trash2 className="w-5 h-5 text-red-500" />
-                  </button>
-                )}
+              <motion.div key={transaction.id} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }}>
+                <TransactionItem
+                  transaction={transaction}
+                  onRegistrar={(t) => setRealizarPrevisao(t)}
+                  onDuplicar={(t, meses) => duplicarMutation.mutate({ transaction: t, meses })}
+                  onEdit={canAdd ? handleEdit : null}
+                  onDelete={canDelete ? (id) => setDeleteId(id) : null}
+                />
               </motion.div>
             ))}
           </div>
@@ -215,14 +273,22 @@ export default function Transactions() {
       </div>
 
       {canAdd && (
-        <motion.button whileTap={{ scale: 0.9 }} onClick={() => setShowForm(true)}
+        <motion.button whileTap={{ scale: 0.9 }} onClick={() => { setEditTransaction(null); setShowForm(true); }}
           className="fixed bottom-24 right-5 w-14 h-14 bg-blue-600 text-white rounded-full shadow-lg z-40 flex items-center justify-center">
           <Plus className="w-6 h-6" />
         </motion.button>
       )}
 
       <AnimatePresence>
-        {showForm && <TransactionForm accounts={accounts} onSubmit={(data) => createMutation.mutate(data)} onClose={() => setShowForm(false)} />}
+        {showForm && (
+          <TransactionForm
+            accounts={accounts}
+            onSubmit={handleSubmit}
+            onClose={() => { setShowForm(false); setEditTransaction(null); }}
+            initialType={editTransaction?.type || "expense"}
+            initialData={editTransaction} // <- passa dados para preencher o form
+          />
+        )}
       </AnimatePresence>
 
       <AnimatePresence>

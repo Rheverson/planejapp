@@ -1,18 +1,12 @@
 import { motion } from "framer-motion";
 import { TrendingUp, TrendingDown, Wallet, PiggyBank } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 const iconMap = {
   income: TrendingUp,
   expense: TrendingDown,
   balance: Wallet,
   forecast: PiggyBank
-};
-
-const colorMap = {
-  income: "from-emerald-500 to-emerald-600",
-  expense: "from-red-500 to-red-600",
-  balance: "from-blue-500 to-blue-600",
-  forecast: "from-violet-500 to-violet-600"
 };
 
 const bgMap = {
@@ -29,34 +23,34 @@ const textMap = {
   forecast: "text-violet-600"
 };
 
-export default function KPICard({ title, value, subtitle, type, delay = 0 }) {
+export default function KPICard({ title, value, subtitle, type, delay = 0, navigateTo }) {
   const Icon = iconMap[type];
+  const navigate = useNavigate();
 
-  const formatCurrency = (val) => {
-    return new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL'
-    }).format(val);
-  };
+  const formatCurrency = (val) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5, delay }}
-      className="bg-white dark:bg-gray-800 rounded-2xl p-5 shadow-sm border border-gray-100 dark:border-gray-700 hover:shadow-md transition-shadow duration-300"
+      onClick={() => navigateTo && navigate(navigateTo)}
+      className={`bg-white dark:bg-gray-800 rounded-2xl p-5 shadow-sm border border-gray-100 dark:border-gray-700 hover:shadow-md transition-shadow duration-300 ${navigateTo ? 'cursor-pointer active:scale-95' : ''}`}
     >
       <div className="flex items-start justify-between mb-3">
         <div className={`p-2.5 rounded-xl ${bgMap[type]} dark:brightness-90`}>
           <Icon className={`w-5 h-5 ${textMap[type]} dark:brightness-110`} />
         </div>
+        {navigateTo && (
+          <span className="text-xs text-gray-400 font-medium"></span>
+        )}
       </div>
-      
+
       <p className="text-gray-500 dark:text-gray-400 text-sm font-medium mb-1">{title}</p>
       <p className={`text-2xl font-bold ${textMap[type]} dark:brightness-110`}>
         {formatCurrency(value)}
       </p>
-      
+
       {subtitle && (
         <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">{subtitle}</p>
       )}

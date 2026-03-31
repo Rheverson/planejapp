@@ -5,15 +5,17 @@ import { useAuth } from "@/lib/AuthContext";
 import { useSharedProfile } from "@/lib/SharedProfileContext";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, TrendingUp, TrendingDown, Wallet, ChevronRight } from "lucide-react";
-import { startOfMonth, endOfMonth, isWithinInterval, parseISO } from "date-fns";
+import { Plus, TrendingUp, TrendingDown, Wallet, ChevronRight, ArrowLeftRight, PiggyBank } from "lucide-react";
+import { startOfMonth, endOfMonth, isWithinInterval, parseISO, format } from "date-fns";
 import { createPageUrl } from "@/utils";
 import { toast } from "sonner";
+import { useMonth } from "@/lib/MonthContext";
 
 import KPICard from "@/components/dashboard/KPICard";
 import AccountCard from "@/components/dashboard/AccountCard";
 import TransactionItem from "@/components/transactions/TransactionItem";
 import TransactionForm from "@/components/transactions/TransactionForm";
+import TransferForm from "@/components/transactions/TransferForm";
 import MonthSelector from "@/components/common/MonthSelector";
 import EmptyState from "@/components/common/EmptyState";
 
@@ -21,20 +23,16 @@ export default function Home() {
   const { user } = useAuth();
   const { activeOwnerId, isViewingSharedProfile, sharedPermissions } = useSharedProfile();
   const canAdd = !isViewingSharedProfile || sharedPermissions?.add_transactions;
-  const [selectedDate, setSelectedDate] = useState(new Date());
+  const { selectedDate, setSelectedDate } = useMonth();
   const [showTransactionForm, setShowTransactionForm] = useState(false);
+  const [showTransferForm, setShowTransferForm] = useState(false);
   const [initialType, setInitialType] = useState("expense");
   const queryClient = useQueryClient();
-  
 
   const { data: accounts = [] } = useQuery({
     queryKey: ['accounts', activeOwnerId],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('accounts')
-        .select('*')
-        .eq('user_id', activeOwnerId)
-        .order('name');
+      const { data, error } = await supabase.from('accounts').select('*').eq('user_id', activeOwnerId).order('name');
       if (error) throw error;
       return data;
     },
@@ -44,11 +42,7 @@ export default function Home() {
   const { data: transactions = [] } = useQuery({
     queryKey: ['transactions', activeOwnerId],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('transactions')
-        .select('*')
-        .eq('user_id', activeOwnerId)
-        .order('date', { ascending: false });
+      const { data, error } = await supabase.from('transactions').select('*').eq('user_id', activeOwnerId).order('date', { ascending: false });
       if (error) throw error;
       return data;
     },
@@ -57,14 +51,9 @@ export default function Home() {
 
   const createTransactionMutation = useMutation({
     mutationFn: async (newTransaction) => {
-      const { data, error } = await supabase
-        .from('transactions')
-        .insert([{
-          ...newTransaction,
-          user_id: activeOwnerId,  // <- era user.id
-          amount: parseFloat(newTransaction.amount)
-        }])
-        .select();
+      const { data, error } = await supabase.from('transactions').insert([{
+        ...newTransaction, user_id: activeOwnerId, amount: parseFloat(newTransaction.amount)
+      }]).select();
       if (error) throw error;
       return data;
     },
@@ -74,9 +63,44 @@ export default function Home() {
       setShowTransactionForm(false);
       toast.success('Transação adicionada!');
     },
-    onError: (err) => {
-      toast.error('Erro ao salvar: ' + err.message);
-    }
+    onError: (err) => toast.error('Erro ao salvar: ' + err.message)
+  });
+
+  const createTransferMutation = useMutation({
+    mutationFn: async ({ fromAccountId, toAccountId, amount, date, description }) => {
+      const pairId = crypto.randomUUID();
+      const { error } = await supabase.from('transactions').insert([
+        {
+          description: description || 'Transferência',
+          amount: parseFloat(amount),
+          type: 'transfer',
+          account_id: fromAccountId,
+          transfer_account_id: toAccountId,
+          transfer_pair_id: pairId,
+          date,
+          is_realized: true,
+          user_id: activeOwnerId,
+        },
+        {
+          description: description || 'Transferência',
+          amount: parseFloat(amount),
+          type: 'transfer',
+          account_id: toAccountId,
+          transfer_account_id: fromAccountId,
+          transfer_pair_id: pairId,
+          date,
+          is_realized: true,
+          user_id: activeOwnerId,
+        }
+      ]);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      setShowTransferForm(false);
+      toast.success('Transferência realizada!');
+    },
+    onError: (err) => toast.error('Erro: ' + err.message)
   });
 
   const monthStart = startOfMonth(selectedDate);
@@ -84,6 +108,7 @@ export default function Home() {
 
   const monthTransactions = useMemo(() => {
     return transactions.filter(t => {
+      if (t.type === 'transfer') return false; // transferências não entram nos KPIs
       const date = parseISO(t.date);
       return isWithinInterval(date, { start: monthStart, end: monthEnd });
     });
@@ -106,75 +131,80 @@ export default function Home() {
 
   const accountBalances = useMemo(() => {
     const balances = {};
-    accounts.forEach(acc => {
-      balances[acc.id] = acc.initial_balance || 0;
-    });
+    accounts.forEach(acc => { balances[acc.id] = acc.initial_balance || 0; });
     transactions.forEach(t => {
-      if (t.account_id && t.is_realized !== false) {
-        if (t.type === 'income') {
-          balances[t.account_id] = (balances[t.account_id] || 0) + t.amount;
-        } else {
-          balances[t.account_id] = (balances[t.account_id] || 0) - t.amount;
-        }
+      if (!t.account_id || t.is_realized === false) return;
+      if (t.type === 'income') balances[t.account_id] = (balances[t.account_id] || 0) + t.amount;
+      else if (t.type === 'expense') balances[t.account_id] = (balances[t.account_id] || 0) - t.amount;
+      else if (t.type === 'transfer') {
+        // debita da origem, credita no destino
+        balances[t.account_id] = (balances[t.account_id] || 0) - t.amount;
+        if (t.transfer_account_id) balances[t.transfer_account_id] = (balances[t.transfer_account_id] || 0) + t.amount;
       }
     });
     return balances;
   }, [accounts, transactions]);
 
-  const totalBalance = Object.values(accountBalances).reduce((sum, b) => sum + b, 0);
-  const recentTransactions = monthTransactions.slice(0, 5);
+  // Separa saldo do dia a dia (sem investimentos) do patrimônio investido
+  const regularAccounts = accounts.filter(a => a.type !== 'investment');
+  const investmentAccounts = accounts.filter(a => a.type === 'investment');
+  const totalBalance = regularAccounts.reduce((sum, acc) => sum + (accountBalances[acc.id] || 0), 0);
+  const totalInvested = investmentAccounts.reduce((sum, acc) => sum + (accountBalances[acc.id] || 0), 0);
 
-  const handleAddTransaction = (type) => {
-    setInitialType(type);
-    setShowTransactionForm(true);
-  };
+  const recentTransactions = monthTransactions.slice(0, 5);
+  const fmt = (v) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 pb-24 transition-colors duration-200">
       <div className="bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 dark:from-blue-700 dark:via-blue-800 dark:to-indigo-900 text-white">
-        <div className="px-5 pt-12 pb-8">
+        <div className="px-5 pt-12 pb-4">
           {isViewingSharedProfile && (
             <p className="text-blue-200 text-xs font-medium mb-2">👁 Visualizando perfil compartilhado</p>
           )}
-          <p className="text-blue-200 text-sm font-medium mb-1">Saldo Total</p>
-          <motion.h1
-            key={totalBalance}
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="text-4xl font-bold mb-6"
-          >
-            {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(totalBalance)}
+          <p className="text-blue-200 text-sm font-medium mb-1">Saldo disponível</p>
+          <motion.h1 key={totalBalance} initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
+            className="text-4xl font-bold mb-1">
+            {fmt(totalBalance)}
           </motion.h1>
-          <MonthSelector selectedDate={selectedDate} onChange={setSelectedDate} />
+          {totalInvested > 0 && (
+            <p className="text-blue-200 text-sm mb-4 flex items-center gap-1">
+              <PiggyBank className="w-3.5 h-3.5" />
+              + {fmt(totalInvested)} investido
+            </p>
+          )}
+          <div className="mb-4">
+            <MonthSelector selectedDate={selectedDate} onChange={setSelectedDate} />
+          </div>
         </div>
 
-        {canAdd && (   // <- era !isViewingSharedProfile
-          <div className="flex gap-3 px-5 pb-6">
-            <motion.button
-              whileTap={{ scale: 0.95 }}
-              onClick={() => handleAddTransaction("income")}
-              className="flex-1 flex items-center justify-center gap-2 py-3 bg-white/10 backdrop-blur-sm rounded-xl text-white font-medium"
-            >
-              <TrendingUp className="w-5 h-5" /> Entrada
+        {canAdd && (
+          <div className="flex gap-2 px-5 pb-6">
+            <motion.button whileTap={{ scale: 0.95 }} onClick={() => { setInitialType("income"); setShowTransactionForm(true); }}
+              className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-white/10 backdrop-blur-sm rounded-xl text-white text-sm font-medium">
+              <TrendingUp className="w-4 h-4" /> Entrada
             </motion.button>
-            <motion.button
-              whileTap={{ scale: 0.95 }}
-              onClick={() => handleAddTransaction("expense")}
-              className="flex-1 flex items-center justify-center gap-2 py-3 bg-white/10 backdrop-blur-sm rounded-xl text-white font-medium"
-            >
-              <TrendingDown className="w-5 h-5" /> Saída
+            <motion.button whileTap={{ scale: 0.95 }} onClick={() => { setInitialType("expense"); setShowTransactionForm(true); }}
+              className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-white/10 backdrop-blur-sm rounded-xl text-white text-sm font-medium">
+              <TrendingDown className="w-4 h-4" /> Saída
+            </motion.button>
+            <motion.button whileTap={{ scale: 0.95 }} onClick={() => setShowTransferForm(true)}
+              className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-white/10 backdrop-blur-sm rounded-xl text-white text-sm font-medium">
+              <ArrowLeftRight className="w-4 h-4" /> Transferir
             </motion.button>
           </div>
         )}
-
       </div>
 
       <div className="px-5 -mt-4 relative z-10">
         <div className="grid grid-cols-2 gap-3 mb-6">
-          <KPICard title="Entradas" value={kpis.totalIncome} type="income" delay={0.1} />
-          <KPICard title="Saídas" value={kpis.totalExpense} type="expense" delay={0.2} />
-          <KPICard title="Saldo Atual" value={kpis.currentBalance} type="balance" subtitle="Realizado" delay={0.3} />
-          <KPICard title="Previsão" value={kpis.forecastBalance} type="forecast" subtitle="Com planejado" delay={0.4} />
+          <KPICard title="Entradas" value={kpis.totalIncome} type="income" delay={0.1}
+            navigateTo={`/Transactions?filter=income&month=${format(selectedDate, 'yyyy-MM')}`} />
+          <KPICard title="Saídas" value={kpis.totalExpense} type="expense" delay={0.2}
+            navigateTo={`/Transactions?filter=expense&month=${format(selectedDate, 'yyyy-MM')}`} />
+          <KPICard title="Saldo Atual" value={kpis.currentBalance} type="balance" subtitle="Realizado" delay={0.3}
+            navigateTo={`/Transactions?filter=realized&month=${format(selectedDate, 'yyyy-MM')}`} />
+          <KPICard title="Previsão" value={kpis.forecastBalance} type="forecast" subtitle="Com planejado" delay={0.4}
+            navigateTo={`/Transactions?filter=planned&month=${format(selectedDate, 'yyyy-MM')}`} />
         </div>
 
         {accounts.length > 0 && (
@@ -186,10 +216,22 @@ export default function Home() {
               </Link>
             </div>
             <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1">
-              {accounts.map((account, index) => (
+              {regularAccounts.map((account, index) => (
                 <AccountCard key={account.id} account={account} balance={accountBalances[account.id] || 0} delay={index * 0.1} />
               ))}
             </div>
+            {investmentAccounts.length > 0 && (
+              <div className="mt-3">
+                <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-2 flex items-center gap-1">
+                  <PiggyBank className="w-3.5 h-3.5" /> Investimentos
+                </p>
+                <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1">
+                  {investmentAccounts.map((account, index) => (
+                    <AccountCard key={account.id} account={account} balance={accountBalances[account.id] || 0} delay={index * 0.1} />
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -212,24 +254,27 @@ export default function Home() {
         </div>
       </div>
 
-      {canAdd && (   // <- era !isViewingSharedProfile
-        <motion.button
-          whileTap={{ scale: 0.9 }}
-          onClick={() => setShowTransactionForm(true)}
-          className="fixed bottom-24 right-5 w-14 h-14 bg-blue-600 text-white rounded-full shadow-lg shadow-blue-600/30 flex items-center justify-center z-40"
-        >
+      {canAdd && (
+        <motion.button whileTap={{ scale: 0.9 }} onClick={() => setShowTransactionForm(true)}
+          className="fixed bottom-24 right-5 w-14 h-14 bg-blue-600 text-white rounded-full shadow-lg shadow-blue-600/30 flex items-center justify-center z-40">
           <Plus className="w-6 h-6" />
         </motion.button>
       )}
 
       <AnimatePresence>
         {showTransactionForm && (
-          <TransactionForm
-            accounts={accounts}
+          <TransactionForm accounts={accounts.filter(a => a.type !== 'investment')}
             initialType={initialType}
             onSubmit={(data) => createTransactionMutation.mutate(data)}
-            onClose={() => setShowTransactionForm(false)}
-          />
+            onClose={() => setShowTransactionForm(false)} />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showTransferForm && (
+          <TransferForm accounts={accounts}
+            onSubmit={(data) => createTransferMutation.mutate(data)}
+            onClose={() => setShowTransferForm(false)} />
         )}
       </AnimatePresence>
     </div>

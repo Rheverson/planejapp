@@ -20,18 +20,20 @@ const dayOptions = Array.from({ length: 31 }, (_, i) => i + 1);
 const today = new Date().toISOString().split("T")[0];
 const todayDay = new Date().getDate();
 
-export default function TransactionForm({ accounts, onSubmit, onClose, initialType = "expense" }) {
-  const [type, setType] = useState(initialType);
-  const [description, setDescription]   = useState("");
-  const [amount, setAmount]             = useState("");
-  const [category, setCategory]         = useState("");
-  const [accountId, setAccountId]       = useState("");
-  const [date, setDate]                 = useState(today);
-  const [isRealized, setIsRealized]     = useState(true);
-  const [isRecurring, setIsRecurring]           = useState(false);
-  const [recurringFreq, setRecurringFreq]       = useState("monthly");
-  const [recurringDay, setRecurringDay]         = useState(todayDay);
-  const [recurringEndDate, setRecurringEndDate] = useState("");
+export default function TransactionForm({ accounts, onSubmit, onClose, initialType = "expense", initialData = null }) {
+  const isEditing = !!initialData;
+
+  const [type, setType] = useState(initialData?.type || initialType);
+  const [description, setDescription]   = useState(initialData?.description || "");
+  const [amount, setAmount]             = useState(initialData?.amount ? String(initialData.amount) : "");
+  const [category, setCategory]         = useState(initialData?.category || "");
+  const [accountId, setAccountId]       = useState(initialData?.account_id || "");
+  const [date, setDate]                 = useState(initialData?.date || today);
+  const [isRealized, setIsRealized]     = useState(initialData?.is_realized ?? true);
+  const [isRecurring, setIsRecurring]           = useState(initialData?.is_recurring || false);
+  const [recurringFreq, setRecurringFreq]       = useState(initialData?.recurring_frequency || "monthly");
+  const [recurringDay, setRecurringDay]         = useState(initialData?.recurring_day || todayDay);
+  const [recurringEndDate, setRecurringEndDate] = useState(initialData?.recurring_end_date || "");
   const [showSuggestion, setShowSuggestion] = useState(false);
 
   const { suggestion, confidence, confirmCategory } = useCategorySuggestion(description, type);
@@ -64,7 +66,7 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
       account_id:          accountId || null,
       date,
       is_realized:         isRecurring ? false : isRealized,
-      notes:               "",
+      notes:               initialData?.notes || "",
       type,
       is_recurring:        isRecurring,
       recurring_frequency: isRecurring ? recurringFreq : null,
@@ -85,7 +87,10 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
         className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-md max-h-[88vh] overflow-y-auto"
       >
         <div className="sticky top-0 bg-white px-4 py-3 border-b border-gray-100 flex items-center justify-between z-10">
-          <h2 className="text-base font-bold text-gray-900">Nova Transação</h2>
+          {/* ✅ Título muda conforme modo */}
+          <h2 className="text-base font-bold text-gray-900">
+            {isEditing ? "Editar Transação" : "Nova Transação"}
+          </h2>
           <button type="button" onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-full transition-colors">
             <X className="w-4 h-4 text-gray-500" />
           </button>
@@ -172,85 +177,86 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
             />
           </div>
 
-          <div className="rounded-xl border border-gray-200 overflow-hidden">
-            <button type="button" onClick={() => setIsRecurring(!isRecurring)}
-              className="w-full flex items-center justify-between px-3 py-2.5 bg-gray-50 hover:bg-gray-100 transition-colors"
-            >
-              <div className="flex items-center gap-2">
-                <Repeat className={`w-4 h-4 ${isRecurring ? "text-blue-500" : "text-gray-400"}`} />
-                <div className="text-left">
-                  <p className="text-sm font-medium text-gray-900">Recorrente</p>
-                  <p className="text-xs text-gray-400">
-                    {isRecurring ? "Ocorrências viram previsão automaticamente" : "Repetir todo mês, semana ou ano"}
-                  </p>
-                </div>
-              </div>
-
-              {/* ✅ Adicione o e.stopPropagation() aqui */}
-              <div onClick={(e) => e.stopPropagation()}>
-                <Switch checked={isRecurring} onCheckedChange={setIsRecurring} />
-              </div>
-            </button>
-
-            <AnimatePresence>
-              {isRecurring && (
-                <motion.div
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: "auto", opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  transition={{ duration: 0.2 }}
-                  className="overflow-hidden"
-                >
-                  <div className="px-3 py-3 space-y-3 border-t border-gray-100">
-                    <div className="space-y-1">
-                      <Label className="text-xs font-medium text-gray-600">Frequência</Label>
-                      <div className="flex gap-1.5">
-                        {frequencyOptions.map(({ value, label }) => (
-                          <button key={value} type="button" onClick={() => setRecurringFreq(value)}
-                            className={`flex-1 py-1.5 text-xs font-semibold rounded-lg border transition-colors ${
-                              recurringFreq === value
-                                ? "bg-blue-600 text-white border-blue-600"
-                                : "bg-white text-gray-600 border-gray-200 hover:border-blue-300"
-                            }`}
-                          >
-                            {label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    {recurringFreq === "monthly" && (
-                      <div className="space-y-1">
-                        <Label className="text-xs font-medium text-gray-600">Todo dia</Label>
-                        <Select value={String(recurringDay)} onValueChange={(v) => setRecurringDay(parseInt(v))}>
-                          <SelectTrigger className="h-10 text-sm border-gray-200 rounded-xl">
-                            <SelectValue placeholder="Dia" />
-                          </SelectTrigger>
-                          <SelectContent className="max-h-48">
-                            {dayOptions.map((d) => (
-                              <SelectItem key={d} value={String(d)}>Dia {d}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <p className="text-xs text-gray-400">Gera previsão todo dia {recurringDay} por 12 meses</p>
-                      </div>
-                    )}
-
-                    <div className="space-y-1">
-                      <Label className="text-xs font-medium text-gray-600">
-                        Encerra em <span className="font-normal text-gray-400">(opcional)</span>
-                      </Label>
-                      <Input type="date" value={recurringEndDate} min={date}
-                        onChange={(e) => setRecurringEndDate(e.target.value)}
-                        className="h-10 text-sm border-gray-200 rounded-xl"
-                      />
-                      <p className="text-xs text-gray-400">Sem data final gera 12 meses</p>
-                    </div>
+          {/* Recorrente — esconde ao editar pois não faz sentido alterar recorrência */}
+          {!isEditing && (
+            <div className="rounded-xl border border-gray-200 overflow-hidden">
+              <button type="button" onClick={() => setIsRecurring(!isRecurring)}
+                className="w-full flex items-center justify-between px-3 py-2.5 bg-gray-50 hover:bg-gray-100 transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <Repeat className={`w-4 h-4 ${isRecurring ? "text-blue-500" : "text-gray-400"}`} />
+                  <div className="text-left">
+                    <p className="text-sm font-medium text-gray-900">Recorrente</p>
+                    <p className="text-xs text-gray-400">
+                      {isRecurring ? "Ocorrências viram previsão automaticamente" : "Repetir todo mês, semana ou ano"}
+                    </p>
                   </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
+                </div>
+                <div onClick={(e) => e.stopPropagation()}>
+                  <Switch checked={isRecurring} onCheckedChange={setIsRecurring} />
+                </div>
+              </button>
+
+              <AnimatePresence>
+                {isRecurring && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: "auto", opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.2 }}
+                    className="overflow-hidden"
+                  >
+                    <div className="px-3 py-3 space-y-3 border-t border-gray-100">
+                      <div className="space-y-1">
+                        <Label className="text-xs font-medium text-gray-600">Frequência</Label>
+                        <div className="flex gap-1.5">
+                          {frequencyOptions.map(({ value, label }) => (
+                            <button key={value} type="button" onClick={() => setRecurringFreq(value)}
+                              className={`flex-1 py-1.5 text-xs font-semibold rounded-lg border transition-colors ${
+                                recurringFreq === value
+                                  ? "bg-blue-600 text-white border-blue-600"
+                                  : "bg-white text-gray-600 border-gray-200 hover:border-blue-300"
+                              }`}
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {recurringFreq === "monthly" && (
+                        <div className="space-y-1">
+                          <Label className="text-xs font-medium text-gray-600">Todo dia</Label>
+                          <Select value={String(recurringDay)} onValueChange={(v) => setRecurringDay(parseInt(v))}>
+                            <SelectTrigger className="h-10 text-sm border-gray-200 rounded-xl">
+                              <SelectValue placeholder="Dia" />
+                            </SelectTrigger>
+                            <SelectContent className="max-h-48">
+                              {dayOptions.map((d) => (
+                                <SelectItem key={d} value={String(d)}>Dia {d}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <p className="text-xs text-gray-400">Gera previsão todo dia {recurringDay} por 12 meses</p>
+                        </div>
+                      )}
+
+                      <div className="space-y-1">
+                        <Label className="text-xs font-medium text-gray-600">
+                          Encerra em <span className="font-normal text-gray-400">(opcional)</span>
+                        </Label>
+                        <Input type="date" value={recurringEndDate} min={date}
+                          onChange={(e) => setRecurringEndDate(e.target.value)}
+                          className="h-10 text-sm border-gray-200 rounded-xl"
+                        />
+                        <p className="text-xs text-gray-400">Sem data final gera 12 meses</p>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          )}
 
           {!isRecurring && (
             <div className="flex items-center justify-between px-3 py-2.5 bg-gray-50 rounded-xl">
@@ -267,9 +273,12 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
               type === "income" ? "bg-emerald-500 hover:bg-emerald-600" : "bg-red-500 hover:bg-red-600"
             }`}
           >
-            {isRecurring
-              ? `Criar recorrência ${type === "income" ? "de entrada" : "de saída"}`
-              : `Adicionar ${type === "income" ? "Entrada" : "Saída"}`}
+            {isEditing
+              ? `Salvar alterações`
+              : isRecurring
+                ? `Criar recorrência ${type === "income" ? "de entrada" : "de saída"}`
+                : `Adicionar ${type === "income" ? "Entrada" : "Saída"}`
+            }
           </Button>
         </form>
       </motion.div>
