@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Plus, TrendingUp, Trash2 } from "lucide-react";
 import { startOfMonth, endOfMonth, isWithinInterval, parseISO } from "date-fns";
 import { toast } from "sonner";
-
+import RealizarPrevisaoModal from "@/components/transactions/RealizarPrevisaoModal";
 import TransactionItem from "@/components/transactions/TransactionItem";
 import TransactionForm from "@/components/transactions/TransactionForm";
 import MonthSelector from "@/components/common/MonthSelector";
@@ -29,6 +29,7 @@ export default function Transactions() {
   const [filter, setFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [deleteId, setDeleteId] = useState(null);
+  const [realizarPrevisao, setRealizarPrevisao] = useState(null);
 
   const { data: accounts = [] } = useQuery({
     queryKey: ['accounts', activeOwnerId],
@@ -55,7 +56,12 @@ export default function Transactions() {
       const { error } = await supabase.from('transactions').insert([{ ...data, user_id: activeOwnerId }]);
       if (error) throw error;
     },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['transactions'] }); setShowForm(false); toast.success("Transação criada!"); }
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['transactions', activeOwnerId] });
+      setShowForm(false);
+      toast.success("Transação criada!");
+    },
+    onError: (err) => toast.error("Erro: " + err.message)
   });
 
   const deleteMutation = useMutation({
@@ -63,7 +69,63 @@ export default function Transactions() {
       const { error } = await supabase.from('transactions').delete().eq('id', id);
       if (error) throw error;
     },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['transactions'] }); setDeleteId(null); toast.success("Transação excluída!"); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['transactions', activeOwnerId] });
+      setDeleteId(null);
+      toast.success("Transação excluída!");
+    },
+    onError: (err) => toast.error("Erro: " + err.message)
+  });
+
+  const realizarMutation = useMutation({
+    mutationFn: async ({ transaction, valorRealizado }) => {
+      const restante = transaction.amount - valorRealizado;
+      await supabase.from('transactions')
+        .update({ is_realized: true, amount: valorRealizado })
+        .eq('id', transaction.id);
+      if (restante > 0.01) {
+        await supabase.from('transactions').insert([{
+          description: transaction.description,
+          amount: restante,
+          type: transaction.type,
+          category: transaction.category,
+          account_id: transaction.account_id,
+          date: transaction.date,
+          is_realized: false,
+          notes: transaction.notes,
+          user_id: activeOwnerId,
+        }]);
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['transactions', activeOwnerId] });
+      setRealizarPrevisao(null);
+      toast.success("Realização registrada!");
+    },
+    onError: (err) => toast.error("Erro: " + err.message)
+  });
+
+  const duplicarMutation = useMutation({
+    mutationFn: async ({ transaction, meses }) => {
+      const dia = transaction.date.split("-")[2];
+      const inserts = meses.map((mes) => ({
+        description: transaction.description,
+        amount: transaction.amount,
+        type: transaction.type,
+        category: transaction.category,
+        account_id: transaction.account_id,
+        date: `${mes}-${dia}`,
+        is_realized: false,
+        notes: transaction.notes,
+        user_id: activeOwnerId,
+      }));
+      const { error } = await supabase.from('transactions').insert(inserts);
+      if (error) throw error;
+    },
+    onSuccess: (_, { meses }) => {
+      queryClient.invalidateQueries({ queryKey: ['transactions', activeOwnerId] });
+      toast.success(`Duplicado em ${meses.length} ${meses.length === 1 ? "mês" : "meses"}!`);
+    },
     onError: (err) => toast.error("Erro: " + err.message)
   });
 
@@ -125,8 +187,14 @@ export default function Transactions() {
           <div className="space-y-3">
             {filteredTransactions.map((transaction) => (
               <motion.div key={transaction.id} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} className="relative flex items-center gap-2">
-                <div className="flex-1"><TransactionItem transaction={transaction} /></div>
-                {!isViewingSharedProfile && (
+                <div className="flex-1">
+                  <TransactionItem
+                    transaction={transaction}
+                    onRegistrar={(t) => setRealizarPrevisao(t)}
+                    onDuplicar={(t, meses) => duplicarMutation.mutate({ transaction: t, meses })}
+                  />
+                </div>
+                {canDelete && (
                   <button onClick={() => setDeleteId(transaction.id)} className="p-2 bg-red-50 dark:bg-red-900/20 rounded-lg hover:bg-red-100">
                     <Trash2 className="w-5 h-5 text-red-500" />
                   </button>
@@ -135,11 +203,11 @@ export default function Transactions() {
             ))}
           </div>
         ) : (
-          <EmptyState icon={TrendingUp} title="Nenhuma transação" description="Período sem dados." action="Adicionar" onAction={() => setShowForm(true)} />
+          <EmptyState icon={TrendingUp} title="Nenhuma transação" description="Período sem dados." action="Adicionar" onAction={() => canAdd && setShowForm(true)} />
         )}
       </div>
 
-      {!isViewingSharedProfile && (
+      {canAdd && (
         <motion.button whileTap={{ scale: 0.9 }} onClick={() => setShowForm(true)}
           className="fixed bottom-24 right-5 w-14 h-14 bg-blue-600 text-white rounded-full shadow-lg z-40 flex items-center justify-center">
           <Plus className="w-6 h-6" />
@@ -148,6 +216,16 @@ export default function Transactions() {
 
       <AnimatePresence>
         {showForm && <TransactionForm accounts={accounts} onSubmit={(data) => createMutation.mutate(data)} onClose={() => setShowForm(false)} />}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {realizarPrevisao && (
+          <RealizarPrevisaoModal
+            transaction={realizarPrevisao}
+            onConfirm={(dados) => realizarMutation.mutate(dados)}
+            onClose={() => setRealizarPrevisao(null)}
+          />
+        )}
       </AnimatePresence>
 
       <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
