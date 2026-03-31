@@ -155,30 +155,37 @@ export default function Transactions() {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 pb-24 transition-colors duration-200">
-      <div className="bg-white dark:bg-gray-800 border-b border-gray-100 dark:border-gray-700 sticky top-0 z-20">
+
+      {/* ✅ Cabeçalho azul igual ao de Contas */}
+      <div className="bg-gradient-to-br from-blue-600 via-blue-700 to-blue-800 text-white sticky top-0 z-20">
         <div className="px-5 pt-12 pb-4">
           {isViewingSharedProfile && (
-            <p className="text-blue-500 text-xs font-medium mb-2">👁 Visualizando perfil compartilhado</p>
+            <p className="text-blue-200 text-xs font-medium mb-2">👁 Visualizando perfil compartilhado</p>
           )}
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">Transações</h1>
+          <h1 className="text-2xl font-bold text-white mb-4">Transações</h1>
           <MonthSelector selectedDate={selectedDate} onChange={setSelectedDate} />
         </div>
         <div className="flex gap-4 px-5 pb-4">
           <div className="flex-1 text-center">
-            <p className="text-xs text-gray-500 mb-1">Entradas</p>
-            <p className="text-lg font-bold text-emerald-600">{fmt(summary.income)}</p>
+            <p className="text-xs text-blue-200 mb-1">Entradas</p>
+            <p className="text-lg font-bold text-emerald-300">{fmt(summary.income)}</p>
           </div>
-          <div className="flex-1 text-center border-x border-gray-100">
-            <p className="text-xs text-gray-500 mb-1">Saídas</p>
-            <p className="text-lg font-bold text-red-600">{fmt(summary.expense)}</p>
+          <div className="flex-1 text-center border-x border-white/20">
+            <p className="text-xs text-blue-200 mb-1">Saídas</p>
+            <p className="text-lg font-bold text-red-300">{fmt(summary.expense)}</p>
           </div>
           <div className="flex-1 text-center">
-            <p className="text-xs text-gray-500 mb-1">Saldo</p>
-            <p className={`text-lg font-bold ${summary.balance >= 0 ? 'text-blue-600' : 'text-red-600'}`}>{fmt(summary.balance)}</p>
+            <p className="text-xs text-blue-200 mb-1">Saldo</p>
+            <p className={`text-lg font-bold ${summary.balance >= 0 ? 'text-white' : 'text-red-300'}`}>{fmt(summary.balance)}</p>
           </div>
         </div>
         <div className="px-5 pb-4">
-          <Input placeholder="Buscar transações..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="rounded-xl bg-gray-50 dark:bg-gray-900" />
+          <Input
+            placeholder="Buscar transações..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="rounded-xl bg-white/10 border-white/20 text-white placeholder:text-blue-200"
+          />
         </div>
       </div>
 
