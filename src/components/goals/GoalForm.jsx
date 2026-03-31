@@ -39,7 +39,7 @@ export default function GoalForm({ goal, month, onSubmit, onClose }) {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center"
+      className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center pb-16 sm:pb-0"
       onClick={onClose}
     >
       <motion.div
@@ -47,14 +47,14 @@ export default function GoalForm({ goal, month, onSubmit, onClose }) {
         animate={{ y: 0, opacity: 1 }}
         exit={{ y: 100, opacity: 0 }}
         onClick={(e) => e.stopPropagation()}
-        className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-md max-h-[88vh] overflow-y-auto"
+        className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-md max-h-[80vh] sm:max-h-[88vh] overflow-y-auto"
       >
         {/* Header */}
         <div className="sticky top-0 bg-white px-4 py-3 border-b border-gray-100 flex items-center justify-between z-10 rounded-t-3xl">
           <h2 className="text-base font-bold text-gray-900">
             {goal ? "Editar Meta" : "Nova Meta"}
           </h2>
-          <button onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-full transition-colors">
+          <button type="button" onClick={onClose} className="p-1.5 hover:bg-gray-100 rounded-full transition-colors">
             <X className="w-4 h-4 text-gray-500" />
           </button>
         </div>
