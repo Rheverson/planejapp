@@ -5,7 +5,7 @@ import { useAuth } from "@/lib/AuthContext";
 import { useSharedProfile } from "@/lib/SharedProfileContext";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, TrendingUp, TrendingDown, Wallet, ChevronRight, ArrowLeftRight, PiggyBank } from "lucide-react";
+import { Plus, TrendingUp, TrendingDown, Wallet, ChevronRight, ArrowLeftRight, PiggyBank, BarChart2 } from "lucide-react";
 import { startOfMonth, endOfMonth, isWithinInterval, parseISO, format } from "date-fns";
 import { createPageUrl } from "@/utils";
 import { toast } from "sonner";
@@ -150,6 +150,10 @@ export default function Home() {
   const investmentAccounts = accounts.filter(a => a.type === 'investment');
   const totalBalance = regularAccounts.reduce((sum, acc) => sum + (accountBalances[acc.id] || 0), 0);
   const totalInvested = investmentAccounts.reduce((sum, acc) => sum + (accountBalances[acc.id] || 0), 0);
+  const expenseCount = monthTransactions.filter(t => t.type === 'expense' && t.is_realized !== false).length;
+  const savingsRate = kpis.totalIncome > 0
+    ? Math.max(0, (((kpis.totalIncome - kpis.totalExpense) / kpis.totalIncome) * 100)).toFixed(0)
+    : null;
 
   const recentTransactions = monthTransactions.slice(0, 5);
   const fmt = (v) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
@@ -207,6 +211,23 @@ export default function Home() {
             navigateTo={`/Transactions?filter=planned&month=${format(selectedDate, 'yyyy-MM')}`} />
         </div>
 
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.45 }} className="mb-6">
+          <Link to={createPageUrl("Reports")}>
+            <div className="flex items-center gap-4 bg-white dark:bg-gray-800 rounded-2xl px-4 py-3.5 border border-gray-100 dark:border-gray-700 shadow-sm hover:shadow-md transition-shadow">
+              <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-700 flex items-center justify-center flex-shrink-0">
+                <BarChart2 className="w-5 h-5 text-slate-600 dark:text-slate-300" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-gray-900 dark:text-white">Ver Relatórios</p>
+                <p className="text-xs text-gray-400 dark:text-gray-500 truncate">
+                  {expenseCount > 0 ? `${expenseCount} gastos${savingsRate !== null ? ` · ${savingsRate}% poupado` : ""} este mês` : "Análise de gastos e metas"}
+                </p>
+              </div>
+              <ChevronRight className="w-4 h-4 text-gray-300 dark:text-gray-600 flex-shrink-0" />
+            </div>
+          </Link>
+        </motion.div>
+        
         {accounts.length > 0 && (
           <div className="mb-6">
             <div className="flex items-center justify-between mb-3">

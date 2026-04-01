@@ -21,6 +21,8 @@ import NotificationCenter from "@/components/NotificationCenter";
 import ProfileSwitcher from "@/components/profile/ProfileSwitcher";
 import { toast } from "sonner";
 import { base44 } from "@/api/base44Client";
+import CategoryManager from "@/components/profile/CategoryManager";
+import { Tag } from "lucide-react";
 
 export default function Profile() {
   const { user, signOut } = useAuth();
@@ -32,6 +34,7 @@ export default function Profile() {
   const [showHelpModal, setShowHelpModal] = useState(false);
   const [showTermsModal, setShowTermsModal] = useState(false);
   const [showPrivacyModal, setShowPrivacyModal] = useState(false);
+  const [showCategories, setShowCategories] = useState(false);
   const [showRateModal, setShowRateModal] = useState(false);
   const [notifications, setNotifications] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
@@ -233,7 +236,13 @@ export default function Profile() {
       items: [
         { icon: Star, label: "Avaliar o App", action: "rate" }
       ]
-    }
+    },
+    {
+      title: "Configurações",
+      items: [
+        { icon: Tag, label: "Gerenciar Categorias", action: "categories" },
+      ]
+    },
   ];
 
   const handleMenuAction = (item) => {
@@ -259,6 +268,8 @@ export default function Profile() {
         setShowTermsModal(true);
       } else if (item.action === "privacy") {
         setShowPrivacyModal(true);
+      } else if (item.action === "categories") {
+        setShowCategories(true);
       } else if (item.action === "rate") {
         setShowRateModal(true);
       }
@@ -387,6 +398,9 @@ export default function Profile() {
               queryClient.invalidateQueries({ queryKey: ['pendingInvitesCount'] });
             }}
           />
+        )}
+        {showCategories && (
+          <CategoryManager onClose={() => setShowCategories(false)} />
         )}
         {showPendingInvites && (
           <PendingInvites

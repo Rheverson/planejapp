@@ -6,23 +6,39 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { X, TrendingUp, TrendingDown, PiggyBank } from "lucide-react";
 import { format, addMonths, addYears } from "date-fns";
-
-const incomeCategories = ["Salário", "Freelance", "Comissão", "Investimentos", "Presente", "Outros"];
-const expenseCategories = ["Alimentação", "Moradia", "Transporte", "Saúde", "Educação", "Lazer", "Compras", "Outros"];
-const investmentCategories = ["Renda Fixa", "Ações", "FIIs", "Criptomoedas", "Tesouro Direto", "Previdência", "Outros"];
+import { useAuth } from "@/lib/AuthContext";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/lib/supabase";
 
 const today = new Date().toISOString().split("T")[0];
 
 const presetPeriods = [
-  { label: "1 mês",  getEnd: () => format(addMonths(new Date(), 1), "yyyy-MM-dd") },
+  { label: "1 mês",   getEnd: () => format(addMonths(new Date(), 1), "yyyy-MM-dd") },
   { label: "3 meses", getEnd: () => format(addMonths(new Date(), 3), "yyyy-MM-dd") },
   { label: "6 meses", getEnd: () => format(addMonths(new Date(), 6), "yyyy-MM-dd") },
-  { label: "1 ano",  getEnd: () => format(addYears(new Date(), 1), "yyyy-MM-dd") },
-  { label: "2 anos", getEnd: () => format(addYears(new Date(), 2), "yyyy-MM-dd") },
-  { label: "5 anos", getEnd: () => format(addYears(new Date(), 5), "yyyy-MM-dd") },
+  { label: "1 ano",   getEnd: () => format(addYears(new Date(), 1),  "yyyy-MM-dd") },
+  { label: "2 anos",  getEnd: () => format(addYears(new Date(), 2),  "yyyy-MM-dd") },
+  { label: "5 anos",  getEnd: () => format(addYears(new Date(), 5),  "yyyy-MM-dd") },
 ];
 
 export default function GoalForm({ goal, accounts = [], onSubmit, onClose }) {
+  const { user } = useAuth();
+
+  const { data: allCategories = [] } = useQuery({
+    queryKey: ['categories', user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('categories')
+        .select('*')
+        .or(`user_id.eq.${user?.id},is_default.eq.true`)
+        .order('is_default', { ascending: false })
+        .order('name');
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!user?.id
+  });
+
   const [type, setType] = useState(goal?.type || "expense");
   const [name, setName] = useState(goal?.name || "");
   const [category, setCategory] = useState(goal?.category || "");
@@ -31,7 +47,7 @@ export default function GoalForm({ goal, accounts = [], onSubmit, onClose }) {
   const [endDate, setEndDate] = useState(goal?.end_date || format(addMonths(new Date(), 1), "yyyy-MM-dd"));
   const [linkedAccountId, setLinkedAccountId] = useState(goal?.linked_account_id || "");
 
-  const categories = type === "income" ? incomeCategories : type === "investment" ? investmentCategories : expenseCategories;
+  const categories = allCategories.filter(c => c.type === type).map(c => c.name);
   const investmentAccounts = accounts.filter(a => a.type === 'investment');
 
   const handleSubmit = (e) => {
@@ -64,12 +80,11 @@ export default function GoalForm({ goal, accounts = [], onSubmit, onClose }) {
 
         <form onSubmit={handleSubmit} className="px-4 py-3 space-y-3 pb-5">
 
-          {/* Tipo */}
           <div className="flex gap-1.5 p-1 bg-gray-100 rounded-xl">
             {[
-              { val: "income",     label: "Entrada",    Icon: TrendingUp,   active: "bg-emerald-500" },
-              { val: "expense",    label: "Saída",      Icon: TrendingDown, active: "bg-red-500" },
-              { val: "investment", label: "Investimento", Icon: PiggyBank,  active: "bg-violet-500" },
+              { val: "income",     label: "Entrada",      Icon: TrendingUp,   active: "bg-emerald-500" },
+              { val: "expense",    label: "Saída",        Icon: TrendingDown, active: "bg-red-500" },
+              { val: "investment", label: "Investimento", Icon: PiggyBank,    active: "bg-violet-500" },
             ].map(({ val, label, Icon, active }) => (
               <button key={val} type="button" onClick={() => { setType(val); setCategory(""); }}
                 className={`flex-1 flex items-center justify-center gap-1 py-2 rounded-lg text-xs font-medium transition-all ${
@@ -80,7 +95,6 @@ export default function GoalForm({ goal, accounts = [], onSubmit, onClose }) {
             ))}
           </div>
 
-          {/* Nome */}
           <div className="space-y-1">
             <Label className="text-xs font-medium text-gray-600">Nome da meta</Label>
             <Input placeholder="Ex: Reserva de emergência, Viagem..." value={name}
@@ -88,7 +102,6 @@ export default function GoalForm({ goal, accounts = [], onSubmit, onClose }) {
               className="h-10 text-sm border-gray-200 rounded-xl" required />
           </div>
 
-          {/* Categoria */}
           <div className="space-y-1">
             <Label className="text-xs font-medium text-gray-600">Categoria</Label>
             <Select value={category} onValueChange={setCategory}>
@@ -103,7 +116,6 @@ export default function GoalForm({ goal, accounts = [], onSubmit, onClose }) {
             </Select>
           </div>
 
-          {/* Valor */}
           <div className="space-y-1">
             <Label className="text-xs font-medium text-gray-600">Valor da meta</Label>
             <div className="relative">
@@ -114,7 +126,6 @@ export default function GoalForm({ goal, accounts = [], onSubmit, onClose }) {
             </div>
           </div>
 
-          {/* Período com atalhos */}
           <div className="space-y-2">
             <Label className="text-xs font-medium text-gray-600">Período</Label>
             <div className="flex gap-1.5 flex-wrap">
@@ -144,10 +155,9 @@ export default function GoalForm({ goal, accounts = [], onSubmit, onClose }) {
             </div>
           </div>
 
-          {/* Conta vinculada (só para investimentos) */}
           {type === "investment" && investmentAccounts.length > 0 && (
             <div className="space-y-1">
-              <Label className="text-xs font-medium text-gray-600">Conta de investimento vinculada</Label>
+              <Label className="text-xs font-medium text-gray-600">Conta vinculada</Label>
               <Select value={linkedAccountId} onValueChange={setLinkedAccountId}>
                 <SelectTrigger className="h-10 text-sm border-gray-200 rounded-xl">
                   <SelectValue placeholder="Selecione (opcional)" />
@@ -162,7 +172,7 @@ export default function GoalForm({ goal, accounts = [], onSubmit, onClose }) {
           )}
 
           <Button type="submit" className={`w-full h-11 rounded-xl text-sm font-semibold ${
-            type === "income" ? "bg-emerald-500 hover:bg-emerald-600"
+            type === "income"     ? "bg-emerald-500 hover:bg-emerald-600"
             : type === "investment" ? "bg-violet-500 hover:bg-violet-600"
             : "bg-red-500 hover:bg-red-600"
           }`}>

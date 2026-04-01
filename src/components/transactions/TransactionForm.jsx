@@ -8,9 +8,10 @@ import { Switch } from "@/components/ui/switch";
 import { X, TrendingUp, TrendingDown, Repeat } from "lucide-react";
 import CategorySuggestion from "./CategorySuggestion";
 import { useCategorySuggestion } from "./useCategorySuggestion";
+import { useAuth } from "@/lib/AuthContext";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/lib/supabase";
 
-const incomeCategories = ["Salário", "Freelance", "Comissão", "Investimentos", "Presente", "Outros"];
-const expenseCategories = ["Alimentação", "Moradia", "Transporte", "Saúde", "Educação", "Lazer", "Compras", "Outros"];
 const frequencyOptions = [
   { value: "monthly", label: "Mensal" },
   { value: "weekly",  label: "Semanal" },
@@ -22,6 +23,22 @@ const todayDay = new Date().getDate();
 
 export default function TransactionForm({ accounts, onSubmit, onClose, initialType = "expense", initialData = null }) {
   const isEditing = !!initialData;
+  const { user } = useAuth();
+
+  const { data: allCategories = [] } = useQuery({
+    queryKey: ['categories', user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('categories')
+        .select('*')
+        .or(`user_id.eq.${user?.id},is_default.eq.true`)
+        .order('is_default', { ascending: false })
+        .order('name');
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!user?.id
+  });
 
   const [type, setType] = useState(initialData?.type || initialType);
   const [description, setDescription]   = useState(initialData?.description || "");
@@ -37,7 +54,7 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
   const [showSuggestion, setShowSuggestion] = useState(false);
 
   const { suggestion, confidence, confirmCategory } = useCategorySuggestion(description, type);
-  const categories = type === "income" ? incomeCategories : expenseCategories;
+  const categories = allCategories.filter(c => c.type === type).map(c => c.name);
 
   const handleDescriptionChange = (val) => {
     setDescription(val);
@@ -87,7 +104,6 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
         className="bg-white rounded-t-3xl sm:rounded-3xl w-full max-w-md max-h-[88vh] overflow-y-auto"
       >
         <div className="sticky top-0 bg-white px-4 py-3 border-b border-gray-100 flex items-center justify-between z-10">
-          {/* ✅ Título muda conforme modo */}
           <h2 className="text-base font-bold text-gray-900">
             {isEditing ? "Editar Transação" : "Nova Transação"}
           </h2>
@@ -177,7 +193,6 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
             />
           </div>
 
-          {/* Recorrente — esconde ao editar pois não faz sentido alterar recorrência */}
           {!isEditing && (
             <div className="rounded-xl border border-gray-200 overflow-hidden">
               <button type="button" onClick={() => setIsRecurring(!isRecurring)}
@@ -274,7 +289,7 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
             }`}
           >
             {isEditing
-              ? `Salvar alterações`
+              ? "Salvar alterações"
               : isRecurring
                 ? `Criar recorrência ${type === "income" ? "de entrada" : "de saída"}`
                 : `Adicionar ${type === "income" ? "Entrada" : "Saída"}`
