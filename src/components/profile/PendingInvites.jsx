@@ -7,7 +7,6 @@ import { Button } from '@/components/ui/button';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/AuthContext';
 import { toast } from 'sonner';
-import { base44 } from '@/api/base44Client';
 import { supabase } from '@/lib/supabase';
 
 const relationshipLabels = {

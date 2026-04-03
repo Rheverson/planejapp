@@ -20,7 +20,6 @@ import RateAppModal from "@/components/profile/RateAppModal";
 import NotificationCenter from "@/components/NotificationCenter";
 import ProfileSwitcher from "@/components/profile/ProfileSwitcher";
 import { toast } from "sonner";
-import { base44 } from "@/api/base44Client";
 import CategoryManager from "@/components/profile/CategoryManager";
 import { Tag } from "lucide-react";
 
@@ -48,18 +47,33 @@ export default function Profile() {
 
   // Consultas de dados
   const { data: accounts = [] } = useQuery({
-    queryKey: ['accounts'],
-    queryFn: () => base44.entities.Account.list()
+    queryKey: ['accounts', user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('accounts').select('*').eq('user_id', user.id);
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!user?.id,
   });
 
   const { data: transactions = [] } = useQuery({
-    queryKey: ['transactions'],
-    queryFn: () => base44.entities.Transaction.list()
+    queryKey: ['transactions', user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('transactions').select('*').eq('user_id', user.id);
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!user?.id,
   });
 
   const { data: sharedAccess = [] } = useQuery({
-    queryKey: ['sharedAccess'],
-    queryFn: () => base44.entities.SharedAccess.list()
+    queryKey: ['sharedAccess', user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('shared_access').select('*').eq('owner_id', user.id);
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!user?.id,
   });
 
   // Query para contar convites pendentes
@@ -124,7 +138,10 @@ export default function Profile() {
   });
 
   const deleteShareMutation = useMutation({
-    mutationFn: (id) => base44.entities.SharedAccess.delete(id),
+    mutationFn: async (id) => {
+      const { error } = await supabase.from('shared_access').delete().eq('id', id).eq('owner_id', user.id);
+      if (error) throw error;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sharedAccess'] });
       toast.success('Compartilhamento removido!');

@@ -6,7 +6,6 @@ import { useAuth } from '@/lib/AuthContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
-import { base44 } from '@/api/base44Client';
 
 const relationshipLabels = {
   esposo_a: "Esposo(a)",
@@ -57,9 +56,7 @@ export default function NotificationCenter() {
       const notification = notifications.find(n => n.id === notificationId);
       
       // Atualizar status do SharedAccess para 'accepted'
-      await base44.entities.SharedAccess.update(notification.shared_access_id, {
-        status: 'accepted'
-      });
+      await supabase.from('shared_access').update({ status: 'accepted' }).eq('id', notification.shared_access_id);
 
       // Marcar notificação como lida
       await supabase
@@ -83,9 +80,7 @@ export default function NotificationCenter() {
       const notification = notifications.find(n => n.id === notificationId);
       
       // Atualizar status do SharedAccess para 'rejected'
-      await base44.entities.SharedAccess.update(notification.shared_access_id, {
-        status: 'rejected'
-      });
+      await supabase.from('shared_access').update({ status: 'rejected' }).eq('id', notification.shared_access_id);
 
       // Marcar notificação como lida
       await supabase

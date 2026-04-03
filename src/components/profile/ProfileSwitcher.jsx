@@ -7,6 +7,14 @@ import { useAuth } from '@/lib/AuthContext';
 import { supabase } from '@/lib/supabase';
 
 const relationshipLabels = {
+  'Esposo(a)': "Esposo(a)",
+  'Namorado(a)': "Namorado(a)",
+  'Noivo(a)': "Noivo(a)",
+  'Irmão(ã)': "Irmão(ã)",
+  'Pai/Mãe': "Pai/Mãe",
+  'Filho(a)': "Filho(a)",
+  'Outro': "Outro",
+  // fallback para os valores antigos em snake_case
   esposo_a: "Esposo(a)",
   namorado_a: "Namorado(a)",
   noivo_a: "Noivo(a)",
@@ -21,6 +29,7 @@ export default function ProfileSwitcher() {
   const { activeProfile, switchProfile, switchToOwnProfile, isViewingSharedProfile } = useSharedProfile();
   const [showMenu, setShowMenu] = useState(false);
 
+  // ✅ CORRIGIDO: Busca shares accepted E os nomes dos donos
   const { data: acceptedShares = [] } = useQuery({
     queryKey: ['acceptedShares', user?.email],
     queryFn: async () => {
@@ -32,15 +41,39 @@ export default function ProfileSwitcher() {
         .eq('shared_with_email', user.email)
         .eq('status', 'accepted');
 
-      if (error) return [];
+      if (error) {
+        console.error('Erro ao buscar shares:', error);
+        return [];
+      }
 
-      // ✅ IMPORTANTE: Já temos owner_id na tabela!
-      return data || [];
+      if (!data || data.length === 0) return [];
+
+      // ✅ NOVO: Busca os nomes dos donos
+      const ownerIds = [...new Set(data.map(s => s.owner_id).filter(Boolean))];
+      const ownersMap = {};
+
+      await Promise.all(
+        ownerIds.map(async (ownerId) => {
+          const { data: ownerData } = await supabase
+            .rpc('get_user_by_id', { user_id_input: ownerId });
+          if (ownerData?.[0]) {
+            ownersMap[ownerId] = ownerData[0].full_name || ownerData[0].email;
+          }
+        })
+      );
+
+      // ✅ NOVO: Adiciona o nome ao objeto share
+      return data.map(share => ({
+        ...share,
+        owner_name: ownersMap[share.owner_id] || `Usuário ${share.owner_id.slice(0, 8)}`
+      }));
     },
     enabled: !!user?.email
   });
 
   const userName = user?.user_metadata?.full_name || user?.email?.split('@')[0];
+
+  console.log('📱 acceptedShares:', acceptedShares); // DEBUG
 
   return (
     <div className="relative">
@@ -101,8 +134,7 @@ export default function ProfileSwitcher() {
                       <button
                         key={share.id}
                         onClick={() => {
-                          // ✅ CORRIGIDO: Passa o objeto share completo
-                          // Agora inclui owner_id que vem direto do banco!
+                          console.log('🔄 Switching to profile:', share); // DEBUG
                           switchProfile(share);
                           setShowMenu(false);
                         }}
@@ -113,9 +145,9 @@ export default function ProfileSwitcher() {
                         }`}
                       >
                         <div>
-                          {/* ✅ NOVO: Busca o nome do dono de forma melhor */}
+                          {/* ✅ CORRIGIDO: Agora mostra o nome correto */}
                           <p className="font-semibold text-sm">
-                            {share.owner_name || `Usuário ${share.owner_id.slice(0, 8)}`}
+                            {share.owner_name}
                           </p>
                           <p className="text-xs text-gray-500 dark:text-gray-400">
                             {relationshipLabels[share.relationship_type] || share.relationship_type}

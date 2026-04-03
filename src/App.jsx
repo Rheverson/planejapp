@@ -13,8 +13,12 @@ import OnboardingGoals from '@/pages/auth/OnboardingGoals';
 import OnboardingPassword from '@/pages/auth/OnboardingPassword';
 import ForgotPassword from "@/pages/auth/ForgotPassword";
 import ResetPassword from "@/pages/auth/ResetPassword";
+import Subscribe from "@/pages/Subscribe";
+import SubscriptionSuccess from "@/pages/SubscriptionSuccess";
 import { MonthProvider } from '@/lib/MonthContext';
 import { PrivacyProvider } from '@/lib/PrivacyContext';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/lib/supabase';
 
 const { Pages, Layout, mainPage } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
@@ -24,10 +28,29 @@ const LayoutWrapper = ({ children, currentPageName }) => Layout ?
   <Layout currentPageName={currentPageName}>{children}</Layout>
   : <>{children}</>;
 
+// Hook para verificar assinatura
+function useSubscription(userId) {
+  return useQuery({
+    queryKey: ['subscription', userId],
+    queryFn: async () => {
+      if (!userId) return null;
+      const { data } = await supabase
+        .from('subscriptions')
+        .select('*')
+        .eq('user_id', userId)
+        .single();
+      return data;
+    },
+    enabled: !!userId,
+    staleTime: 5 * 60 * 1000, // 5 minutos
+  });
+}
+
 const AuthenticatedApp = () => {
   const { loading, user } = useAuth();
+  const { data: subscription, isLoading: subLoading } = useSubscription(user?.id);
 
-  if (loading) {
+  if (loading || (user && subLoading)) {
     return (
       <div className="fixed inset-0 flex items-center justify-center bg-white dark:bg-gray-900">
         <div className="w-10 h-10 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
@@ -48,11 +71,33 @@ const AuthenticatedApp = () => {
     );
   }
 
+  // Verifica se assinatura está ativa ou em trial
+  const isSubscribed = subscription && [
+    'active', 'trialing'
+  ].includes(subscription.status);
+
+  // Trial expirado ou sem assinatura
+  const needsSubscription = !isSubscribed;
+
+  // Se não tem assinatura ativa, manda para Subscribe
+  // exceto se já está na página de subscribe ou success
+  if (needsSubscription) {
+    return (
+      <Routes>
+        <Route path="/subscribe" element={<Subscribe />} />
+        <Route path="/subscription-success" element={<SubscriptionSuccess />} />
+        <Route path="*" element={<Navigate to="/subscribe" replace />} />
+      </Routes>
+    );
+  }
+
   return (
     <Routes>
       <Route path="/login" element={<Navigate to="/" replace />} />
       <Route path="/forgot-password" element={<Navigate to="/" replace />} />
       <Route path="/onboarding/*" element={<Navigate to="/" replace />} />
+      <Route path="/subscribe" element={<Navigate to="/" replace />} />
+      <Route path="/subscription-success" element={<SubscriptionSuccess />} />
       <Route path="/" element={<LayoutWrapper currentPageName={mainPageKey}><MainPage /></LayoutWrapper>} />
       {Object.entries(Pages).map(([path, Page]) => (
         <Route
@@ -78,10 +123,10 @@ function App() {
               <QueryClientProvider client={queryClientInstance}>
                 <SharedProfileProvider>
                   <MonthProvider>
-                    <PrivacyProvider>       
+                    <PrivacyProvider>
                       <NavigationTracker />
                       <AuthenticatedApp />
-                    </PrivacyProvider> 
+                    </PrivacyProvider>
                   </MonthProvider>
                 </SharedProfileProvider>
               </QueryClientProvider>

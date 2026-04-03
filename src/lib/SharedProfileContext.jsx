@@ -6,44 +6,48 @@ const SharedProfileContext = createContext();
 export const SharedProfileProvider = ({ children }) => {
   const { user } = useAuth();
   const [activeProfile, setActiveProfile] = useState(null);
-  const [activeProfileData, setActiveProfileData] = useState(null);
 
   useEffect(() => {
     if (user?.id) {
       const saved = localStorage.getItem(`activeProfile_${user.id}`);
       if (saved) {
-        setActiveProfile(JSON.parse(saved));
+        try {
+          setActiveProfile(JSON.parse(saved));
+        } catch (e) {
+          console.error('Erro ao restaurar perfil:', e);
+        }
       }
     }
   }, [user?.id]);
 
   const switchProfile = (profileData) => {
+    console.log('📌 switchProfile chamado com:', profileData);
     setActiveProfile(profileData);
-    setActiveProfileData(profileData);
     if (user?.id) {
       localStorage.setItem(`activeProfile_${user.id}`, JSON.stringify(profileData));
     }
   };
 
   const switchToOwnProfile = () => {
+    console.log('📌 switchToOwnProfile chamado');
     setActiveProfile(null);
-    setActiveProfileData(null);
     if (user?.id) {
       localStorage.removeItem(`activeProfile_${user.id}`);
     }
   };
 
   return (
-    <SharedProfileContext.Provider value={{
-      activeProfile,
-      activeProfileData,
-      switchProfile,
-      switchToOwnProfile,
-      isViewingSharedProfile: activeProfile !== null,
-      // ✅ CORRIGIDO: activeOwnerId vem direto do banco agora
-      activeOwnerId: activeProfile?.owner_id || user?.id,
-      sharedPermissions: activeProfile?.permissions || null 
-    }}>
+    <SharedProfileContext.Provider
+      value={{
+        activeProfile,
+        switchProfile,
+        switchToOwnProfile,
+        isViewingSharedProfile: activeProfile !== null,
+        // ✅ activeOwnerId agora vem do activeProfile.owner_id
+        activeOwnerId: activeProfile?.owner_id || user?.id,
+        sharedPermissions: activeProfile?.permissions || null
+      }}
+    >
       {children}
     </SharedProfileContext.Provider>
   );
