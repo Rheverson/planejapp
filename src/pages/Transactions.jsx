@@ -179,6 +179,7 @@ export default function Transactions() {
       .filter(t => {
         if (filter === "income") return t.type === "income";
         if (filter === "expense") return t.type === "expense";
+        if (filter === "transfer")  return t.type === "transfer"; 
         if (filter === "realized") return t.is_realized !== false;
         if (filter === "planned") return t.is_realized === false;
         return true;
@@ -234,6 +235,7 @@ export default function Transactions() {
               { value: "planned",  label: "Previstos" },
               { value: "income",   label: "Entradas" },
               { value: "expense",  label: "Saídas" },
+              { value: "transfer", label: "Transferências" },
             ].map(({ value, label }) => (
               <button
                 key={value}
@@ -259,6 +261,7 @@ export default function Transactions() {
               <motion.div key={transaction.id} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }}>
                 <TransactionItem
                   transaction={transaction}
+                  accounts={accounts}
                   onRegistrar={(t) => setRealizarPrevisao(t)}
                   onDuplicar={(t, meses) => duplicarMutation.mutate({ transaction: t, meses })}
                   onEdit={canAdd ? handleEdit : null}

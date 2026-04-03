@@ -87,20 +87,31 @@ export default function Goals() {
       let current = 0;
 
       if (goal.linked_account_id) {
-        // Meta de investimento vinculada a conta: usa saldo da conta
-        const acc = accounts.find(a => a.id === goal.linked_account_id);
-        current = acc?.initial_balance || 0;
+        // Meta de investimento: soma apenas transações DENTRO do período da meta
+        const start = parseISO(goal.start_date);
+        const end = parseISO(goal.end_date);
+        
         transactions.forEach(t => {
-          if (t.account_id !== goal.linked_account_id || t.is_realized === false) return;
-          if (t.type === 'income') current += t.amount;
-          else if (t.type === 'expense') current -= t.amount;
-          else if (t.type === 'transfer') {
-            if (t.account_id === goal.linked_account_id) current -= t.amount;
+          if (t.is_realized === false) return;
+          if (t.account_id !== goal.linked_account_id && t.transfer_account_id !== goal.linked_account_id) return;
+          
+          const date = parseISO(t.date);
+          if (!isWithinInterval(date, { start, end })) return; // <- só dentro do período
+
+          if (t.type === 'income' && t.account_id === goal.linked_account_id) {
+            current += t.amount;
+          } else if (t.type === 'expense' && t.account_id === goal.linked_account_id) {
+            current -= t.amount;
+          } else if (t.type === 'transfer') {
+            // transferência entrando na conta de investimento conta como aporte
             if (t.transfer_account_id === goal.linked_account_id) current += t.amount;
+            // transferência saindo não conta (retirada)
+            if (t.account_id === goal.linked_account_id) current -= t.amount;
           }
         });
+
       } else {
-        // Meta de receita/despesa: soma transações dentro do período da meta
+        // Meta de receita/despesa: soma transações dentro do período
         const start = parseISO(goal.start_date);
         const end = parseISO(goal.end_date);
         transactions.forEach(t => {
