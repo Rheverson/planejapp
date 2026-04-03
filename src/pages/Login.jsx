@@ -86,10 +86,11 @@ export default function Login() {
         if (error.message.includes("Invalid login credentials")) {
           setLoginError("Senha incorreta. Por favor, tente novamente.");
         } else if (error.message.includes("Email not confirmed")) {
-          setLoginError("Email não confirmado. Verifique seu email.");
+          // <- CORREÇÃO: redireciona para verificação em vez de mostrar erro
+          toast.info("Confirme seu email primeiro!");
+          navigate("/auth/verify", { state: { email, password } });
         } else {
           setLoginError("Ocorreu um erro. Tente novamente.");
-          console.error("Erro de login:", error.message);
         }
       } else {
         toast.success("Login bem-sucedido!");
@@ -100,7 +101,6 @@ export default function Login() {
       setLoading(false);
     }
   };
-
   const handleGoToSignup = () => {
     navigate("/onboarding/name", { state: { email } });
   };

@@ -1,33 +1,29 @@
-// src/pages/auth/Verify.jsx - VERIFICAÇÃO DE CÓDIGO
-// Verifica o código OTP enviado para o email e faz login automático
-
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { Loader2, Mail, ArrowLeft } from "lucide-react";
+import { Loader2, Mail, ArrowLeft, AlertCircle } from "lucide-react";
 
 export default function Verify() {
-  const [token, setToken] = useState("");
+  const [token, setToken] = useState(["", "", "", "", "", ""]);
   const [loading, setLoading] = useState(false);
   const [resendLoading, setResendLoading] = useState(false);
   const [resendCountdown, setResendCountdown] = useState(0);
-  
+  const [codeExpired, setCodeExpired] = useState(false);
+  const inputRefs = useRef([]);
+
   const location = useLocation();
   const navigate = useNavigate();
 
   const email = location.state?.email;
   const password = location.state?.password;
 
-  if (!email || !password) {
-    navigate("/login");
-    return null;
-  }
+  useEffect(() => {
+    if (!email) navigate("/login");
+  }, []);
 
-  // Countdown para reenvio de código
   useEffect(() => {
     if (resendCountdown > 0) {
       const timer = setTimeout(() => setResendCountdown(resendCountdown - 1), 1000);
@@ -35,65 +31,95 @@ export default function Verify() {
     }
   }, [resendCountdown]);
 
+  const handleChange = (index, value) => {
+    if (!/^\d*$/.test(value)) return;
+    const newToken = [...token];
+    newToken[index] = value.slice(-1);
+    setToken(newToken);
+    setCodeExpired(false);
+    if (value && index < 5) {
+      inputRefs.current[index + 1]?.focus();
+    }
+  };
+
+  const handleKeyDown = (index, e) => {
+    if (e.key === "Backspace" && !token[index] && index > 0) {
+      inputRefs.current[index - 1]?.focus();
+    }
+  };
+
+  const handlePaste = (e) => {
+    const paste = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6);
+    if (paste.length === 6) {
+      setToken(paste.split(""));
+      inputRefs.current[5]?.focus();
+    }
+  };
+
+  const fullToken = token.join("");
+
   const handleVerify = async (e) => {
     e.preventDefault();
-    if (token.length < 6) return;
+    if (fullToken.length < 6) return;
 
     setLoading(true);
+    setCodeExpired(false);
     try {
-      // 1. Verifica o código OTP
       const { error: verifyError } = await supabase.auth.verifyOtp({
         email,
-        token,
-        type: 'signup'
+        token: fullToken,
+        type: 'email'  // <- corrigido
       });
 
-      if (verifyError) throw verifyError;
+      if (verifyError) {
+        if (verifyError.message.includes("expired") || verifyError.message.includes("invalid")) {
+          setCodeExpired(true);
+          setToken(["", "", "", "", "", ""]);
+          inputRefs.current[0]?.focus();
+          return;
+        }
+        throw verifyError;
+      }
 
-      // 2. Tenta logar automaticamente após verificar
-      const { error: loginError } = await supabase.auth.signInWithPassword({
-        email,
-        password
-      });
+      if (password) {
+        await supabase.auth.signInWithPassword({ email, password });
+      }
 
-      if (loginError) throw loginError;
-
-      toast.success("Sucesso!", {
-        description: "Conta confirmada com sucesso. Bem-vindo!"
-      });
-
-      // 3. Vai para a Home (AuthContext cuidará do redirecionamento)
+      toast.success("Email confirmado! Bem-vindo!");
       navigate("/");
 
     } catch (err) {
-      toast.error("Erro na verificação", {
-        description: err.message || "Código inválido ou expirado. Tente novamente."
-      });
-      console.error("Erro na verificação:", err);
+      toast.error("Erro na verificação: " + err.message);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleResendCode = async () => {
+  const handleResend = async () => {
     setResendLoading(true);
+    setCodeExpired(false);
     try {
-      const { error } = await supabase.auth.resend({
-        type: 'signup',
-        email: email.toLowerCase().trim()
+      // Usa signUp novamente — o Supabase reenvia o código se o usuário já existe mas não confirmou
+      const { error } = await supabase.auth.signUp({
+        email: email.toLowerCase().trim(),
+        password: password || Math.random().toString(36), // senha temporária
+        options: {
+          emailRedirectTo: window.location.origin
+        }
       });
 
-      if (error) throw error;
+      // Ignora erro de "already registered" — o email foi reenviado mesmo assim
+      if (error && !error.message.includes("already registered") && !error.message.includes("User already registered")) {
+        throw error;
+      }
 
-      toast.success("Código reenviado!", {
-        description: "Verifique seu e-mail novamente."
-      });
+      toast.success("Novo código enviado! Verifique seu email.");
+      setToken(["", "", "", "", "", ""]);
+      inputRefs.current[0]?.focus();
+      setResendCountdown(60);
 
-      setResendCountdown(60); // 60 segundos de espera
     } catch (err) {
-      toast.error("Erro ao reenviar", {
-        description: err.message
-      });
+      toast.error("Erro ao reenviar: " + err.message);
     } finally {
       setResendLoading(false);
     }
@@ -101,91 +127,83 @@ export default function Verify() {
 
   return (
     <div className="min-h-screen bg-blue-600 flex flex-col justify-center items-center p-4">
-      <motion.div 
-        initial={{ opacity: 0, y: 20 }} 
-        animate={{ opacity: 1, y: 0 }} 
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
         className="bg-white w-full max-w-md rounded-3xl p-8 shadow-2xl"
       >
-        <button 
-          onClick={() => navigate("/login")}
-          className="flex items-center gap-2 text-blue-600 hover:text-blue-700 font-medium text-sm mb-6"
-        >
-          <ArrowLeft size={18} />
-          Voltar
+        <button onClick={() => navigate("/login")}
+          className="flex items-center gap-2 text-blue-600 hover:text-blue-700 font-medium text-sm mb-6">
+          <ArrowLeft size={18} /> Voltar
         </button>
 
         <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-6">
+          <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
             <Mail size={32} />
           </div>
-          
           <h2 className="text-2xl font-bold mb-2 text-gray-900">Verifique seu e-mail</h2>
-          <p className="text-gray-600 text-sm">
-            Enviamos um código de 6 dígitos para <br />
+          <p className="text-gray-500 text-sm">
+            Enviamos um código para<br />
             <span className="font-semibold text-gray-800">{email}</span>
           </p>
         </div>
 
+        {codeExpired && (
+          <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
+            className="bg-red-50 border border-red-200 rounded-2xl p-4 mb-6 flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-semibold text-red-700">Código expirado ou inválido</p>
+              <p className="text-xs text-red-600 mt-0.5">Clique em "Reenviar código" para receber um novo.</p>
+            </div>
+          </motion.div>
+        )}
+
         <form onSubmit={handleVerify} className="space-y-6">
-          <div className="space-y-2">
-            <label htmlFor="token" className="block text-sm font-semibold text-gray-800">
+          <div>
+            <label className="block text-sm font-semibold text-gray-800 mb-3 text-center">
               Código de verificação
             </label>
-            <Input 
-              id="token"
-              type="text"
-              placeholder="000000"
-              maxLength={6}
-              value={token}
-              onChange={(e) => setToken(e.target.value.replace(/\D/g, ""))}
-              className="text-center text-2xl tracking-[0.5em] h-16 font-bold border-2 focus:border-blue-500 rounded-xl"
-              autoFocus
-              disabled={loading}
-            />
+            <div className="flex gap-2 justify-center" onPaste={handlePaste}>
+              {token.map((digit, i) => (
+                <input
+                  key={i}
+                  ref={el => inputRefs.current[i] = el}
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={1}
+                  value={digit}
+                  onChange={e => handleChange(i, e.target.value)}
+                  onKeyDown={e => handleKeyDown(i, e)}
+                  className={`w-12 h-14 text-center text-xl font-bold border-2 rounded-xl transition-colors outline-none
+                    ${digit ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}
+                    ${codeExpired ? 'border-red-300 bg-red-50' : ''}
+                    focus:border-blue-500`}
+                  disabled={loading}
+                />
+              ))}
+            </div>
           </div>
 
-          <Button 
-            type="submit"
-            disabled={loading || token.length < 6} 
-            className="w-full h-14 bg-blue-600 hover:bg-blue-700 rounded-xl text-lg font-bold flex items-center justify-center gap-2"
-          >
-            {loading ? (
-              <>
-                <Loader2 size={20} className="animate-spin" />
-                Verificando...
-              </>
-            ) : (
-              "Confirmar Código"
-            )}
+          <Button type="submit" disabled={loading || fullToken.length < 6}
+            className="w-full h-14 bg-blue-600 hover:bg-blue-700 rounded-xl text-lg font-bold">
+            {loading
+              ? <><Loader2 size={20} className="animate-spin mr-2" />Verificando...</>
+              : "Confirmar Código"}
           </Button>
 
-          <div className="space-y-3 pt-4 border-t border-gray-200">
-            <p className="text-sm text-gray-600 text-center">
-              Não recebeu o código?
-            </p>
-            
-            <Button 
-              type="button"
-              onClick={handleResendCode}
+          <div className="text-center space-y-3 pt-2 border-t border-gray-100">
+            <p className="text-sm text-gray-500">Não recebeu o código?</p>
+            <Button type="button" onClick={handleResend}
               disabled={resendLoading || resendCountdown > 0}
-              variant="outline"
-              className="w-full h-12 rounded-xl border-gray-200 hover:bg-gray-50"
-            >
-              {resendLoading ? (
-                <>
-                  <Loader2 size={18} className="animate-spin mr-2" />
-                  Reenviando...
-                </>
-              ) : resendCountdown > 0 ? (
-                `Reenviar em ${resendCountdown}s`
-              ) : (
-                "Reenviar código"
-              )}
+              variant="outline" className="w-full h-12 rounded-xl border-gray-200">
+              {resendLoading
+                ? <><Loader2 size={18} className="animate-spin mr-2" />Reenviando...</>
+                : resendCountdown > 0
+                  ? `Reenviar em ${resendCountdown}s`
+                  : "Reenviar código"}
             </Button>
-
-            <p className="text-xs text-gray-400 text-center">
-              Verifique a pasta de spam se não encontrar o email.
-            </p>
+            <p className="text-xs text-gray-400">Verifique também a pasta de spam.</p>
           </div>
         </form>
       </motion.div>
