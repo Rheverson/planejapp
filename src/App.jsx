@@ -14,6 +14,7 @@ import OnboardingPassword from '@/pages/auth/OnboardingPassword';
 import ForgotPassword from "@/pages/auth/ForgotPassword";
 import ResetPassword from "@/pages/auth/ResetPassword";
 import { MonthProvider } from '@/lib/MonthContext';
+import { PrivacyProvider } from '@/lib/PrivacyContext';
 
 const { Pages, Layout, mainPage } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
@@ -77,8 +78,10 @@ function App() {
               <QueryClientProvider client={queryClientInstance}>
                 <SharedProfileProvider>
                   <MonthProvider>
-                    <NavigationTracker />
-                    <AuthenticatedApp />
+                    <PrivacyProvider>       
+                      <NavigationTracker />
+                      <AuthenticatedApp />
+                    </PrivacyProvider> 
                   </MonthProvider>
                 </SharedProfileProvider>
               </QueryClientProvider>

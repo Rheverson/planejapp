@@ -1,3 +1,4 @@
+// src/pages/Home.jsx
 import React, { useState, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
@@ -5,11 +6,12 @@ import { useAuth } from "@/lib/AuthContext";
 import { useSharedProfile } from "@/lib/SharedProfileContext";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, TrendingUp, TrendingDown, Wallet, ChevronRight, ArrowLeftRight, PiggyBank, BarChart2 } from "lucide-react";
+import { Plus, TrendingUp, TrendingDown, Wallet, ChevronRight, ArrowLeftRight, PiggyBank, BarChart2, Eye, EyeOff } from "lucide-react";
 import { startOfMonth, endOfMonth, isWithinInterval, parseISO, format } from "date-fns";
 import { createPageUrl } from "@/utils";
 import { toast } from "sonner";
 import { useMonth } from "@/lib/MonthContext";
+import { usePrivacy } from "@/lib/PrivacyContext";
 
 import KPICard from "@/components/dashboard/KPICard";
 import AccountCard from "@/components/dashboard/AccountCard";
@@ -24,6 +26,7 @@ export default function Home() {
   const { activeOwnerId, isViewingSharedProfile, sharedPermissions } = useSharedProfile();
   const canAdd = !isViewingSharedProfile || sharedPermissions?.add_transactions;
   const { selectedDate, setSelectedDate } = useMonth();
+  const { hidden, toggle } = usePrivacy();
   const [showTransactionForm, setShowTransactionForm] = useState(false);
   const [showTransferForm, setShowTransferForm] = useState(false);
   const [initialType, setInitialType] = useState("expense");
@@ -70,28 +73,8 @@ export default function Home() {
     mutationFn: async ({ fromAccountId, toAccountId, amount, date, description }) => {
       const pairId = crypto.randomUUID();
       const { error } = await supabase.from('transactions').insert([
-        {
-          description: description || 'Transferência',
-          amount: parseFloat(amount),
-          type: 'transfer',
-          account_id: fromAccountId,
-          transfer_account_id: toAccountId,
-          transfer_pair_id: pairId,
-          date,
-          is_realized: true,
-          user_id: activeOwnerId,
-        },
-        {
-          description: description || 'Transferência',
-          amount: parseFloat(amount),
-          type: 'transfer',
-          account_id: toAccountId,
-          transfer_account_id: fromAccountId,
-          transfer_pair_id: pairId,
-          date,
-          is_realized: true,
-          user_id: activeOwnerId,
-        }
+        { description: description || 'Transferência', amount: parseFloat(amount), type: 'transfer', account_id: fromAccountId, transfer_account_id: toAccountId, transfer_pair_id: pairId, date, is_realized: true, user_id: activeOwnerId },
+        { description: description || 'Transferência', amount: parseFloat(amount), type: 'transfer', account_id: toAccountId, transfer_account_id: fromAccountId, transfer_pair_id: pairId, date, is_realized: true, user_id: activeOwnerId }
       ]);
       if (error) throw error;
     },
@@ -104,27 +87,26 @@ export default function Home() {
   });
 
   const monthStart = startOfMonth(selectedDate);
-  const monthEnd = endOfMonth(selectedDate);
+  const monthEnd   = endOfMonth(selectedDate);
 
   const monthTransactions = useMemo(() => {
     return transactions.filter(t => {
-      if (t.type === 'transfer') return false; // transferências não entram nos KPIs
-      const date = parseISO(t.date);
-      return isWithinInterval(date, { start: monthStart, end: monthEnd });
+      if (t.type === 'transfer') return false;
+      return isWithinInterval(parseISO(t.date), { start: monthStart, end: monthEnd });
     });
   }, [transactions, monthStart, monthEnd]);
 
   const kpis = useMemo(() => {
     const realized = monthTransactions.filter(t => t.is_realized !== false);
-    const planned = monthTransactions.filter(t => t.is_realized === false);
-    const totalIncomeRealized = realized.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
-    const totalIncomePlanned = planned.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
-    const totalExpenseRealized = realized.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
-    const totalExpensePlanned = planned.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
+    const planned  = monthTransactions.filter(t => t.is_realized === false);
+    const totalIncomeRealized  = realized.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
+    const totalIncomePlanned   = planned.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
+    const totalExpenseRealized = realized.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+    const totalExpensePlanned  = planned.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
     return {
-      totalIncome: totalIncomeRealized + totalIncomePlanned,
-      totalExpense: totalExpenseRealized + totalExpensePlanned,
-      currentBalance: totalIncomeRealized - totalExpenseRealized,
+      totalIncome:     totalIncomeRealized + totalIncomePlanned,
+      totalExpense:    totalExpenseRealized + totalExpensePlanned,
+      currentBalance:  totalIncomeRealized - totalExpenseRealized,
       forecastBalance: (totalIncomeRealized + totalIncomePlanned) - (totalExpenseRealized + totalExpensePlanned)
     };
   }, [monthTransactions]);
@@ -134,10 +116,9 @@ export default function Home() {
     accounts.forEach(acc => { balances[acc.id] = acc.initial_balance || 0; });
     transactions.forEach(t => {
       if (!t.account_id || t.is_realized === false) return;
-      if (t.type === 'income') balances[t.account_id] = (balances[t.account_id] || 0) + t.amount;
+      if (t.type === 'income')       balances[t.account_id] = (balances[t.account_id] || 0) + t.amount;
       else if (t.type === 'expense') balances[t.account_id] = (balances[t.account_id] || 0) - t.amount;
       else if (t.type === 'transfer') {
-        // debita da origem, credita no destino
         balances[t.account_id] = (balances[t.account_id] || 0) - t.amount;
         if (t.transfer_account_id) balances[t.transfer_account_id] = (balances[t.transfer_account_id] || 0) + t.amount;
       }
@@ -145,13 +126,13 @@ export default function Home() {
     return balances;
   }, [accounts, transactions]);
 
-  // Separa saldo do dia a dia (sem investimentos) do patrimônio investido
-  const regularAccounts = accounts.filter(a => a.type !== 'investment');
+  const regularAccounts    = accounts.filter(a => a.type !== 'investment');
   const investmentAccounts = accounts.filter(a => a.type === 'investment');
-  const totalBalance = regularAccounts.reduce((sum, acc) => sum + (accountBalances[acc.id] || 0), 0);
+  const totalBalance  = regularAccounts.reduce((sum, acc) => sum + (accountBalances[acc.id] || 0), 0);
   const totalInvested = investmentAccounts.reduce((sum, acc) => sum + (accountBalances[acc.id] || 0), 0);
+
   const expenseCount = monthTransactions.filter(t => t.type === 'expense' && t.is_realized !== false).length;
-  const savingsRate = kpis.totalIncome > 0
+  const savingsRate  = kpis.totalIncome > 0
     ? Math.max(0, (((kpis.totalIncome - kpis.totalExpense) / kpis.totalIncome) * 100)).toFixed(0)
     : null;
 
@@ -165,17 +146,37 @@ export default function Home() {
           {isViewingSharedProfile && (
             <p className="text-blue-200 text-xs font-medium mb-2">👁 Visualizando perfil compartilhado</p>
           )}
-          <p className="text-blue-200 text-sm font-medium mb-1">Saldo disponível</p>
-          <motion.h1 key={totalBalance} initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
-            className="text-4xl font-bold mb-1">
-            {fmt(totalBalance)}
+
+          {/* Label + botão olho */}
+          <div className="flex items-center gap-2 mb-1">
+            <p className="text-blue-200 text-sm font-medium">Saldo disponível</p>
+            <button
+              onClick={toggle}
+              className="p-1 bg-white/10 hover:bg-white/20 rounded-full transition-colors"
+            >
+              {hidden
+                ? <EyeOff className="w-3.5 h-3.5 text-white/60" />
+                : <Eye    className="w-3.5 h-3.5 text-white/60" />}
+            </button>
+          </div>
+
+          {/* Saldo principal */}
+          <motion.h1
+            key={String(hidden)}
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="text-4xl font-bold mb-1 tracking-tight"
+          >
+            {hidden ? "R$ ••••••" : fmt(totalBalance)}
           </motion.h1>
+
           {totalInvested > 0 && (
             <p className="text-blue-200 text-sm mb-4 flex items-center gap-1">
               <PiggyBank className="w-3.5 h-3.5" />
-              + {fmt(totalInvested)} investido
+              {hidden ? "+ R$ •••••• investido" : `+ ${fmt(totalInvested)} investido`}
             </p>
           )}
+
           <div className="mb-4">
             <MonthSelector selectedDate={selectedDate} onChange={setSelectedDate} />
           </div>
@@ -183,11 +184,13 @@ export default function Home() {
 
         {canAdd && (
           <div className="flex gap-2 px-5 pb-6">
-            <motion.button whileTap={{ scale: 0.95 }} onClick={() => { setInitialType("income"); setShowTransactionForm(true); }}
+            <motion.button whileTap={{ scale: 0.95 }}
+              onClick={() => { setInitialType("income"); setShowTransactionForm(true); }}
               className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-white/10 backdrop-blur-sm rounded-xl text-white text-sm font-medium">
               <TrendingUp className="w-4 h-4" /> Entrada
             </motion.button>
-            <motion.button whileTap={{ scale: 0.95 }} onClick={() => { setInitialType("expense"); setShowTransactionForm(true); }}
+            <motion.button whileTap={{ scale: 0.95 }}
+              onClick={() => { setInitialType("expense"); setShowTransactionForm(true); }}
               className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-white/10 backdrop-blur-sm rounded-xl text-white text-sm font-medium">
               <TrendingDown className="w-4 h-4" /> Saída
             </motion.button>
@@ -211,6 +214,7 @@ export default function Home() {
             navigateTo={`/Transactions?filter=planned&month=${format(selectedDate, 'yyyy-MM')}`} />
         </div>
 
+        {/* Botão Relatórios */}
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.45 }} className="mb-6">
           <Link to={createPageUrl("Reports")}>
             <div className="flex items-center gap-4 bg-white dark:bg-gray-800 rounded-2xl px-4 py-3.5 border border-gray-100 dark:border-gray-700 shadow-sm hover:shadow-md transition-shadow">
@@ -220,14 +224,17 @@ export default function Home() {
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold text-gray-900 dark:text-white">Ver Relatórios</p>
                 <p className="text-xs text-gray-400 dark:text-gray-500 truncate">
-                  {expenseCount > 0 ? `${expenseCount} gastos${savingsRate !== null ? ` · ${savingsRate}% poupado` : ""} este mês` : "Análise de gastos e metas"}
+                  {expenseCount > 0
+                    ? `${expenseCount} gastos${savingsRate !== null ? ` · ${savingsRate}% poupado` : ""} este mês`
+                    : "Análise de gastos e metas"}
                 </p>
               </div>
               <ChevronRight className="w-4 h-4 text-gray-300 dark:text-gray-600 flex-shrink-0" />
             </div>
           </Link>
         </motion.div>
-        
+
+        {/* Contas */}
         {accounts.length > 0 && (
           <div className="mb-6">
             <div className="flex items-center justify-between mb-3">
@@ -256,6 +263,7 @@ export default function Home() {
           </div>
         )}
 
+        {/* Transações recentes */}
         <div>
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-lg font-bold text-gray-900 dark:text-white">Transações Recentes</h2>
@@ -270,7 +278,9 @@ export default function Home() {
               ))}
             </div>
           ) : (
-            <EmptyState icon={Wallet} title="Nenhuma transação" description="Adicione sua primeira entrada ou saída." action="Adicionar Transação" onAction={() => setShowTransactionForm(true)} />
+            <EmptyState icon={Wallet} title="Nenhuma transação"
+              description="Adicione sua primeira entrada ou saída."
+              action="Adicionar Transação" onAction={() => setShowTransactionForm(true)} />
           )}
         </div>
       </div>
