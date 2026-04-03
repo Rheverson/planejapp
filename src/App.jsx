@@ -8,6 +8,7 @@ import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import { SharedProfileProvider } from '@/lib/SharedProfileContext';
 import Login from '@/pages/Login';
+import Verify from '@/pages/auth/Verify';
 import OnboardingName from '@/pages/auth/OnboardingName';
 import OnboardingGoals from '@/pages/auth/OnboardingGoals';
 import OnboardingPassword from '@/pages/auth/OnboardingPassword';
@@ -63,6 +64,7 @@ const AuthenticatedApp = () => {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/auth/verify" element={<Verify />} />
         <Route path="/onboarding/name" element={<OnboardingName />} />
         <Route path="/onboarding/goals" element={<OnboardingGoals />} />
         <Route path="/onboarding/password" element={<OnboardingPassword />} />
