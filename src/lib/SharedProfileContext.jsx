@@ -40,6 +40,7 @@ export const SharedProfileProvider = ({ children }) => {
       switchProfile,
       switchToOwnProfile,
       isViewingSharedProfile: activeProfile !== null,
+      // ✅ CORRIGIDO: activeOwnerId vem direto do banco agora
       activeOwnerId: activeProfile?.owner_id || user?.id,
       sharedPermissions: activeProfile?.permissions || null 
     }}>

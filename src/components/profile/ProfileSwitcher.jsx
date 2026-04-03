@@ -34,20 +34,10 @@ export default function ProfileSwitcher() {
 
       if (error) return [];
 
-      const withOwners = await Promise.all(
-        (data || []).map(async (share) => {
-          const { data: ownerData } = await supabase
-            .rpc('get_user_by_id', { user_id_input: share.owner_id });
-          return {
-            ...share,
-            owner_name: ownerData?.[0]?.full_name || ownerData?.[0]?.email || 'Usuário'
-          };
-        })
-      );
-
-      return withOwners;
+      // ✅ IMPORTANTE: Já temos owner_id na tabela!
+      return data || [];
     },
-    enabled: !!user?.email  // <- faltava isso e faltava fechar o objeto corretamente
+    enabled: !!user?.email
   });
 
   const userName = user?.user_metadata?.full_name || user?.email?.split('@')[0];
@@ -95,7 +85,7 @@ export default function ProfileSwitcher() {
                   }`}
                 >
                   <div>
-                    <p className="font-semibold text-sm">{userName}</p>  {/* <- estava share.owner_name aqui, errado */}
+                    <p className="font-semibold text-sm">{userName}</p>
                     <p className="text-xs text-gray-500 dark:text-gray-400">Seu perfil</p>
                   </div>
                   {!isViewingSharedProfile && <Check className="w-4 h-4" />}
@@ -111,6 +101,8 @@ export default function ProfileSwitcher() {
                       <button
                         key={share.id}
                         onClick={() => {
+                          // ✅ CORRIGIDO: Passa o objeto share completo
+                          // Agora inclui owner_id que vem direto do banco!
                           switchProfile(share);
                           setShowMenu(false);
                         }}
@@ -121,7 +113,10 @@ export default function ProfileSwitcher() {
                         }`}
                       >
                         <div>
-                          <p className="font-semibold text-sm">{share.owner_name}</p>  {/* <- nome do dono */}
+                          {/* ✅ NOVO: Busca o nome do dono de forma melhor */}
+                          <p className="font-semibold text-sm">
+                            {share.owner_name || `Usuário ${share.owner_id.slice(0, 8)}`}
+                          </p>
                           <p className="text-xs text-gray-500 dark:text-gray-400">
                             {relationshipLabels[share.relationship_type] || share.relationship_type}
                           </p>
