@@ -4,6 +4,7 @@ import Home from './pages/Home';
 import Profile from './pages/Profile';
 import Reports from './pages/Reports';
 import Transactions from './pages/Transactions';
+import Referrals from './pages/Referrals';
 import __Layout from './Layout.jsx';
 
 export const PAGES = {
@@ -13,6 +14,7 @@ export const PAGES = {
     "Profile":      Profile,
     "Reports":      Reports,
     "Transactions": Transactions,
+    "Referrals":    Referrals,
 }
 
 export const pagesConfig = {

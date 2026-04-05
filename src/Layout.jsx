@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "./utils";
 import { motion } from "framer-motion";
-import { Home, ArrowLeftRight, Wallet, User, Target } from "lucide-react";
+import { Home, ArrowLeftRight, Wallet, User, Target, Gift } from "lucide-react";
 
 const navItems = [
   { name: "Home",       icon: Home,          page: "Home"         },
@@ -10,6 +10,7 @@ const navItems = [
   { name: "Metas",      icon: Target,        page: "Goals"        },
   { name: "Contas",     icon: Wallet,        page: "Accounts"     },
   { name: "Perfil",     icon: User,          page: "Profile"      },
+  { name: "Indicar",    icon: Gift,          page: "Referrals"    },
 ];
 
 export default function Layout({ children, currentPageName }) {
