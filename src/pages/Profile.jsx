@@ -3,9 +3,11 @@ import { useAuth } from "@/lib/AuthContext";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/lib/supabase";
-import { 
-  User, Mail, LogOut, ChevronRight, Moon, Bell, Shield, 
-  HelpCircle, Star, FileText, Wallet, Users, Clock
+import { useNavigate } from "react-router-dom";
+import { createPageUrl } from "@/utils";
+import {
+  LogOut, ChevronRight, Moon, Bell, Shield,
+  HelpCircle, Star, FileText, Wallet, Users, Clock, Gift, Tag
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -19,12 +21,13 @@ import PrivacyModal from "@/components/profile/PrivacyModal";
 import RateAppModal from "@/components/profile/RateAppModal";
 import NotificationCenter from "@/components/NotificationCenter";
 import ProfileSwitcher from "@/components/profile/ProfileSwitcher";
-import { toast } from "sonner";
 import CategoryManager from "@/components/profile/CategoryManager";
-import { Tag } from "lucide-react";
+import ReferralInviteModal from "@/components/referral/ReferralInviteModal";
+import { toast } from "sonner";
 
 export default function Profile() {
   const { user, signOut } = useAuth();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
 
   const [showShareModal, setShowShareModal] = useState(false);
@@ -35,6 +38,7 @@ export default function Profile() {
   const [showPrivacyModal, setShowPrivacyModal] = useState(false);
   const [showCategories, setShowCategories] = useState(false);
   const [showRateModal, setShowRateModal] = useState(false);
+  const [showReferralModal, setShowReferralModal] = useState(false);
   const [notifications, setNotifications] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
@@ -45,7 +49,6 @@ export default function Profile() {
     if (savedDarkMode) document.documentElement.classList.add('dark');
   }, []);
 
-  // Consultas de dados
   const { data: accounts = [] } = useQuery({
     queryKey: ['accounts', user?.id],
     queryFn: async () => {
@@ -76,35 +79,35 @@ export default function Profile() {
     enabled: !!user?.id,
   });
 
-  // Query para contar convites pendentes
   const { data: pendingInvitesCount = 0 } = useQuery({
     queryKey: ['pendingInvitesCount', user?.email],
     queryFn: async () => {
       if (!user?.email) return 0;
-      try {
-        const { count, error } = await supabase
-          .from('shared_access')
-          .select('*', { count: 'exact', head: true })
-          .eq('shared_with_email', user.email)
-          .eq('status', 'pending');
-        
-        if (error) {
-          console.error("Erro ao contar convites:", error);
-          return 0;
-        }
-        return count || 0;
-      } catch (err) {
-        console.error("Erro na query de convites:", err);
-        return 0;
-      }
+      const { count, error } = await supabase
+        .from('shared_access')
+        .select('*', { count: 'exact', head: true })
+        .eq('shared_with_email', user.email)
+        .eq('status', 'pending');
+      if (error) return 0;
+      return count || 0;
     },
     enabled: !!user?.email,
   });
 
-  // Mutation para compartilhar finanças
+  const { data: referrals = [] } = useQuery({
+    queryKey: ['referrals', user?.id],
+    queryFn: async () => {
+      const { data } = await supabase.from('referrals').select('*').eq('referrer_id', user.id);
+      return data || [];
+    },
+    enabled: !!user?.id,
+  });
+
+  const activeReferrals = referrals.filter(r => r.status === 'active').length;
+  const discountPercent = activeReferrals >= 4 ? 100 : activeReferrals >= 3 ? 75 : activeReferrals >= 2 ? 50 : activeReferrals >= 1 ? 25 : 0;
+
   const createShareMutation = useMutation({
     mutationFn: async (formData) => {
-      console.log('🔵 Tentando inserir:', formData); // <- adiciona
       const payload = {
         owner_id: user.id,
         shared_with_email: formData.shared_with_email.toLowerCase().trim(),
@@ -112,16 +115,7 @@ export default function Profile() {
         status: 'pending',
         permissions: formData.permissions,
       };
-
-      console.log('📦 Payload:', payload);
-
-      const { data, error } = await supabase
-        .from('shared_access')
-        .insert([payload])
-        .select();
-
-      console.log('Resultado:', { data, error });
-
+      const { data, error } = await supabase.from('shared_access').insert([payload]).select();
       if (error) throw error;
       return data;
     },
@@ -131,10 +125,7 @@ export default function Profile() {
       setShowShareModal(false);
       toast.success('Convite enviado com sucesso!');
     },
-    onError: (error) => {
-      console.error("Erro no compartilhamento:", error);
-      toast.error(`Erro: ${error.message || 'Não foi possível enviar o convite.'}`);
-    }
+    onError: (error) => toast.error(`Erro: ${error.message}`)
   });
 
   const deleteShareMutation = useMutation({
@@ -146,30 +137,21 @@ export default function Profile() {
       queryClient.invalidateQueries({ queryKey: ['sharedAccess'] });
       toast.success('Compartilhamento removido!');
     },
-    onError: (error) => {
-      console.error("Erro ao remover compartilhamento:", error);
-      toast.error('Erro ao remover compartilhamento');
-    }
+    onError: (error) => toast.error('Erro ao remover compartilhamento')
   });
 
-  // ✅ CORRIGIDO: Logout chamando a função do contexto
   const handleLogout = async () => {
     setIsLoggingOut(true);
     try {
       await signOut();
       toast.success("Sessão encerrada com sucesso");
-      // O AuthContext cuidará do redirecionamento para /login
     } catch (error) {
-      console.error("Erro ao fazer logout:", error);
-      toast.error("Erro ao sair da conta. Tente novamente.");
+      toast.error("Erro ao sair da conta.");
       setIsLoggingOut(false);
     }
   };
 
   const handleShare = async (data) => {
-    console.log('🟢 handleShare chamado:', data);
-    console.log('👤 user:', user?.id, user?.email);
-    
     try {
       const payload = {
         owner_id: user.id,
@@ -178,34 +160,13 @@ export default function Profile() {
         status: 'pending',
         permissions: data.permissions,
       };
-
-      console.log('📦 Payload:', JSON.stringify(payload));
-      
-      const { data: result, error } = await supabase
-        .from('shared_access')
-        .insert([payload])
-        .select();
-
-      console.log('✅ Result:', JSON.stringify(result));
-      console.log('❌ Error:', JSON.stringify(error));
-
-      if (error) {
-        toast.error(`Erro: ${error.message}`);
-        return;
-      }
-
+      const { data: result, error } = await supabase.from('shared_access').insert([payload]).select();
+      if (error) { toast.error(`Erro: ${error.message}`); return; }
       toast.success('Convite enviado!');
       setShowShareModal(false);
-      
     } catch (err) {
-      console.error('💥 Catch:', err.message);
       toast.error(`Erro inesperado: ${err.message}`);
     }
-  };
-
-  const handleRateSubmit = (data) => {
-    console.log('Rating:', data);
-    toast.success('Obrigado pela sua avaliação!');
   };
 
   const stats = {
@@ -217,11 +178,23 @@ export default function Profile() {
 
   const menuItems = [
     {
+      title: "Indicações",
+      items: [
+        {
+          icon: Gift,
+          label: "Indique e Ganhe",
+          action: "referrals",
+          badge: discountPercent > 0 ? `${discountPercent}% off` : null,
+          badgeColor: "bg-orange-100 text-orange-600"
+        }
+      ]
+    },
+    {
       title: "Compartilhamento",
       items: [
-        { 
-          icon: Users, 
-          label: "Compartilhar Finanças", 
+        {
+          icon: Users,
+          label: "Compartilhar Finanças",
           action: "share",
           badge: sharedAccess.filter(s => s.status === 'accepted').length || null
         },
@@ -257,14 +230,16 @@ export default function Profile() {
     {
       title: "Configurações",
       items: [
-        { icon: Tag, label: "Gerenciar Categorias", action: "categories" },
+        { icon: Tag, label: "Gerenciar Categorias", action: "categories" }
       ]
     },
   ];
 
   const handleMenuAction = (item) => {
     try {
-      if (item.action === "share") {
+      if (item.action === "referrals") {
+        setShowReferralModal(true);
+      } else if (item.action === "share") {
         setShowSharedList(true);
       } else if (item.action === "pending_invites") {
         setShowPendingInvites(true);
@@ -291,7 +266,6 @@ export default function Profile() {
         setShowRateModal(true);
       }
     } catch (error) {
-      console.error("Erro ao executar ação do menu:", error);
       toast.error("Erro ao executar ação");
     }
   };
@@ -314,25 +288,50 @@ export default function Profile() {
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Meu Perfil</h1>
           <NotificationCenter />
         </div>
-        
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="px-5 pb-8 flex items-center gap-4"
-        >
+
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+          className="px-5 pb-4 flex items-center gap-4">
           <Avatar className="w-16 h-16 bg-gradient-to-br from-blue-500 to-indigo-600">
-            <AvatarFallback className="text-xl font-bold text-white bg-transparent">
-              {initials}
-            </AvatarFallback>
+            <AvatarFallback className="text-xl font-bold text-white bg-transparent">{initials}</AvatarFallback>
           </Avatar>
-          
           <div className="flex-1 min-w-0">
-            <p className="text-lg font-bold text-gray-900 dark:text-white truncate">
-              {userName}
-            </p>
+            <p className="text-lg font-bold text-gray-900 dark:text-white truncate">{userName}</p>
             <p className="text-sm text-gray-500 dark:text-gray-400 truncate">{user.email}</p>
           </div>
         </motion.div>
+
+        {/* Banner de indicação no perfil */}
+        {discountPercent === 0 && (
+          <div className="px-5 pb-5">
+            <button onClick={() => setShowReferralModal(true)}
+              className="w-full bg-gradient-to-r from-amber-500 to-orange-500 rounded-2xl p-4 flex items-center gap-3 text-left">
+              <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center flex-shrink-0">
+                <Gift className="w-5 h-5 text-white" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-white font-semibold text-sm">Indique amigos e ganhe descontos</p>
+                <p className="text-white/70 text-xs">4 indicados = 100% grátis para sempre!</p>
+              </div>
+              <ChevronRight className="w-4 h-4 text-white/70 flex-shrink-0" />
+            </button>
+          </div>
+        )}
+
+        {discountPercent > 0 && (
+          <div className="px-5 pb-5">
+            <button onClick={() => setShowReferralModal(true)}
+              className="w-full bg-gradient-to-r from-emerald-500 to-teal-500 rounded-2xl p-4 flex items-center gap-3 text-left">
+              <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center flex-shrink-0">
+                <Gift className="w-5 h-5 text-white" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-white font-semibold text-sm">Você tem {discountPercent}% de desconto!</p>
+                <p className="text-white/70 text-xs">{activeReferrals} indicado{activeReferrals > 1 ? 's' : ''} ativo{activeReferrals > 1 ? 's' : ''} · Indique mais para aumentar</p>
+              </div>
+              <ChevronRight className="w-4 h-4 text-white/70 flex-shrink-0" />
+            </button>
+          </div>
+        )}
 
         <div className="grid grid-cols-3 gap-4 px-5 pb-6">
           <StatCard delay={0.1} icon={Wallet} value={stats.totalAccounts} label="Contas" color="blue" />
@@ -349,35 +348,21 @@ export default function Profile() {
             <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-3 px-1">{section.title}</p>
             <div className="bg-white dark:bg-gray-800 rounded-2xl overflow-hidden shadow-sm border border-gray-100 dark:border-gray-700">
               {section.items.map((item, i) => (
-                <button
-                  key={item.label}
-                  onClick={() => handleMenuAction(item)}
-                  disabled={isLoggingOut}
-                  className={`w-full flex items-center justify-between p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-                    i !== section.items.length - 1 ? 'border-b border-gray-100 dark:border-gray-700' : ''
-                  }`}
-                >
+                <button key={item.label} onClick={() => handleMenuAction(item)} disabled={isLoggingOut}
+                  className={`w-full flex items-center justify-between p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors disabled:opacity-50 ${i !== section.items.length - 1 ? 'border-b border-gray-100 dark:border-gray-700' : ''}`}>
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
-                      <item.icon className="w-5 h-5 text-gray-600 dark:text-gray-300" />
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${item.action === 'referrals' ? 'bg-orange-100 dark:bg-orange-900/30' : 'bg-gray-100 dark:bg-gray-700'}`}>
+                      <item.icon className={`w-5 h-5 ${item.action === 'referrals' ? 'text-orange-600 dark:text-orange-400' : 'text-gray-600 dark:text-gray-300'}`} />
                     </div>
                     <span className="font-medium text-gray-900 dark:text-white">{item.label}</span>
                     {item.badge && (
-                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                        item.action === 'pending_invites' 
-                          ? 'bg-orange-100 text-orange-600' 
-                          : 'bg-blue-100 text-blue-600'
-                      }`}>
+                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${item.badgeColor || (item.action === 'pending_invites' ? 'bg-orange-100 text-orange-600' : 'bg-blue-100 text-blue-600')}`}>
                         {item.badge}
                       </span>
                     )}
                   </div>
                   {item.action === 'toggle' ? (
-                    <Switch 
-                      checked={item.state} 
-                      onCheckedChange={() => handleMenuAction(item)}
-                      disabled={isLoggingOut}
-                    />
+                    <Switch checked={item.state} onCheckedChange={() => handleMenuAction(item)} disabled={isLoggingOut} />
                   ) : (
                     <ChevronRight className="w-5 h-5 text-gray-400" />
                   )}
@@ -388,60 +373,35 @@ export default function Profile() {
         ))}
 
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}>
-          <Button
-            onClick={handleLogout}
-            disabled={isLoggingOut}
-            variant="outline"
-            className="w-full h-14 rounded-2xl text-red-600 dark:text-red-400 border-red-200 dark:border-red-800 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <LogOut className="w-5 h-5 mr-2" /> 
+          <Button onClick={handleLogout} disabled={isLoggingOut} variant="outline"
+            className="w-full h-14 rounded-2xl text-red-600 dark:text-red-400 border-red-200 dark:border-red-800 hover:bg-red-50 dark:hover:bg-red-900/20">
+            <LogOut className="w-5 h-5 mr-2" />
             {isLoggingOut ? "Saindo..." : "Sair da Conta"}
           </Button>
         </motion.div>
       </div>
 
       <AnimatePresence>
-        {showShareModal && (
-          <ShareFinancesModal
-            onSubmit={handleShare}
-            onClose={() => setShowShareModal(false)}
-          />
-        )}
+        {showReferralModal && <ReferralInviteModal onClose={() => setShowReferralModal(false)} />}
+        {showShareModal && <ShareFinancesModal onSubmit={handleShare} onClose={() => setShowShareModal(false)} />}
         {showSharedList && (
-          <SharedAccessList
-            onClose={() => {
-              setShowSharedList(false);
-              queryClient.invalidateQueries({ queryKey: ['sharedAccess'] });
-              queryClient.invalidateQueries({ queryKey: ['pendingInvitesCount'] });
-            }}
-          />
+          <SharedAccessList onClose={() => {
+            setShowSharedList(false);
+            queryClient.invalidateQueries({ queryKey: ['sharedAccess'] });
+            queryClient.invalidateQueries({ queryKey: ['pendingInvitesCount'] });
+          }} />
         )}
-        {showCategories && (
-          <CategoryManager onClose={() => setShowCategories(false)} />
-        )}
+        {showCategories && <CategoryManager onClose={() => setShowCategories(false)} />}
         {showPendingInvites && (
-          <PendingInvites
-            onClose={() => {
-              setShowPendingInvites(false);
-              queryClient.invalidateQueries({ queryKey: ['pendingInvitesCount'] });
-            }}
-          />
+          <PendingInvites onClose={() => {
+            setShowPendingInvites(false);
+            queryClient.invalidateQueries({ queryKey: ['pendingInvitesCount'] });
+          }} />
         )}
-        {showHelpModal && (
-          <HelpModal onClose={() => setShowHelpModal(false)} />
-        )}
-        {showTermsModal && (
-          <TermsModal onClose={() => setShowTermsModal(false)} />
-        )}
-        {showPrivacyModal && (
-          <PrivacyModal onClose={() => setShowPrivacyModal(false)} />
-        )}
-        {showRateModal && (
-          <RateAppModal
-            onSubmit={handleRateSubmit}
-            onClose={() => setShowRateModal(false)}
-          />
-        )}
+        {showHelpModal && <HelpModal onClose={() => setShowHelpModal(false)} />}
+        {showTermsModal && <TermsModal onClose={() => setShowTermsModal(false)} />}
+        {showPrivacyModal && <PrivacyModal onClose={() => setShowPrivacyModal(false)} />}
+        {showRateModal && <RateAppModal onSubmit={() => toast.success('Obrigado!')} onClose={() => setShowRateModal(false)} />}
       </AnimatePresence>
     </div>
   );
@@ -454,12 +414,8 @@ function StatCard({ delay, icon: Icon, value, label, color, isPositive, isNegati
     red: "bg-red-50 text-red-600 dark:bg-red-950 dark:text-red-300"
   };
   return (
-    <motion.div 
-      initial={{ opacity: 0, y: 20 }} 
-      animate={{ opacity: 1, y: 0 }} 
-      transition={{ delay }} 
-      className={`${colors[color]} rounded-xl p-4 text-center`}
-    >
+    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay }}
+      className={`${colors[color]} rounded-xl p-4 text-center`}>
       {Icon ? <Icon className="w-5 h-5 mx-auto mb-2" /> : <div className="w-5 h-5 mx-auto mb-2 font-bold">{isPositive ? '+' : '-'}</div>}
       <p className="text-2xl font-bold text-gray-900 dark:text-white">{value}</p>
       <p className="text-xs text-gray-500 dark:text-gray-400">{label}</p>

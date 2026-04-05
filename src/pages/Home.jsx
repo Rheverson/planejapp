@@ -1,5 +1,4 @@
-// src/pages/Home.jsx
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthContext";
@@ -12,6 +11,8 @@ import { createPageUrl } from "@/utils";
 import { toast } from "sonner";
 import { useMonth } from "@/lib/MonthContext";
 import { usePrivacy } from "@/lib/PrivacyContext";
+import ReferralBanner from "@/components/referral/ReferralBanner";
+import ReferralInviteModal from "@/components/referral/ReferralInviteModal";
 
 import KPICard from "@/components/dashboard/KPICard";
 import AccountCard from "@/components/dashboard/AccountCard";
@@ -31,6 +32,26 @@ export default function Home() {
   const [showTransferForm, setShowTransferForm] = useState(false);
   const [initialType, setInitialType] = useState("expense");
   const queryClient = useQueryClient();
+  const [showReferralModal, setShowReferralModal] = useState(false);
+  const [showReferralBanner, setShowReferralBanner] = useState(
+    () => localStorage.getItem('referral_banner_dismissed') !== 'true'
+  );
+
+  // Modal de inatividade — aparece 3s após abrir o app se passou 2h
+  useEffect(() => {
+    if (isViewingSharedProfile) return;
+    const INACTIVITY_KEY = 'last_referral_shown';
+    const TWO_HOURS = 2 * 60 * 60 * 1000;
+    const lastShown = localStorage.getItem(INACTIVITY_KEY);
+    const now = Date.now();
+    if (!lastShown || now - parseInt(lastShown) > TWO_HOURS) {
+      const timer = setTimeout(() => {
+        setShowReferralModal(true);
+        localStorage.setItem(INACTIVITY_KEY, now.toString());
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [isViewingSharedProfile]);
 
   const { data: accounts = [] } = useQuery({
     queryKey: ['accounts', activeOwnerId],
@@ -87,7 +108,7 @@ export default function Home() {
   });
 
   const monthStart = startOfMonth(selectedDate);
-  const monthEnd   = endOfMonth(selectedDate);
+  const monthEnd = endOfMonth(selectedDate);
 
   const monthTransactions = useMemo(() => {
     return transactions.filter(t => {
@@ -98,15 +119,15 @@ export default function Home() {
 
   const kpis = useMemo(() => {
     const realized = monthTransactions.filter(t => t.is_realized !== false);
-    const planned  = monthTransactions.filter(t => t.is_realized === false);
-    const totalIncomeRealized  = realized.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
-    const totalIncomePlanned   = planned.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
+    const planned = monthTransactions.filter(t => t.is_realized === false);
+    const totalIncomeRealized = realized.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
+    const totalIncomePlanned = planned.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
     const totalExpenseRealized = realized.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
-    const totalExpensePlanned  = planned.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+    const totalExpensePlanned = planned.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
     return {
-      totalIncome:     totalIncomeRealized + totalIncomePlanned,
-      totalExpense:    totalExpenseRealized + totalExpensePlanned,
-      currentBalance:  totalIncomeRealized - totalExpenseRealized,
+      totalIncome: totalIncomeRealized + totalIncomePlanned,
+      totalExpense: totalExpenseRealized + totalExpensePlanned,
+      currentBalance: totalIncomeRealized - totalExpenseRealized,
       forecastBalance: (totalIncomeRealized + totalIncomePlanned) - (totalExpenseRealized + totalExpensePlanned)
     };
   }, [monthTransactions]);
@@ -116,7 +137,7 @@ export default function Home() {
     accounts.forEach(acc => { balances[acc.id] = acc.initial_balance || 0; });
     transactions.forEach(t => {
       if (!t.account_id || t.is_realized === false) return;
-      if (t.type === 'income')       balances[t.account_id] = (balances[t.account_id] || 0) + t.amount;
+      if (t.type === 'income') balances[t.account_id] = (balances[t.account_id] || 0) + t.amount;
       else if (t.type === 'expense') balances[t.account_id] = (balances[t.account_id] || 0) - t.amount;
       else if (t.type === 'transfer') {
         balances[t.account_id] = (balances[t.account_id] || 0) - t.amount;
@@ -126,16 +147,14 @@ export default function Home() {
     return balances;
   }, [accounts, transactions]);
 
-  const regularAccounts    = accounts.filter(a => a.type !== 'investment');
+  const regularAccounts = accounts.filter(a => a.type !== 'investment');
   const investmentAccounts = accounts.filter(a => a.type === 'investment');
-  const totalBalance  = regularAccounts.reduce((sum, acc) => sum + (accountBalances[acc.id] || 0), 0);
+  const totalBalance = regularAccounts.reduce((sum, acc) => sum + (accountBalances[acc.id] || 0), 0);
   const totalInvested = investmentAccounts.reduce((sum, acc) => sum + (accountBalances[acc.id] || 0), 0);
-
   const expenseCount = monthTransactions.filter(t => t.type === 'expense' && t.is_realized !== false).length;
-  const savingsRate  = kpis.totalIncome > 0
+  const savingsRate = kpis.totalIncome > 0
     ? Math.max(0, (((kpis.totalIncome - kpis.totalExpense) / kpis.totalIncome) * 100)).toFixed(0)
     : null;
-
   const recentTransactions = monthTransactions.slice(0, 5);
   const fmt = (v) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
 
@@ -146,37 +165,22 @@ export default function Home() {
           {isViewingSharedProfile && (
             <p className="text-blue-200 text-xs font-medium mb-2">👁 Visualizando perfil compartilhado</p>
           )}
-
-          {/* Label + botão olho */}
           <div className="flex items-center gap-2 mb-1">
             <p className="text-blue-200 text-sm font-medium">Saldo disponível</p>
-            <button
-              onClick={toggle}
-              className="p-1 bg-white/10 hover:bg-white/20 rounded-full transition-colors"
-            >
-              {hidden
-                ? <EyeOff className="w-3.5 h-3.5 text-white/60" />
-                : <Eye    className="w-3.5 h-3.5 text-white/60" />}
+            <button onClick={toggle} className="p-1 bg-white/10 hover:bg-white/20 rounded-full transition-colors">
+              {hidden ? <EyeOff className="w-3.5 h-3.5 text-white/60" /> : <Eye className="w-3.5 h-3.5 text-white/60" />}
             </button>
           </div>
-
-          {/* Saldo principal */}
-          <motion.h1
-            key={String(hidden)}
-            initial={{ opacity: 0, y: -6 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="text-4xl font-bold mb-1 tracking-tight"
-          >
+          <motion.h1 key={String(hidden)} initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }}
+            className="text-4xl font-bold mb-1 tracking-tight">
             {hidden ? "R$ ••••••" : fmt(totalBalance)}
           </motion.h1>
-
           {totalInvested > 0 && (
             <p className="text-blue-200 text-sm mb-4 flex items-center gap-1">
               <PiggyBank className="w-3.5 h-3.5" />
               {hidden ? "+ R$ •••••• investido" : `+ ${fmt(totalInvested)} investido`}
             </p>
           )}
-
           <div className="mb-4">
             <MonthSelector selectedDate={selectedDate} onChange={setSelectedDate} />
           </div>
@@ -214,6 +218,17 @@ export default function Home() {
             navigateTo={`/Transactions?filter=planned&month=${format(selectedDate, 'yyyy-MM')}`} />
         </div>
 
+        {/* Banner de indicação */}
+        {showReferralBanner && !isViewingSharedProfile && (
+          <ReferralBanner
+            onOpen={() => setShowReferralModal(true)}
+            onDismiss={() => {
+              setShowReferralBanner(false);
+              localStorage.setItem('referral_banner_dismissed', 'true');
+            }}
+          />
+        )}
+
         {/* Botão Relatórios */}
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.45 }} className="mb-6">
           <Link to={createPageUrl("Reports")}>
@@ -224,9 +239,7 @@ export default function Home() {
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold text-gray-900 dark:text-white">Ver Relatórios</p>
                 <p className="text-xs text-gray-400 dark:text-gray-500 truncate">
-                  {expenseCount > 0
-                    ? `${expenseCount} gastos${savingsRate !== null ? ` · ${savingsRate}% poupado` : ""} este mês`
-                    : "Análise de gastos e metas"}
+                  {expenseCount > 0 ? `${expenseCount} gastos${savingsRate !== null ? ` · ${savingsRate}% poupado` : ""} este mês` : "Análise de gastos e metas"}
                 </p>
               </div>
               <ChevronRight className="w-4 h-4 text-gray-300 dark:text-gray-600 flex-shrink-0" />
@@ -306,6 +319,12 @@ export default function Home() {
           <TransferForm accounts={accounts}
             onSubmit={(data) => createTransferMutation.mutate(data)}
             onClose={() => setShowTransferForm(false)} />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showReferralModal && (
+          <ReferralInviteModal onClose={() => setShowReferralModal(false)} />
         )}
       </AnimatePresence>
     </div>
