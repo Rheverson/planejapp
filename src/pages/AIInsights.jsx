@@ -5,9 +5,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
-  Sparkles, TrendingUp, TrendingDown, AlertTriangle,
-  CheckCircle2, Info, ChevronDown, ChevronUp,
-  PiggyBank, Target, Zap, RefreshCw
+  Sparkles, AlertTriangle, CheckCircle2, Info,
+  ChevronDown, ChevronUp, PiggyBank, RefreshCw, Clock
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useMonth } from "@/lib/MonthContext";
@@ -32,7 +31,9 @@ export default function AIInsights() {
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
+  const [limiteAtingido, setLimiteAtingido] = useState(false);
   const [expandedInsight, setExpandedInsight] = useState(null);
+  const [usage, setUsage] = useState(null);
 
   const month = format(selectedDate, 'yyyy-MM');
   const monthLabel = format(selectedDate, 'MMMM yyyy', { locale: ptBR });
@@ -40,13 +41,25 @@ export default function AIInsights() {
   const fetchInsights = async () => {
     setLoading(true);
     setError(null);
+    setLimiteAtingido(false);
     try {
       const { data: result, error: err } = await supabase.functions.invoke('ai-insights', {
         body: { userId: user.id, month }
       });
+
       if (err) throw err;
+
+      // Limite atingido
+      if (result.error === 'limite_atingido') {
+        setLimiteAtingido(true);
+        setError(result.message);
+        return;
+      }
+
       if (result.error) throw new Error(result.error);
+
       setData(result);
+      setUsage(result.usage);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -78,19 +91,40 @@ export default function AIInsights() {
 
       <div className="px-4 py-4 space-y-4 -mt-4 relative z-10">
 
+        {/* Indicador de uso */}
+        {usage && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+            className="bg-violet-50 dark:bg-violet-900/20 rounded-xl p-3 border border-violet-200 dark:border-violet-800 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Clock className="w-4 h-4 text-violet-600" />
+              <p className="text-sm text-violet-700 dark:text-violet-300">Análises restantes esta semana</p>
+            </div>
+            <span className="font-bold text-violet-600">{usage.remaining}/2</span>
+          </motion.div>
+        )}
+
+        {/* Limite atingido */}
+        {limiteAtingido && (
+          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
+            className="bg-amber-50 dark:bg-amber-900/20 rounded-2xl p-5 border border-amber-200 dark:border-amber-800 text-center">
+            <Clock className="w-10 h-10 text-amber-500 mx-auto mb-3" />
+            <p className="text-amber-800 dark:text-amber-300 font-semibold mb-1">Limite semanal atingido</p>
+            <p className="text-amber-600 dark:text-amber-400 text-sm">{error}</p>
+          </motion.div>
+        )}
+
         {/* Botão gerar */}
-        {!data && !loading && (
+        {!data && !loading && !limiteAtingido && (
           <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
             className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-sm border border-gray-100 dark:border-gray-700 text-center">
             <div className="w-16 h-16 bg-violet-100 dark:bg-violet-900/30 rounded-2xl flex items-center justify-center mx-auto mb-4">
               <Sparkles className="w-8 h-8 text-violet-600" />
             </div>
-            <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">
-              Análise com IA
-            </h3>
-            <p className="text-gray-500 dark:text-gray-400 text-sm mb-6">
-              Nossa IA analisa seus gastos, receitas e padrões para gerar insights personalizados e recomendações práticas.
+            <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Análise com IA</h3>
+            <p className="text-gray-500 dark:text-gray-400 text-sm mb-2">
+              Nossa IA analisa seus gastos, receitas e padrões para gerar insights personalizados.
             </p>
+            <p className="text-xs text-gray-400 mb-6">📊 2 análises gratuitas por semana</p>
             <Button onClick={fetchInsights}
               className="w-full h-12 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 rounded-xl font-bold text-white">
               <Sparkles className="w-4 h-4 mr-2" />
@@ -113,10 +147,10 @@ export default function AIInsights() {
           </motion.div>
         )}
 
-        {/* Erro */}
-        {error && (
+        {/* Erro genérico */}
+        {error && !limiteAtingido && (
           <div className="bg-red-50 dark:bg-red-900/20 rounded-2xl p-4 border border-red-200">
-            <p className="text-red-600 text-sm font-medium">Erro: {error}</p>
+            <p className="text-red-600 text-sm font-medium">{error}</p>
             <Button onClick={fetchInsights} variant="outline" className="mt-3 w-full rounded-xl">
               Tentar novamente
             </Button>
@@ -126,9 +160,9 @@ export default function AIInsights() {
         {/* Resultados */}
         {data && !loading && (
           <>
-            {/* Score de saúde financeira */}
+            {/* Score */}
             <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
-              className={`bg-gradient-to-br ${scoreColors[data.insights.score_color]} rounded-2xl p-6 text-white`}>
+              className={`bg-gradient-to-br ${scoreColors[data.insights.score_color] || scoreColors.blue} rounded-2xl p-6 text-white`}>
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <p className="text-white/80 text-sm">Saúde Financeira</p>
@@ -149,8 +183,6 @@ export default function AIInsights() {
                 </div>
               </div>
               <p className="text-white/90 text-sm leading-relaxed">{data.insights.resumo}</p>
-
-              {/* Resumo financeiro */}
               <div className="grid grid-cols-3 gap-3 mt-4">
                 <div className="bg-white/20 rounded-xl p-3 text-center">
                   <p className="text-white/70 text-xs">Entradas</p>
@@ -171,9 +203,7 @@ export default function AIInsights() {
             {data.insights.insights?.length > 0 && (
               <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
                 className="space-y-3">
-                <h3 className="text-sm font-bold text-gray-700 dark:text-gray-300 px-1">
-                  💡 Insights do mês
-                </h3>
+                <h3 className="text-sm font-bold text-gray-700 dark:text-gray-300 px-1">💡 Insights do mês</h3>
                 {data.insights.insights.map((insight, i) => {
                   const { icon: Icon, color, bg, border } = insightIcons[insight.tipo] || insightIcons.neutro;
                   const isExpanded = expandedInsight === i;
@@ -215,7 +245,7 @@ export default function AIInsights() {
               </motion.div>
             )}
 
-            {/* Recomendações de redução de custos */}
+            {/* Recomendações */}
             {data.insights.recomendacoes?.length > 0 && (
               <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
                 className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
@@ -243,7 +273,7 @@ export default function AIInsights() {
               </motion.div>
             )}
 
-            {/* Investimento sugerido */}
+            {/* Investimento */}
             {data.insights.investimento_sugerido && (
               <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}
                 className="bg-gradient-to-br from-emerald-500 to-teal-600 rounded-2xl p-5 text-white">
@@ -251,12 +281,8 @@ export default function AIInsights() {
                   <PiggyBank className="w-5 h-5 text-white" />
                   <h3 className="text-sm font-bold">💰 Quanto investir</h3>
                 </div>
-                <div className="flex items-center gap-4 mb-3">
-                  <div>
-                    <p className="text-3xl font-bold">{fmt(data.insights.investimento_sugerido.valor)}</p>
-                    <p className="text-emerald-100 text-sm">{data.insights.investimento_sugerido.percentual}% da sua renda</p>
-                  </div>
-                </div>
+                <p className="text-3xl font-bold">{fmt(data.insights.investimento_sugerido.valor)}</p>
+                <p className="text-emerald-100 text-sm mb-2">{data.insights.investimento_sugerido.percentual} da sua renda</p>
                 <p className="text-emerald-100 text-sm mb-3">{data.insights.investimento_sugerido.justificativa}</p>
                 {data.insights.investimento_sugerido.opcoes?.length > 0 && (
                   <div className="space-y-1">
@@ -300,11 +326,13 @@ export default function AIInsights() {
             )}
 
             {/* Botão atualizar */}
-            <Button onClick={fetchInsights} variant="outline"
-              className="w-full h-12 rounded-2xl border-gray-200 text-gray-600 font-medium">
-              <RefreshCw className="w-4 h-4 mr-2" />
-              Atualizar análise
-            </Button>
+            {usage && usage.remaining > 0 && (
+              <Button onClick={fetchInsights} variant="outline"
+                className="w-full h-12 rounded-2xl border-gray-200 text-gray-600 font-medium">
+                <RefreshCw className="w-4 h-4 mr-2" />
+                Atualizar análise ({usage.remaining} restante{usage.remaining > 1 ? 's' : ''})
+              </Button>
+            )}
           </>
         )}
       </div>

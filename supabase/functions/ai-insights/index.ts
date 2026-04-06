@@ -19,7 +19,27 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     )
 
-    // Busca dados financeiros do usuário
+    // ── Verifica limite de uso (2 por semana) ────────────
+    const weekAgo = new Date()
+    weekAgo.setDate(weekAgo.getDate() - 7)
+
+    const { count } = await supabase
+      .from("ai_usage")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .gte("created_at", weekAgo.toISOString())
+
+    if ((count || 0) >= 2) {
+      return new Response(JSON.stringify({
+        error: "limite_atingido",
+        message: "Você atingiu o limite de 2 análises por semana. Tente novamente em alguns dias!"
+      }), {
+        status: 429,
+        headers: { ...corsHeaders, "Content-Type": "application/json" }
+      })
+    }
+
+    // ── Busca dados financeiros ──────────────────────────
     const startDate = `${month}-01`
     const endDate = `${month}-31`
 
@@ -42,19 +62,11 @@ serve(async (req) => {
     const accounts = accountsRes.data || []
     const goals = goalsRes.data || []
 
-    // Calcula métricas
-    const totalIncome = transactions
-      .filter(t => t.type === 'income')
-      .reduce((s, t) => s + t.amount, 0)
-
-    const totalExpense = transactions
-      .filter(t => t.type === 'expense')
-      .reduce((s, t) => s + t.amount, 0)
-
+    const totalIncome = transactions.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0)
+    const totalExpense = transactions.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0)
     const balance = totalIncome - totalExpense
     const savingsRate = totalIncome > 0 ? ((balance / totalIncome) * 100).toFixed(1) : 0
 
-    // Gastos por categoria
     const byCategory: Record<string, number> = {}
     transactions.filter(t => t.type === 'expense').forEach(t => {
       const cat = t.category || 'outros'
@@ -64,95 +76,100 @@ serve(async (req) => {
     const topCategories = Object.entries(byCategory)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 5)
-      .map(([cat, val]) => `${cat}: R$${val.toFixed(2)}`)
+      .map(([cat, val]) => `${cat}: R$${(val as number).toFixed(2)}`)
 
-    // Saldo total das contas
     const totalBalance = accounts.reduce((s, a) => s + (a.initial_balance || 0), 0)
 
-    // Prompt para o Claude
     const prompt = `Você é um consultor financeiro pessoal especializado em finanças brasileiras. 
-Analise os dados financeiros do usuário e forneça insights práticos e personalizados em português brasileiro.
+Analise os dados financeiros e forneça insights práticos em português brasileiro.
 
-DADOS FINANCEIROS DO MÊS:
+DADOS DO MÊS:
 - Entradas: R$${totalIncome.toFixed(2)}
 - Saídas: R$${totalExpense.toFixed(2)}
-- Saldo do mês: R$${balance.toFixed(2)}
+- Saldo: R$${balance.toFixed(2)}
 - Taxa de poupança: ${savingsRate}%
-- Saldo total nas contas: R$${totalBalance.toFixed(2)}
-- Total de transações: ${transactions.length}
+- Saldo total contas: R$${totalBalance.toFixed(2)}
+- Transações: ${transactions.length}
 
-TOP CATEGORIAS DE GASTOS:
+TOP GASTOS POR CATEGORIA:
 ${topCategories.join('\n')}
 
-METAS ATIVAS: ${goals.length} meta(s)
+METAS ATIVAS: ${goals.length}
 
-Forneça uma análise em JSON com exatamente este formato:
+Responda APENAS com um JSON válido, sem texto antes ou depois:
 {
-  "score": (número de 0 a 100 representando saúde financeira),
-  "score_label": (texto curto: "Crítico", "Atenção", "Regular", "Bom" ou "Excelente"),
+  "score": (0-100 saúde financeira),
+  "score_label": ("Crítico", "Atenção", "Regular", "Bom" ou "Excelente"),
   "score_color": ("red", "orange", "yellow", "blue" ou "green"),
-  "resumo": (1 parágrafo resumindo a situação financeira do mês),
+  "resumo": "parágrafo resumindo a situação",
   "insights": [
     {
-      "tipo": ("positivo", "negativo" ou "neutro"),
-      "titulo": (título curto do insight),
-      "descricao": (descrição detalhada com números reais),
-      "acao": (ação recomendada específica)
+      "tipo": "positivo|negativo|neutro",
+      "titulo": "título curto",
+      "descricao": "descrição com números reais",
+      "acao": "ação recomendada específica"
     }
   ],
   "recomendacoes": [
     {
-      "categoria": (categoria de gasto),
-      "gasto_atual": (valor atual),
-      "gasto_ideal": (valor recomendado),
-      "economia_possivel": (diferença),
-      "dica": (dica específica para reduzir)
+      "categoria": "nome",
+      "gasto_atual": 0.00,
+      "gasto_ideal": 0.00,
+      "economia_possivel": 0.00,
+      "dica": "dica específica"
     }
   ],
   "investimento_sugerido": {
-    "valor": (quanto investir por mês),
-    "percentual": (% da renda),
-    "justificativa": (por que esse valor),
+    "valor": 0.00,
+    "percentual": "X%",
+    "justificativa": "texto",
     "opcoes": ["opção 1", "opção 2", "opção 3"]
   },
   "regra_50_30_20": {
-    "necessidades": {"ideal": ${(totalIncome * 0.5).toFixed(2)}, "atual": ${transactions.filter(t => t.type === 'expense' && ['moradia','alimentação','transporte','saúde'].includes(t.category)).reduce((s,t) => s+t.amount, 0).toFixed(2)}},
+    "necessidades": {"ideal": ${(totalIncome * 0.5).toFixed(2)}, "atual": 0},
     "desejos": {"ideal": ${(totalIncome * 0.3).toFixed(2)}, "atual": 0},
     "investimentos": {"ideal": ${(totalIncome * 0.2).toFixed(2)}, "atual": 0}
   }
-}
+}`
 
-Seja direto, use números reais dos dados fornecidos e dê conselhos práticos para a realidade brasileira.`
+    // ── Chama o Google Gemini ────────────────────────────
+    const geminiRes = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${Deno.env.get("GEMINI_API_KEY")}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0.7,
+            maxOutputTokens: 2000,
+          }
+        })
+      }
+    )
 
-    // Chama a API do Claude
-    const claudeRes = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": Deno.env.get("ANTHROPIC_API_KEY")!,
-        "anthropic-version": "2023-06-01"
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 2000,
-        messages: [{ role: "user", content: prompt }]
-      })
-    })
+    const geminiData = await geminiRes.json()
+    console.log('Gemini status:', geminiRes.status)
 
-    const claudeData = await claudeRes.json()
-    const content = claudeData.content[0].text
-
-    // Parse o JSON da resposta
-    const jsonMatch = content.match(/\{[\s\S]*\}/)
-    const insights = jsonMatch ? JSON.parse(jsonMatch[0]) : null
-
-    if (!insights) {
-      throw new Error("Falha ao processar insights da IA")
+    if (!geminiRes.ok) {
+      console.error('Gemini error:', JSON.stringify(geminiData))
+      throw new Error("Erro ao chamar a IA: " + (geminiData.error?.message || "Erro desconhecido"))
     }
+
+    const content = geminiData.candidates?.[0]?.content?.parts?.[0]?.text
+    if (!content) throw new Error("Resposta vazia da IA")
+
+    // Remove possíveis marcadores de código
+    const cleanContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
+    const insights = JSON.parse(cleanContent)
+
+    // ── Registra uso ─────────────────────────────────────
+    await supabase.from("ai_usage").insert({ user_id: userId })
 
     return new Response(JSON.stringify({
       insights,
-      meta: { totalIncome, totalExpense, balance, savingsRate, month }
+      meta: { totalIncome, totalExpense, balance, savingsRate, month },
+      usage: { used: (count || 0) + 1, limit: 2, remaining: 2 - (count || 0) - 1 }
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" }
     })
