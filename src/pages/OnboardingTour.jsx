@@ -174,7 +174,7 @@ export default function OnboardingTour() {
     try {
       const { error } = await supabase
         .from('goals')
-        .insert([{ ...data, user_id: user.id, status: 'active' }]);
+        .insert([{ ...data, user_id: user.id}]);
 
       if (error) throw error;
 
