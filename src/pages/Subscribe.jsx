@@ -28,29 +28,29 @@ export default function Subscribe() {
     if (!code || code.length < 8) { setReferralValid(null); return; }
     setValidating(true);
     try {
-      const { data } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('referral_code', code.toUpperCase().trim())
-        .maybeSingle();
+        const { data, error } = await supabase
+        .rpc('validate_referral_code', { code: code.toUpperCase().trim() });
 
-      if (!data) {
+        console.log('validate result:', data, error);
+
+        if (error || !data) {
         setReferralValid(false);
         setReferralLocked(false);
         localStorage.removeItem('referral_code');
-      } else if (data.id === user?.id) {
+        } else if (data === user?.id) {
+        // Auto-indicação
         setReferralValid(false);
         setReferralLocked(false);
         localStorage.removeItem('referral_code');
-      } else {
+        } else {
         setReferralValid(true);
-      }
+        }
     } catch {
-      setReferralValid(false);
+        setReferralValid(false);
     } finally {
-      setValidating(false);
+        setValidating(false);
     }
-  };
+    };
 
   const handleSubscribe = async () => {
     setLoading(true);
