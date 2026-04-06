@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useAuth } from "@/lib/AuthContext";
 import { supabase } from "@/lib/supabase";
 import { motion } from "framer-motion";
-import { Check, Users, Zap, LogOut, CheckCircle2, Lock } from "lucide-react";
+import { Check, Users, Zap, LogOut, CheckCircle2, Lock, XCircle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
@@ -11,6 +11,8 @@ export default function Subscribe() {
   const { user, signOut } = useAuth();
   const [referralCode, setReferralCode] = useState('');
   const [referralLocked, setReferralLocked] = useState(false);
+  const [referralValid, setReferralValid] = useState(null); // null=não verificado, true=válido, false=inválido
+  const [validating, setValidating] = useState(false);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -18,70 +20,108 @@ export default function Subscribe() {
     if (saved) {
       setReferralCode(saved.toUpperCase());
       setReferralLocked(true);
+      validateCode(saved.toUpperCase());
     }
   }, []);
 
+  const validateCode = async (code) => {
+    if (!code || code.length < 8) { setReferralValid(null); return; }
+    setValidating(true);
+    try {
+      const { data } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('referral_code', code.toUpperCase().trim())
+        .maybeSingle();
+
+      if (!data) {
+        setReferralValid(false);
+        setReferralLocked(false);
+        localStorage.removeItem('referral_code');
+      } else if (data.id === user?.id) {
+        setReferralValid(false);
+        setReferralLocked(false);
+        localStorage.removeItem('referral_code');
+      } else {
+        setReferralValid(true);
+      }
+    } catch {
+      setReferralValid(false);
+    } finally {
+      setValidating(false);
+    }
+  };
+
   const handleSubscribe = async () => {
-        setLoading(true);
-        try {
-            const { data: { session } } = await supabase.auth.getSession();
-            if (!session) { toast.error("Você precisa estar logado"); setLoading(false); return; }
+    setLoading(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) { toast.error("Você precisa estar logado"); setLoading(false); return; }
 
-            // Valida o código de indicação se foi preenchido
-            if (referralCode && referralCode.trim() !== '') {
-            const { data: referrer, error: referrerError } = await supabase
-                .from('profiles')
-                .select('id')
-                .eq('referral_code', referralCode.toUpperCase().trim())
-                .maybeSingle();
-
-            console.log('Referrer:', referrer, 'Error:', referrerError);
-
-            if (referrerError) {
-                console.error('Erro ao validar código:', referrerError);
-                toast.error("Erro ao validar código. Tente novamente.");
-                setLoading(false);
-                return;
-            }
-
-            if (!referrer) {
-                toast.error("Código de indicação inválido. Verifique com quem te indicou.");
-                setReferralLocked(false);
-                setReferralCode('');
-                localStorage.removeItem('referral_code');
-                setLoading(false);
-                return;
-            }
-
-            if (referrer.id === session.user.id) {
-                toast.error("Você não pode usar seu próprio código.");
-                setReferralLocked(false);
-                setReferralCode('');
-                localStorage.removeItem('referral_code');
-                setLoading(false);
-                return;
-            }
-            }
-
-            const { data, error } = await supabase.functions.invoke("create-checkout", {
-            body: { userId: session.user.id, email: session.user.email, referralCode: referralCode || null },
-            headers: { Authorization: `Bearer ${session.access_token}` }
-            });
-
-            if (error) throw error;
-            if (!data?.url) throw new Error("URL não retornada");
-            window.location.href = data.url;
-
-        } catch (err) {
-            toast.error("Erro: " + err.message);
-        } finally {
-            setLoading(false);
+      if (referralCode && referralCode.trim() !== '') {
+        if (referralValid === false) {
+          toast.error("Código de indicação inválido. Verifique com quem te indicou.");
+          setReferralCode('');
+          setReferralLocked(false);
+          localStorage.removeItem('referral_code');
+          setLoading(false);
+          return;
         }
-    };
+
+        if (referralValid === null) {
+          // Ainda não validou — valida agora
+          const { data: referrer } = await supabase
+            .from('profiles')
+            .select('id')
+            .eq('referral_code', referralCode.toUpperCase().trim())
+            .maybeSingle();
+
+          if (!referrer) {
+            toast.error("Código de indicação inválido. Verifique com quem te indicou.");
+            setReferralCode('');
+            setReferralLocked(false);
+            localStorage.removeItem('referral_code');
+            setLoading(false);
+            return;
+          }
+
+          if (referrer.id === session.user.id) {
+            toast.error("Você não pode usar seu próprio código.");
+            setReferralCode('');
+            setReferralLocked(false);
+            localStorage.removeItem('referral_code');
+            setLoading(false);
+            return;
+          }
+        }
+      }
+
+      const { data, error } = await supabase.functions.invoke("create-checkout", {
+        body: { userId: session.user.id, email: session.user.email, referralCode: referralCode || null },
+        headers: { Authorization: `Bearer ${session.access_token}` }
+      });
+
+      if (error) throw error;
+      if (!data?.url) throw new Error("URL não retornada");
+      window.location.href = data.url;
+
+    } catch (err) {
+      toast.error("Erro: " + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleLogout = async () => {
     await signOut();
     toast.success("Sessão encerrada");
+  };
+
+  const handleCodeChange = (e) => {
+    const val = e.target.value.toUpperCase();
+    setReferralCode(val);
+    setReferralValid(null);
+    if (val.length === 8) validateCode(val);
   };
 
   return (
@@ -89,7 +129,6 @@ export default function Subscribe() {
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
         className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl">
 
-        {/* Header */}
         <div className="bg-gradient-to-br from-blue-600 to-indigo-700 px-6 pt-6 pb-6 text-white">
           <div className="flex items-center justify-between mb-4">
             <div className="text-left">
@@ -103,7 +142,6 @@ export default function Subscribe() {
             </button>
           </div>
 
-          {/* Indicador de etapas */}
           <div className="flex items-center justify-center gap-2 mb-4">
             <div className="flex items-center gap-1.5">
               <div className="w-6 h-6 rounded-full bg-white/30 flex items-center justify-center">
@@ -137,7 +175,6 @@ export default function Subscribe() {
         </div>
 
         <div className="px-6 py-6 space-y-5">
-          {/* Preço */}
           <div className="text-center">
             <div className="flex items-end justify-center gap-1">
               <span className="text-gray-400 text-sm mb-1">R$</span>
@@ -148,15 +185,8 @@ export default function Subscribe() {
             <p className="text-xs text-emerald-600 font-medium mt-1">✓ Primeiro mês grátis</p>
           </div>
 
-          {/* Benefícios */}
           <div className="space-y-2">
-            {[
-              "Transações ilimitadas",
-              "Compartilhamento de finanças",
-              "Relatórios completos",
-              "Metas e investimentos",
-              "Suporte prioritário",
-            ].map(item => (
+            {["Transações ilimitadas", "Compartilhamento de finanças", "Relatórios completos", "Metas e investimentos", "Suporte prioritário"].map(item => (
               <div key={item} className="flex items-center gap-2">
                 <div className="w-5 h-5 rounded-full bg-emerald-100 flex items-center justify-center flex-shrink-0">
                   <Check className="w-3 h-3 text-emerald-600" />
@@ -166,7 +196,6 @@ export default function Subscribe() {
             ))}
           </div>
 
-          {/* Indicação */}
           <div className="bg-amber-50 rounded-2xl p-4">
             <div className="flex items-center gap-2 mb-2">
               <Users className="w-4 h-4 text-amber-600" />
@@ -183,37 +212,42 @@ export default function Subscribe() {
           {/* Código de indicação */}
           <div>
             <label className="text-xs font-semibold text-gray-500 mb-1.5 block">
-              Código de indicação {referralLocked ? '' : '(opcional)'}
+              Código de indicação {!referralCode ? '(opcional)' : ''}
             </label>
             <div className="relative">
               <Input
                 placeholder="Ex: AB12CD34"
                 value={referralCode}
-                onChange={e => !referralLocked && setReferralCode(e.target.value.toUpperCase())}
+                onChange={handleCodeChange}
                 className={`rounded-xl border-gray-200 uppercase pr-10 ${
-                  referralLocked
-                    ? 'bg-emerald-50 border-emerald-200 text-emerald-700 cursor-not-allowed font-bold tracking-widest'
-                    : ''
-                }`}
+                  referralValid === true ? 'bg-emerald-50 border-emerald-300 text-emerald-700 font-bold tracking-widest' :
+                  referralValid === false ? 'bg-red-50 border-red-300 text-red-700' : ''
+                } ${referralLocked && referralValid === true ? 'cursor-not-allowed' : ''}`}
                 maxLength={8}
-                readOnly={referralLocked}
+                readOnly={referralLocked && referralValid === true}
               />
-              {referralLocked && (
-                <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                  <Lock className="w-4 h-4 text-emerald-500" />
-                </div>
-              )}
+              <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                {validating && <Loader2 className="w-4 h-4 text-gray-400 animate-spin" />}
+                {!validating && referralValid === true && <Lock className="w-4 h-4 text-emerald-500" />}
+                {!validating && referralValid === false && <XCircle className="w-4 h-4 text-red-500" />}
+              </div>
             </div>
-            {referralLocked && (
+            {!validating && referralValid === true && (
               <p className="text-xs text-emerald-600 mt-1.5 flex items-center gap-1 font-medium">
                 <CheckCircle2 className="w-3.5 h-3.5" />
-                Código de indicação aplicado!
+                Código válido! Desconto será aplicado ao indicador.
+              </p>
+            )}
+            {!validating && referralValid === false && (
+              <p className="text-xs text-red-500 mt-1.5 flex items-center gap-1 font-medium">
+                <XCircle className="w-3.5 h-3.5" />
+                Código inválido. Verifique com quem te indicou.
               </p>
             )}
           </div>
 
-          <Button onClick={handleSubscribe} disabled={loading}
-            className="w-full h-14 rounded-2xl text-base font-bold bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-200">
+          <Button onClick={handleSubscribe} disabled={loading || validating || referralValid === false}
+            className="w-full h-14 rounded-2xl text-base font-bold bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-200 disabled:opacity-50">
             {loading ? "Aguarde..." : "Começar 30 dias grátis"}
           </Button>
 
