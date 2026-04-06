@@ -235,7 +235,7 @@ export default function Subscribe() {
             {!validating && referralValid === true && (
               <p className="text-xs text-emerald-600 mt-1.5 flex items-center gap-1 font-medium">
                 <CheckCircle2 className="w-3.5 h-3.5" />
-                Código válido! Desconto será aplicado ao indicador.
+                Código válido!
               </p>
             )}
             {!validating && referralValid === false && (
