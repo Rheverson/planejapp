@@ -56,8 +56,6 @@ export default function AIInsights() {
   const month = `${selectedYear}-${selectedMonth}`;
   const monthLabel = format(new Date(`${selectedYear}-${selectedMonth}-02`), 'MMMM yyyy', { locale: ptBR });
 
-
-  // Carrega análise salva ao abrir
   useEffect(() => {
     loadSavedInsights();
   }, [user?.id]);
@@ -70,7 +68,6 @@ export default function AIInsights() {
         .select('ai_insights, ai_insights_date')
         .eq('id', user.id)
         .single();
-
       if (profile?.ai_insights) {
         setData(profile.ai_insights);
         setSavedDate(profile.ai_insights_date);
@@ -85,10 +82,7 @@ export default function AIInsights() {
   const saveInsights = async (insightsData) => {
     await supabase
       .from('profiles')
-      .update({
-        ai_insights: insightsData,
-        ai_insights_date: new Date().toISOString()
-      })
+      .update({ ai_insights: insightsData, ai_insights_date: new Date().toISOString() })
       .eq('id', user.id);
   };
 
@@ -108,43 +102,40 @@ export default function AIInsights() {
     setLimiteAtingido(false);
     setShowPeriodSelector(false);
     try {
-        const { data: result, error: err } = await supabase.functions.invoke('ai-insights', {
+      const { data: result, error: err } = await supabase.functions.invoke('ai-insights', {
         body: { userId: user.id, month }
-        });
+      });
 
-        // Trata erro HTTP (como 429 de limite)
-        if (err) {
-        // Tenta extrair o body do erro
+      if (err) {
         try {
-            const errBody = JSON.parse(err.context?.responseText || '{}')
-            if (errBody.error === 'limite_atingido') {
+          const errBody = JSON.parse(err.context?.responseText || '{}')
+          if (errBody.error === 'limite_atingido') {
             setLimiteAtingido(true);
             setError(errBody.message);
             return;
-            }
+          }
         } catch {}
         throw err;
-        }
+      }
 
-        if (result?.error === 'limite_atingido') {
+      if (result?.error === 'limite_atingido') {
         setLimiteAtingido(true);
         setError(result.message);
         return;
-        }
+      }
 
-        if (result?.error) throw new Error(result.error);
+      if (result?.error) throw new Error(result.error);
 
-        setData(result);
-        setUsage(result.usage);
-        setSavedDate(new Date().toISOString());
-        await saveInsights(result);
-
+      setData(result);
+      setUsage(result.usage);
+      setSavedDate(new Date().toISOString());
+      await saveInsights(result);
     } catch (err) {
-        setError("Erro ao gerar análise. Tente novamente.");
+      setError("Erro ao gerar análise. Tente novamente.");
     } finally {
-        setLoading(false);
+      setLoading(false);
     }
-    };
+  };
 
   const fmt = (v) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v || 0);
 
@@ -336,19 +327,47 @@ export default function AIInsights() {
                   </div>
                 </div>
               </div>
-              <p className="text-white/90 text-sm leading-relaxed">{data.insights?.resumo}</p>
-              <div className="grid grid-cols-3 gap-3 mt-4">
-                <div className="bg-white/20 rounded-xl p-3 text-center">
+
+              <p className="text-white/90 text-sm leading-relaxed mb-4">{data.insights?.resumo}</p>
+
+              {/* Alerta projeção negativa */}
+              {data.insights?.alerta_projecao && data.insights.alerta_projecao !== 'null' && (
+                <div className="bg-red-500/30 border border-red-300/50 rounded-xl p-3 mb-4">
+                  <p className="text-white text-sm font-semibold">{data.insights.alerta_projecao}</p>
+                </div>
+              )}
+
+              {/* Realizado */}
+              <p className="text-white/70 text-xs font-semibold mb-2 uppercase tracking-wide">Realizado até agora</p>
+              <div className="grid grid-cols-3 gap-2 mb-3">
+                <div className="bg-white/20 rounded-xl p-2.5 text-center">
                   <p className="text-white/70 text-xs">Entradas</p>
-                  <p className="text-white font-bold text-sm">{fmt(data.meta?.totalIncome)}</p>
+                  <p className="text-white font-bold text-xs">{fmt(data.meta?.totalIncome)}</p>
                 </div>
-                <div className="bg-white/20 rounded-xl p-3 text-center">
+                <div className="bg-white/20 rounded-xl p-2.5 text-center">
                   <p className="text-white/70 text-xs">Saídas</p>
-                  <p className="text-white font-bold text-sm">{fmt(data.meta?.totalExpense)}</p>
+                  <p className="text-white font-bold text-xs">{fmt(data.meta?.totalExpense)}</p>
                 </div>
-                <div className="bg-white/20 rounded-xl p-3 text-center">
+                <div className="bg-white/20 rounded-xl p-2.5 text-center">
                   <p className="text-white/70 text-xs">Poupança</p>
-                  <p className="text-white font-bold text-sm">{data.meta?.savingsRate}%</p>
+                  <p className="text-white font-bold text-xs">{data.meta?.savingsRate}%</p>
+                </div>
+              </div>
+
+              {/* Projeção */}
+              <p className="text-white/70 text-xs font-semibold mb-2 uppercase tracking-wide">Projeção fim do mês</p>
+              <div className="grid grid-cols-3 gap-2">
+                <div className="bg-white/20 rounded-xl p-2.5 text-center">
+                  <p className="text-white/70 text-xs">Entradas</p>
+                  <p className="text-white font-bold text-xs">{fmt(data.meta?.totalIncomeProjected)}</p>
+                </div>
+                <div className="bg-white/20 rounded-xl p-2.5 text-center">
+                  <p className="text-white/70 text-xs">Saídas</p>
+                  <p className="text-white font-bold text-xs">{fmt(data.meta?.totalExpenseProjected)}</p>
+                </div>
+                <div className={`rounded-xl p-2.5 text-center ${data.meta?.isProjectedNegative ? 'bg-red-500/40 border border-red-300/50' : 'bg-white/20'}`}>
+                  <p className="text-white/70 text-xs">Saldo final</p>
+                  <p className="text-white font-bold text-xs">{fmt(data.meta?.balanceProjected)}</p>
                 </div>
               </div>
             </motion.div>
@@ -426,17 +445,17 @@ export default function AIInsights() {
             {/* Investimento */}
             {data.insights?.investimento_sugerido && (
               <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}
-                className="bg-gradient-to-br from-emerald-500 to-teal-600 rounded-2xl p-5 text-white">
+                className={`rounded-2xl p-5 text-white ${data.meta?.isProjectedNegative ? 'bg-gradient-to-br from-red-500 to-rose-600' : 'bg-gradient-to-br from-emerald-500 to-teal-600'}`}>
                 <div className="flex items-center gap-2 mb-3">
                   <PiggyBank className="w-5 h-5 text-white" />
                   <h3 className="text-sm font-bold">💰 Quanto investir</h3>
                 </div>
                 <p className="text-3xl font-bold">{fmt(data.insights.investimento_sugerido.valor)}</p>
-                <p className="text-emerald-100 text-sm mb-2">{data.insights.investimento_sugerido.percentual} da sua renda</p>
-                <p className="text-emerald-100 text-sm mb-3">{data.insights.investimento_sugerido.justificativa}</p>
-                {data.insights.investimento_sugerido.opcoes?.length > 0 && (
+                <p className="text-white/80 text-sm mb-2">{data.insights.investimento_sugerido.percentual} da sua renda</p>
+                <p className="text-white/80 text-sm mb-3">{data.insights.investimento_sugerido.justificativa}</p>
+                {data.insights.investimento_sugerido.valor > 0 && data.insights.investimento_sugerido.opcoes?.length > 0 && (
                   <div className="space-y-1">
-                    <p className="text-xs font-semibold text-emerald-100">Onde investir:</p>
+                    <p className="text-xs font-semibold text-white/70">Onde investir:</p>
                     {data.insights.investimento_sugerido.opcoes.map((op, i) => (
                       <div key={i} className="flex items-center gap-2">
                         <div className="w-1.5 h-1.5 rounded-full bg-white/60" />
@@ -452,23 +471,46 @@ export default function AIInsights() {
             {data.insights?.regra_50_30_20 && (
               <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}
                 className="bg-white dark:bg-gray-800 rounded-2xl p-5 shadow-sm border border-gray-100 dark:border-gray-700">
-                <h3 className="text-sm font-bold text-gray-700 dark:text-gray-300 mb-4">📊 Regra 50/30/20</h3>
+                <h3 className="text-sm font-bold text-gray-700 dark:text-gray-300 mb-1">📊 Regra 50/30/20</h3>
+
+                {/* Base de cálculo */}
+                <div className="bg-gray-50 dark:bg-gray-700 rounded-xl px-3 py-2 mb-4">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    Base: <span className="font-bold text-gray-700 dark:text-gray-200">
+                      {fmt(data.insights.regra_50_30_20.renda_base)}
+                    </span> (renda projetada do mês)
+                  </p>
+                </div>
+
                 {[
-                  { label: "Necessidades", key: "necessidades", percent: "50%", color: "bg-blue-500" },
-                  { label: "Desejos", key: "desejos", percent: "30%", color: "bg-amber-500" },
-                  { label: "Investimentos", key: "investimentos", percent: "20%", color: "bg-emerald-500" },
-                ].map(({ label, key, percent, color }) => {
+                  { label: "Necessidades", key: "necessidades", percent: "50%", color: "bg-blue-500", desc: "Aluguel, alimentação, saúde, transporte" },
+                  { label: "Desejos", key: "desejos", percent: "30%", color: "bg-amber-500", desc: "Lazer, compras, restaurantes" },
+                  { label: "Investimentos", key: "investimentos", percent: "20%", color: "bg-emerald-500", desc: "Poupança e investimentos" },
+                ].map(({ label, key, percent, color, desc }) => {
                   const item = data.insights.regra_50_30_20[key];
                   const progress = item?.ideal > 0 ? Math.min((item.atual / item.ideal) * 100, 100) : 0;
+                  const isOver = item?.atual > item?.ideal;
                   return (
-                    <div key={key} className="mb-3">
-                      <div className="flex items-center justify-between mb-1">
-                        <p className="text-sm font-medium text-gray-700 dark:text-gray-300">{label} <span className="text-gray-400">({percent})</span></p>
-                        <p className="text-xs text-gray-500">{fmt(item?.atual)} / {fmt(item?.ideal)}</p>
+                    <div key={key} className="mb-4">
+                      <div className="flex items-center justify-between mb-0.5">
+                        <div>
+                          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{label}</span>
+                          <span className="text-gray-400 text-xs ml-1">({percent})</span>
+                        </div>
+                        <span className={`text-xs font-bold ${isOver ? 'text-red-500' : 'text-emerald-600'}`}>
+                          {fmt(item?.atual)} / {fmt(item?.ideal)}
+                        </span>
                       </div>
+                      <p className="text-xs text-gray-400 mb-1.5">{desc}</p>
                       <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-2">
-                        <div className={`${color} rounded-full h-2 transition-all`} style={{ width: `${progress}%` }} />
+                        <div className={`${isOver ? 'bg-red-500' : color} rounded-full h-2 transition-all`}
+                          style={{ width: `${progress}%` }} />
                       </div>
+                      {isOver && (
+                        <p className="text-xs text-red-500 mt-1">
+                          ⚠️ Acima do ideal em {fmt(item.atual - item.ideal)}
+                        </p>
+                      )}
                     </div>
                   );
                 })}
