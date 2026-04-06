@@ -54,7 +54,8 @@ export default function AIInsights() {
   const [selectedYear, setSelectedYear] = useState(String(currentYear));
 
   const month = `${selectedYear}-${selectedMonth}`;
-  const monthLabel = format(new Date(`${month}-01`), 'MMMM yyyy', { locale: ptBR });
+  const monthLabel = format(new Date(`${selectedYear}-${selectedMonth}-02`), 'MMMM yyyy', { locale: ptBR });
+
 
   // Carrega análise salva ao abrir
   useEffect(() => {
