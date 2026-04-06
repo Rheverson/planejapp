@@ -133,30 +133,29 @@ Responda APENAS com um JSON válido, sem texto antes ou depois:
 }`
 
     // ── Chama o Google Gemini ────────────────────────────
-    const geminiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${Deno.env.get("GEMINI_API_KEY")}`,
-      {
+    const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${Deno.env.get("GROQ_API_KEY")}`
+        },
         body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: {
+            model: "llama-3.3-70b-versatile",
+            messages: [{ role: "user", content: prompt }],
             temperature: 0.7,
-            maxOutputTokens: 2000,
-          }
+            max_tokens: 2000
         })
-      }
-    )
+        })
 
-    const geminiData = await geminiRes.json()
-    console.log('Gemini status:', geminiRes.status)
+    const groqData = await groqRes.json()
+    console.log('Groq status:', groqRes.status)
 
-    if (!geminiRes.ok) {
-      console.error('Gemini error:', JSON.stringify(geminiData))
-      throw new Error("Erro ao chamar a IA: " + (geminiData.error?.message || "Erro desconhecido"))
+    if (!groqRes.ok) {
+        console.error('Groq error:', JSON.stringify(groqData))
+        throw new Error("Erro ao chamar a IA: " + (groqData.error?.message || "Erro desconhecido"))
     }
 
-    const content = geminiData.candidates?.[0]?.content?.parts?.[0]?.text
+    const content = groqData.choices?.[0]?.message?.content
     if (!content) throw new Error("Resposta vazia da IA")
 
     // Remove possíveis marcadores de código
