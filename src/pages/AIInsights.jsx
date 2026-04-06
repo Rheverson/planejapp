@@ -108,31 +108,43 @@ export default function AIInsights() {
     setLimiteAtingido(false);
     setShowPeriodSelector(false);
     try {
-      const { data: result, error: err } = await supabase.functions.invoke('ai-insights', {
+        const { data: result, error: err } = await supabase.functions.invoke('ai-insights', {
         body: { userId: user.id, month }
-      });
+        });
 
-      if (err) throw err;
-      if (result.error === 'limite_atingido') {
+        // Trata erro HTTP (como 429 de limite)
+        if (err) {
+        // Tenta extrair o body do erro
+        try {
+            const errBody = JSON.parse(err.context?.responseText || '{}')
+            if (errBody.error === 'limite_atingido') {
+            setLimiteAtingido(true);
+            setError(errBody.message);
+            return;
+            }
+        } catch {}
+        throw err;
+        }
+
+        if (result?.error === 'limite_atingido') {
         setLimiteAtingido(true);
         setError(result.message);
         return;
-      }
-      if (result.error) throw new Error(result.error);
+        }
 
-      setData(result);
-      setUsage(result.usage);
-      setSavedDate(new Date().toISOString());
+        if (result?.error) throw new Error(result.error);
 
-      // Salva no banco
-      await saveInsights(result);
+        setData(result);
+        setUsage(result.usage);
+        setSavedDate(new Date().toISOString());
+        await saveInsights(result);
 
     } catch (err) {
-      setError(err.message);
+        setError("Erro ao gerar análise. Tente novamente.");
     } finally {
-      setLoading(false);
+        setLoading(false);
     }
-  };
+    };
 
   const fmt = (v) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v || 0);
 
