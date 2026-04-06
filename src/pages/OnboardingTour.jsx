@@ -130,15 +130,16 @@ export default function OnboardingTour() {
   const isCompleted = completedSteps.includes(currentStep);
 
   const handleComplete = async () => {
-    // Salva no banco
-    await supabase
+    console.log('🔵 handleComplete chamado, user.id:', user?.id);
+    
+    const { error } = await supabase
         .from('profiles')
         .update({ onboarding_completed: true })
         .eq('id', user.id);
 
-    // Salva no localStorage também (retrocompatibilidade)
-    localStorage.setItem('onboarding_completed', 'true');
+    console.log('✅ Update resultado:', error);
 
+    localStorage.setItem('onboarding_completed', 'true');
     queryClient.invalidateQueries();
     navigate('/');
     };
