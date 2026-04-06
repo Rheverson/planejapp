@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "809183269982",
+    "project_id": "planejeapp",
+    "storage_bucket": "planejeapp.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:809183269982:android:96bfb82bf5b2194d2710cf",
+        "android_client_info": {
+          "package_name": "com.planeje.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCNZGSUeh3Odf0R0yF8Fm5AMStUqXcnkok"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

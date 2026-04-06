@@ -3,7 +3,7 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClientInstance } from '@/lib/query-client';
 import NavigationTracker from '@/lib/NavigationTracker';
 import { pagesConfig } from './pages.config';
-import { BrowserRouter as Router, Route, Routes, Navigate, useSearchParams } from 'react-router-dom';
+import { BrowserRouter as Router, Route, Routes, Navigate, useSearchParams, useNavigate } from 'react-router-dom';
 import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import { SharedProfileProvider } from '@/lib/SharedProfileContext';
@@ -16,11 +16,13 @@ import ForgotPassword from "@/pages/auth/ForgotPassword";
 import ResetPassword from "@/pages/auth/ResetPassword";
 import Subscribe from "@/pages/Subscribe";
 import SubscriptionSuccess from "@/pages/SubscriptionSuccess";
+import OnboardingTour from '@/pages/OnboardingTour';
 import { MonthProvider } from '@/lib/MonthContext';
 import { PrivacyProvider } from '@/lib/PrivacyContext';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { useEffect } from 'react';
+import { initPushNotifications } from '@/lib/pushNotifications';
 
 const { Pages, Layout, mainPage } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
@@ -30,7 +32,6 @@ const LayoutWrapper = ({ children, currentPageName }) => Layout ?
   <Layout currentPageName={currentPageName}>{children}</Layout>
   : <>{children}</>;
 
-// Captura o código de indicação da URL
 function ReferralCapture() {
   const [searchParams] = useSearchParams();
   useEffect(() => {
@@ -62,6 +63,30 @@ function useSubscription(userId) {
 const AuthenticatedApp = () => {
   const { loading, user } = useAuth();
   const { data: subscription, isLoading: subLoading } = useSubscription(user?.id);
+  const navigate = useNavigate();
+
+  // Inicializa push notifications quando usuário logar
+  useEffect(() => {
+    if (user) {
+      initPushNotifications();
+    }
+  }, [user?.id]);
+
+  // Redireciona para onboarding tour no primeiro login
+  useEffect(() => {
+    if (!user) return;
+
+    const isSubscribed = subscription && ['active', 'trialing'].includes(subscription.status);
+    if (!isSubscribed) return; // Aguarda ter assinatura
+
+    const onboardingCompleted = localStorage.getItem('onboarding_completed') === 'true';
+    if (!onboardingCompleted) {
+      const timer = setTimeout(() => {
+        navigate('/onboarding-tour');
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [user?.id, subscription]);
 
   if (loading || (user && subLoading)) {
     return (
@@ -100,6 +125,7 @@ const AuthenticatedApp = () => {
 
   return (
     <Routes>
+      <Route path="/onboarding-tour" element={<OnboardingTour />} />
       <Route path="/login" element={<Navigate to="/" replace />} />
       <Route path="/forgot-password" element={<Navigate to="/" replace />} />
       <Route path="/onboarding/*" element={<Navigate to="/" replace />} />

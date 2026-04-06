@@ -95,7 +95,6 @@ serve(async (req) => {
 
         if (insertError) {
           console.error("Erro ao salvar customer:", insertError)
-          // Não retorna erro — continua para criar o checkout
         }
       } catch (stripeErr) {
         console.error("Erro ao criar customer no Stripe:", stripeErr)
@@ -106,7 +105,6 @@ serve(async (req) => {
     // ── Processa código de indicação ─────────────────────
     if (referralCode) {
       try {
-        // Busca o indicador pelo código
         const { data: referrer } = await supabaseAdmin
           .from("profiles")
           .select("id")
@@ -114,13 +112,10 @@ serve(async (req) => {
           .maybeSingle()
 
         if (!referrer) {
-          // Código inválido — não bloqueia o checkout, apenas ignora
           console.log("Código de indicação inválido:", referralCode)
         } else if (referrer.id === userId) {
-          // Auto-indicação — ignora silenciosamente
           console.log("Auto-indicação ignorada para:", userId)
         } else {
-          // Verifica se já existe referral para esse usuário
           const { data: existingReferral } = await supabaseAdmin
             .from("referrals")
             .select("id")
@@ -138,17 +133,28 @@ serve(async (req) => {
               })
 
             if (referralError) {
-              // Se for duplicata, ignora. Qualquer outro erro, loga mas não bloqueia
               if (!referralError.message.includes('duplicate') && !referralError.code?.includes('23505')) {
                 console.error("Erro ao salvar referral:", referralError)
               }
             } else {
               console.log("Referral criado:", referrer.id, "->", userId)
+
+              // ── Notifica o indicador que alguém usou seu código ──
+              try {
+                await supabaseAdmin.functions.invoke('send-notification', {
+                  body: {
+                    user_id: referrer.id,
+                    title: '🎉 Alguém usou seu código!',
+                    body: 'Um novo amigo se cadastrou com seu código. Aguardando o primeiro pagamento para ativar seu desconto!'
+                  }
+                })
+              } catch (notifErr) {
+                console.error("Erro ao enviar notificação de indicação:", notifErr)
+              }
             }
           }
         }
       } catch (referralErr) {
-        // Erro no processamento do referral não deve bloquear o checkout
         console.error("Erro inesperado no referral:", referralErr)
       }
     }
@@ -171,9 +177,7 @@ serve(async (req) => {
     } catch (stripeErr: any) {
       console.error("Erro ao criar sessão Stripe:", stripeErr)
 
-      // Mensagens específicas por tipo de erro do Stripe
       if (stripeErr.code === 'resource_missing') {
-        // Customer não existe no Stripe — limpa e tenta recriar
         await supabaseAdmin
           .from("subscriptions")
           .update({ stripe_customer_id: null })
