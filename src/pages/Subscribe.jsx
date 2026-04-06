@@ -24,24 +24,54 @@ export default function Subscribe() {
   const handleSubscribe = async () => {
     setLoading(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) { toast.error("Você precisa estar logado"); setLoading(false); return; }
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) { toast.error("Você precisa estar logado"); setLoading(false); return; }
 
-      const { data, error } = await supabase.functions.invoke("create-checkout", {
+        // Valida o código de indicação se foi preenchido
+        if (referralCode) {
+        const { data: referrer, error: referrerError } = await supabase
+            .from('profiles')
+            .select('id')
+            .eq('referral_code', referralCode.toUpperCase())
+            .maybeSingle();
+
+        if (!referrer) {
+            toast.error("Código de indicação inválido. Verifique com quem te indicou.");
+            // Se estava travado (veio da URL), destrava para o usuário corrigir
+            if (referralLocked) {
+            setReferralLocked(false);
+            localStorage.removeItem('referral_code');
+            }
+            setLoading(false);
+            return;
+        }
+
+        // Bloqueia auto-indicação
+        if (referrer.id === session.user.id) {
+            toast.error("Você não pode usar seu próprio código de indicação.");
+            setReferralCode('');
+            setReferralLocked(false);
+            localStorage.removeItem('referral_code');
+            setLoading(false);
+            return;
+        }
+        }
+
+        const { data, error } = await supabase.functions.invoke("create-checkout", {
         body: { userId: session.user.id, email: session.user.email, referralCode: referralCode || null },
         headers: { Authorization: `Bearer ${session.access_token}` }
-      });
+        });
 
-      if (error) throw error;
-      if (!data?.url) throw new Error("URL não retornada");
-      window.location.href = data.url;
+        if (error) throw error;
+        if (!data?.url) throw new Error("URL não retornada");
+        window.location.href = data.url;
 
     } catch (err) {
-      toast.error("Erro: " + err.message);
+        toast.error("Erro: " + err.message);
     } finally {
-      setLoading(false);
+        setLoading(false);
     }
-  };
+    };
 
   const handleLogout = async () => {
     await signOut();
