@@ -645,23 +645,24 @@ export default function AIInsights() {
               )}
 
               {/* Input */}
-              <div className="px-4 pb-6 pt-2 border-t border-gray-100 dark:border-gray-800">
-                <div className="flex gap-2 items-end">
-                  <input
-                    ref={inputRef}
-                    value={chatInput}
-                    onChange={(e) => setChatInput(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
-                    placeholder="Pergunte algo sobre suas finanças..."
-                    className="flex-1 bg-gray-100 dark:bg-gray-800 rounded-2xl px-4 py-3 text-sm text-gray-800 dark:text-gray-200 placeholder-gray-400 outline-none resize-none"
-                  />
-                  <button onClick={() => sendMessage()}
-                    disabled={!chatInput.trim() || chatLoading}
-                    className="w-11 h-11 bg-violet-600 hover:bg-violet-700 disabled:opacity-40 rounded-2xl flex items-center justify-center flex-shrink-0 transition-colors">
-                    <Send className="w-4 h-4 text-white" />
-                  </button>
-                </div>
-              </div>
+            <div className="px-4 pt-2 pb-safe border-t border-gray-100 dark:border-gray-800"
+            style={{ paddingBottom: 'max(24px, env(safe-area-inset-bottom))' }}>
+            <div className="flex gap-2 items-end mb-16">
+                <input
+                ref={inputRef}
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
+                placeholder="Pergunte algo sobre suas finanças..."
+                className="flex-1 bg-gray-100 dark:bg-gray-800 rounded-2xl px-4 py-3 text-sm text-gray-800 dark:text-gray-200 placeholder-gray-400 outline-none resize-none"
+                />
+                <button onClick={() => sendMessage()}
+                disabled={!chatInput.trim() || chatLoading}
+                className="w-11 h-11 bg-violet-600 hover:bg-violet-700 disabled:opacity-40 rounded-2xl flex items-center justify-center flex-shrink-0 transition-colors">
+                <Send className="w-4 h-4 text-white" />
+                </button>
+            </div>
+            </div>
             </motion.div>
           </motion.div>
         )}
