@@ -645,9 +645,9 @@ export default function AIInsights() {
               )}
 
               {/* Input */}
-            <div className="px-4 pt-2 pb-safe border-t border-gray-100 dark:border-gray-800"
-            style={{ paddingBottom: 'max(24px, env(safe-area-inset-bottom))' }}>
-            <div className="flex gap-2 items-end mb-16">
+            <div className="px-4 pt-2 border-t border-gray-100 dark:border-gray-800"
+                style={{ paddingBottom: 'max(16px, env(safe-area-inset-bottom))' }}>
+                <div className="flex gap-2 items-end">
                 <input
                 ref={inputRef}
                 value={chatInput}
