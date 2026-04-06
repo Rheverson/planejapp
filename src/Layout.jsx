@@ -2,15 +2,15 @@ import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "./utils";
 import { motion } from "framer-motion";
-import { Home, ArrowLeftRight, Wallet, User, Target, Gift } from "lucide-react";
+import { Home, ArrowLeftRight, Wallet, User, Target, Sparkles } from "lucide-react";
 
 const navItems = [
   { name: "Home",       icon: Home,          page: "Home"         },
   { name: "Transações", icon: ArrowLeftRight, page: "Transactions" },
   { name: "Metas",      icon: Target,        page: "Goals"        },
   { name: "Contas",     icon: Wallet,        page: "Accounts"     },
+  { name: "IA",         icon: Sparkles,      page: "AIInsights"   },
   { name: "Perfil",     icon: User,          page: "Profile"      },
-  { name: "Indicar",    icon: Gift,          page: "Referrals"    },
 ];
 
 export default function Layout({ children, currentPageName }) {
@@ -55,6 +55,7 @@ export default function Layout({ children, currentPageName }) {
         <div className="flex items-center justify-between h-16 max-w-lg mx-auto px-4 relative">
           {navItems.map((item) => {
             const isActive = currentPageName === item.page;
+            const isAI = item.page === "AIInsights";
             return (
               <Link
                 key={item.page}
@@ -73,14 +74,26 @@ export default function Layout({ children, currentPageName }) {
                   animate={{ y: isActive ? -2 : 0 }}
                 >
                   <div className={`p-2 rounded-xl transition-all duration-300 ${
-                    isActive ? 'bg-blue-50 dark:bg-blue-900/40 scale-110' : 'bg-transparent scale-100'
+                    isActive
+                      ? isAI
+                        ? 'bg-violet-50 dark:bg-violet-900/40 scale-110'
+                        : 'bg-blue-50 dark:bg-blue-900/40 scale-110'
+                      : 'bg-transparent scale-100'
                   }`}>
                     <item.icon className={`w-5 h-5 transition-colors duration-300 ${
-                      isActive ? 'text-blue-600 dark:text-blue-400 stroke-[2.5]' : 'text-gray-400 dark:text-gray-500'
+                      isActive
+                        ? isAI
+                          ? 'text-violet-600 dark:text-violet-400 stroke-[2.5]'
+                          : 'text-blue-600 dark:text-blue-400 stroke-[2.5]'
+                        : 'text-gray-400 dark:text-gray-500'
                     }`} />
                   </div>
                   <span className={`text-[10px] mt-1 truncate w-full text-center transition-all duration-300 ${
-                    isActive ? 'text-blue-600 dark:text-blue-400 font-bold opacity-100' : 'text-gray-500 dark:text-gray-400 opacity-80'
+                    isActive
+                      ? isAI
+                        ? 'text-violet-600 dark:text-violet-400 font-bold opacity-100'
+                        : 'text-blue-600 dark:text-blue-400 font-bold opacity-100'
+                      : 'text-gray-500 dark:text-gray-400 opacity-80'
                   }`}>
                     {item.name}
                   </span>

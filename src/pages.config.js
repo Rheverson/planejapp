@@ -6,6 +6,8 @@ import Reports from './pages/Reports';
 import Transactions from './pages/Transactions';
 import Referrals from './pages/Referrals';
 import __Layout from './Layout.jsx';
+import AIInsights from './pages/AIInsights';
+
 
 export const PAGES = {
     "Accounts":     Accounts,
@@ -15,6 +17,7 @@ export const PAGES = {
     "Reports":      Reports,
     "Transactions": Transactions,
     "Referrals":    Referrals,
+    "AIInsights":   AIInsights,
 }
 
 export const pagesConfig = {
