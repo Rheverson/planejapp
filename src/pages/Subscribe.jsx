@@ -22,55 +22,61 @@ export default function Subscribe() {
   }, []);
 
   const handleSubscribe = async () => {
-    setLoading(true);
-    try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) { toast.error("Você precisa estar logado"); setLoading(false); return; }
+        setLoading(true);
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) { toast.error("Você precisa estar logado"); setLoading(false); return; }
 
-        // Valida o código de indicação se foi preenchido
-        if (referralCode) {
-        const { data: referrer, error: referrerError } = await supabase
-            .from('profiles')
-            .select('id')
-            .eq('referral_code', referralCode.toUpperCase())
-            .maybeSingle();
+            // Valida o código de indicação se foi preenchido
+            if (referralCode && referralCode.trim() !== '') {
+            const { data: referrer, error: referrerError } = await supabase
+                .from('profiles')
+                .select('id')
+                .eq('referral_code', referralCode.toUpperCase().trim())
+                .maybeSingle();
 
-        if (!referrer) {
-            toast.error("Código de indicação inválido. Verifique com quem te indicou.");
-            // Se estava travado (veio da URL), destrava para o usuário corrigir
-            if (referralLocked) {
-            setReferralLocked(false);
-            localStorage.removeItem('referral_code');
+            console.log('Referrer:', referrer, 'Error:', referrerError);
+
+            if (referrerError) {
+                console.error('Erro ao validar código:', referrerError);
+                toast.error("Erro ao validar código. Tente novamente.");
+                setLoading(false);
+                return;
             }
+
+            if (!referrer) {
+                toast.error("Código de indicação inválido. Verifique com quem te indicou.");
+                setReferralLocked(false);
+                setReferralCode('');
+                localStorage.removeItem('referral_code');
+                setLoading(false);
+                return;
+            }
+
+            if (referrer.id === session.user.id) {
+                toast.error("Você não pode usar seu próprio código.");
+                setReferralLocked(false);
+                setReferralCode('');
+                localStorage.removeItem('referral_code');
+                setLoading(false);
+                return;
+            }
+            }
+
+            const { data, error } = await supabase.functions.invoke("create-checkout", {
+            body: { userId: session.user.id, email: session.user.email, referralCode: referralCode || null },
+            headers: { Authorization: `Bearer ${session.access_token}` }
+            });
+
+            if (error) throw error;
+            if (!data?.url) throw new Error("URL não retornada");
+            window.location.href = data.url;
+
+        } catch (err) {
+            toast.error("Erro: " + err.message);
+        } finally {
             setLoading(false);
-            return;
         }
-
-        // Bloqueia auto-indicação
-        if (referrer.id === session.user.id) {
-            toast.error("Você não pode usar seu próprio código de indicação.");
-            setReferralCode('');
-            setReferralLocked(false);
-            localStorage.removeItem('referral_code');
-            setLoading(false);
-            return;
-        }
-        }
-
-        const { data, error } = await supabase.functions.invoke("create-checkout", {
-        body: { userId: session.user.id, email: session.user.email, referralCode: referralCode || null },
-        headers: { Authorization: `Bearer ${session.access_token}` }
-        });
-
-        if (error) throw error;
-        if (!data?.url) throw new Error("URL não retornada");
-        window.location.href = data.url;
-
-    } catch (err) {
-        toast.error("Erro: " + err.message);
-    } finally {
-        setLoading(false);
-    }
     };
 
   const handleLogout = async () => {
