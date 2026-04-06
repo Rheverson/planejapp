@@ -1,16 +1,25 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useAuth } from "@/lib/AuthContext";
 import { supabase } from "@/lib/supabase";
 import { motion } from "framer-motion";
-import { Check, Users, Zap, LogOut } from "lucide-react";
+import { Check, Users, Zap, LogOut, CheckCircle2, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 
 export default function Subscribe() {
   const { user, signOut } = useAuth();
-  const [referralCode, setReferralCode] = useState("");
+  const [referralCode, setReferralCode] = useState('');
+  const [referralLocked, setReferralLocked] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const saved = localStorage.getItem('referral_code');
+    if (saved) {
+      setReferralCode(saved.toUpperCase());
+      setReferralLocked(true);
+    }
+  }, []);
 
   const handleSubscribe = async () => {
     setLoading(true);
@@ -46,8 +55,6 @@ export default function Subscribe() {
 
         {/* Header */}
         <div className="bg-gradient-to-br from-blue-600 to-indigo-700 px-6 pt-6 pb-6 text-white">
-          
-          {/* Botão sair + info usuário */}
           <div className="flex items-center justify-between mb-4">
             <div className="text-left">
               <p className="text-blue-200 text-xs">Logado como</p>
@@ -140,11 +147,33 @@ export default function Subscribe() {
           {/* Código de indicação */}
           <div>
             <label className="text-xs font-semibold text-gray-500 mb-1.5 block">
-              Código de indicação (opcional)
+              Código de indicação {referralLocked ? '' : '(opcional)'}
             </label>
-            <Input placeholder="Ex: AB12CD34" value={referralCode}
-              onChange={e => setReferralCode(e.target.value.toUpperCase())}
-              className="rounded-xl border-gray-200 uppercase" maxLength={8} />
+            <div className="relative">
+              <Input
+                placeholder="Ex: AB12CD34"
+                value={referralCode}
+                onChange={e => !referralLocked && setReferralCode(e.target.value.toUpperCase())}
+                className={`rounded-xl border-gray-200 uppercase pr-10 ${
+                  referralLocked
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-700 cursor-not-allowed font-bold tracking-widest'
+                    : ''
+                }`}
+                maxLength={8}
+                readOnly={referralLocked}
+              />
+              {referralLocked && (
+                <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                  <Lock className="w-4 h-4 text-emerald-500" />
+                </div>
+              )}
+            </div>
+            {referralLocked && (
+              <p className="text-xs text-emerald-600 mt-1.5 flex items-center gap-1 font-medium">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                Código de indicação aplicado!
+              </p>
+            )}
           </div>
 
           <Button onClick={handleSubscribe} disabled={loading}

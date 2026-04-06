@@ -3,7 +3,7 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClientInstance } from '@/lib/query-client';
 import NavigationTracker from '@/lib/NavigationTracker';
 import { pagesConfig } from './pages.config';
-import { BrowserRouter as Router, Route, Routes, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Route, Routes, Navigate, useSearchParams } from 'react-router-dom';
 import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import { SharedProfileProvider } from '@/lib/SharedProfileContext';
@@ -20,6 +20,7 @@ import { MonthProvider } from '@/lib/MonthContext';
 import { PrivacyProvider } from '@/lib/PrivacyContext';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
+import { useEffect } from 'react';
 
 const { Pages, Layout, mainPage } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
@@ -29,7 +30,18 @@ const LayoutWrapper = ({ children, currentPageName }) => Layout ?
   <Layout currentPageName={currentPageName}>{children}</Layout>
   : <>{children}</>;
 
-// Hook para verificar assinatura
+// Captura o código de indicação da URL
+function ReferralCapture() {
+  const [searchParams] = useSearchParams();
+  useEffect(() => {
+    const ref = searchParams.get('ref');
+    if (ref) {
+      localStorage.setItem('referral_code', ref.toUpperCase());
+    }
+  }, []);
+  return null;
+}
+
 function useSubscription(userId) {
   return useQuery({
     queryKey: ['subscription', userId],
@@ -43,7 +55,7 @@ function useSubscription(userId) {
       return data;
     },
     enabled: !!userId,
-    staleTime: 5 * 60 * 1000, // 5 minutos
+    staleTime: 5 * 60 * 1000,
   });
 }
 
@@ -73,16 +85,9 @@ const AuthenticatedApp = () => {
     );
   }
 
-  // Verifica se assinatura está ativa ou em trial
-  const isSubscribed = subscription && [
-    'active', 'trialing'
-  ].includes(subscription.status);
-
-  // Trial expirado ou sem assinatura
+  const isSubscribed = subscription && ['active', 'trialing'].includes(subscription.status);
   const needsSubscription = !isSubscribed;
 
-  // Se não tem assinatura ativa, manda para Subscribe
-  // exceto se já está na página de subscribe ou success
   if (needsSubscription) {
     return (
       <Routes>
@@ -102,11 +107,8 @@ const AuthenticatedApp = () => {
       <Route path="/subscription-success" element={<SubscriptionSuccess />} />
       <Route path="/" element={<LayoutWrapper currentPageName={mainPageKey}><MainPage /></LayoutWrapper>} />
       {Object.entries(Pages).map(([path, Page]) => (
-        <Route
-          key={path}
-          path={`/${path}`}
-          element={<LayoutWrapper currentPageName={path}><Page /></LayoutWrapper>}
-        />
+        <Route key={path} path={`/${path}`}
+          element={<LayoutWrapper currentPageName={path}><Page /></LayoutWrapper>} />
       ))}
       <Route path="*" element={<PageNotFound />} />
     </Routes>
@@ -116,6 +118,7 @@ const AuthenticatedApp = () => {
 function App() {
   return (
     <Router>
+      <ReferralCapture />
       <Routes>
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route

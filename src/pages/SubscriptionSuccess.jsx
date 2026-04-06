@@ -5,7 +5,6 @@ import { CheckCircle2, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/AuthContext";
-import { supabase } from "@/lib/supabase";
 
 export default function SubscriptionSuccess() {
   const navigate = useNavigate();
@@ -13,16 +12,11 @@ export default function SubscriptionSuccess() {
   const { user } = useAuth();
 
   useEffect(() => {
-    // Aguarda um pouco para o webhook processar e invalida o cache
-    const timer = setTimeout(async () => {
-      // Atualiza o referral para active se foi indicado
-      if (user?.id) {
-        await supabase
-          .from('referrals')
-          .update({ status: 'active' })
-          .eq('referred_id', user.id)
-          .eq('status', 'pending');
-      }
+    // Limpa o código de indicação do localStorage
+    localStorage.removeItem('referral_code');
+
+    // Aguarda o webhook processar e invalida o cache
+    const timer = setTimeout(() => {
       queryClient.invalidateQueries({ queryKey: ['subscription'] });
     }, 3000);
 
@@ -41,12 +35,8 @@ export default function SubscriptionSuccess() {
         </motion.div>
 
         <h1 className="text-2xl font-bold text-gray-900 mb-2">Tudo certo! 🎉</h1>
-        <p className="text-gray-500 text-sm mb-2">
-          Sua assinatura foi ativada com sucesso.
-        </p>
-        <p className="text-emerald-600 font-semibold text-sm mb-8">
-          30 dias grátis ativados!
-        </p>
+        <p className="text-gray-500 text-sm mb-2">Sua assinatura foi ativada com sucesso.</p>
+        <p className="text-emerald-600 font-semibold text-sm mb-8">30 dias grátis ativados!</p>
 
         <div className="bg-gray-50 rounded-2xl p-4 mb-6 text-left">
           <p className="text-xs font-semibold text-gray-500 mb-2">O que você tem acesso:</p>
