@@ -129,11 +129,19 @@ export default function OnboardingTour() {
   const isLast = currentStep === steps.length - 1;
   const isCompleted = completedSteps.includes(currentStep);
 
-  const handleComplete = () => {
+  const handleComplete = async () => {
+    // Salva no banco
+    await supabase
+        .from('profiles')
+        .update({ onboarding_completed: true })
+        .eq('id', user.id);
+
+    // Salva no localStorage também (retrocompatibilidade)
     localStorage.setItem('onboarding_completed', 'true');
+
     queryClient.invalidateQueries();
     navigate('/');
-  };
+    };
 
   const handleNext = () => {
     if (isLast) {

@@ -60,9 +60,28 @@ function useSubscription(userId) {
   });
 }
 
+// Hook para buscar o perfil do usuário incluindo onboarding_completed
+function useProfile(userId) {
+  return useQuery({
+    queryKey: ['profile', userId],
+    queryFn: async () => {
+      if (!userId) return null;
+      const { data } = await supabase
+        .from('profiles')
+        .select('onboarding_completed')
+        .eq('id', userId)
+        .single();
+      return data;
+    },
+    enabled: !!userId,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
 const AuthenticatedApp = () => {
   const { loading, user } = useAuth();
   const { data: subscription, isLoading: subLoading } = useSubscription(user?.id);
+  const { data: profile, isLoading: profileLoading } = useProfile(user?.id);
   const navigate = useNavigate();
 
   // Inicializa push notifications quando usuário logar
@@ -75,20 +94,25 @@ const AuthenticatedApp = () => {
   // Redireciona para onboarding tour no primeiro login
   useEffect(() => {
     if (!user) return;
+    if (profileLoading) return;
 
     const isSubscribed = subscription && ['active', 'trialing'].includes(subscription.status);
-    if (!isSubscribed) return; // Aguarda ter assinatura
+    if (!isSubscribed) return;
 
-    const onboardingCompleted = localStorage.getItem('onboarding_completed') === 'true';
+    // Verifica tanto no banco quanto no localStorage (retrocompatibilidade)
+    const localCompleted = localStorage.getItem('onboarding_completed') === 'true';
+    const dbCompleted = profile?.onboarding_completed === true;
+    const onboardingCompleted = localCompleted || dbCompleted;
+
     if (!onboardingCompleted) {
       const timer = setTimeout(() => {
         navigate('/onboarding-tour');
       }, 500);
       return () => clearTimeout(timer);
     }
-  }, [user?.id, subscription]);
+  }, [user?.id, subscription, profile, profileLoading]);
 
-  if (loading || (user && subLoading)) {
+  if (loading || (user && (subLoading || profileLoading))) {
     return (
       <div className="fixed inset-0 flex items-center justify-center bg-white dark:bg-gray-900">
         <div className="w-10 h-10 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
