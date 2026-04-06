@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { X, TrendingUp, TrendingDown, Repeat } from "lucide-react";
+import { X, TrendingUp, TrendingDown, Repeat, Zap } from "lucide-react";
 import CategorySuggestion from "./CategorySuggestion";
 import { useCategorySuggestion } from "./useCategorySuggestion";
 import { useAuth } from "@/lib/AuthContext";
@@ -47,6 +47,7 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
   const [accountId, setAccountId]       = useState(initialData?.account_id || "");
   const [date, setDate]                 = useState(initialData?.date || today);
   const [isRealized, setIsRealized]     = useState(initialData?.is_realized ?? true);
+  const [autoRealize, setAutoRealize]   = useState(initialData?.auto_realize || false);
   const [isRecurring, setIsRecurring]           = useState(initialData?.is_recurring || false);
   const [recurringFreq, setRecurringFreq]       = useState(initialData?.recurring_frequency || "monthly");
   const [recurringDay, setRecurringDay]         = useState(initialData?.recurring_day || todayDay);
@@ -55,6 +56,18 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
 
   const { suggestion, confidence, confirmCategory } = useCategorySuggestion(description, type);
   const categories = allCategories.filter(c => c.type === type).map(c => c.name);
+
+  // Quando auto realizar é ativado, desativa is_realized
+  const handleAutoRealizeChange = (val) => {
+    setAutoRealize(val);
+    if (val) setIsRealized(false);
+  };
+
+  // Quando is_realized é ativado, desativa auto realizar
+  const handleIsRealizedChange = (val) => {
+    setIsRealized(val);
+    if (val) setAutoRealize(false);
+  };
 
   const handleDescriptionChange = (val) => {
     setDescription(val);
@@ -83,6 +96,7 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
       account_id:          accountId || null,
       date,
       is_realized:         isRecurring ? false : isRealized,
+      auto_realize:        !isRecurring && !isRealized ? autoRealize : false,
       notes:               initialData?.notes || "",
       type,
       is_recurring:        isRecurring,
@@ -91,6 +105,9 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
       recurring_end_date:  isRecurring && recurringEndDate ? recurringEndDate : null,
     });
   };
+
+  // Mostra auto realizar apenas quando é previsão (não realizada) e não é recorrente
+  const showAutoRealize = !isRecurring && !isRealized;
 
   return (
     <motion.div
@@ -274,12 +291,46 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
           )}
 
           {!isRecurring && (
-            <div className="flex items-center justify-between px-3 py-2.5 bg-gray-50 rounded-xl">
-              <div>
-                <p className="text-sm font-medium text-gray-900">Já foi realizada?</p>
-                <p className="text-xs text-gray-500">{isRealized ? "Transação confirmada" : "Previsão futura"}</p>
+            <div className="space-y-2">
+              {/* Já foi realizada */}
+              <div className="flex items-center justify-between px-3 py-2.5 bg-gray-50 rounded-xl">
+                <div>
+                  <p className="text-sm font-medium text-gray-900">Já foi realizada?</p>
+                  <p className="text-xs text-gray-500">{isRealized ? "Transação confirmada" : "Previsão futura"}</p>
+                </div>
+                <Switch checked={isRealized} onCheckedChange={handleIsRealizedChange} />
               </div>
-              <Switch checked={isRealized} onCheckedChange={setIsRealized} />
+
+              {/* Auto realizar — só aparece quando é previsão */}
+              <AnimatePresence>
+                {showAutoRealize && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <div className={`flex items-center justify-between px-3 py-2.5 rounded-xl border transition-colors ${
+                      autoRealize
+                        ? 'bg-blue-50 border-blue-200'
+                        : 'bg-gray-50 border-transparent'
+                    }`}>
+                      <div className="flex items-center gap-2">
+                        <Zap className={`w-4 h-4 ${autoRealize ? 'text-blue-600' : 'text-gray-400'}`} />
+                        <div>
+                          <p className="text-sm font-medium text-gray-900">Realizar automaticamente</p>
+                          <p className="text-xs text-gray-500">
+                            {autoRealize
+                              ? `Será realizada automaticamente em ${new Date(date + 'T00:00:00').toLocaleDateString('pt-BR')}`
+                              : 'Marcar como realizada na data de vencimento'}
+                          </p>
+                        </div>
+                      </div>
+                      <Switch checked={autoRealize} onCheckedChange={handleAutoRealizeChange} />
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           )}
 
