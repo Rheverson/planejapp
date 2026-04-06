@@ -1,0 +1,17 @@
+{
+  "name": "PlanejeApp",
+  "short_name": "Planeje",
+  "description": "Seu controle financeiro inteligente",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#2563eb",
+  "theme_color": "#2563eb",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}
