@@ -209,6 +209,10 @@ export default function Goals() {
         });
       }
 
+      return { ...goal, current };
+    });
+  }, [goals, transactions, accounts]);
+
   const activeGoals = goalsWithProgress.filter(
     (g) => !isBefore(parseISO(g.end_date), new Date())
   );

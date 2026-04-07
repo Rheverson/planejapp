@@ -209,7 +209,6 @@ export default function SharedAccessList({ onClose }) {
   const [activeTab, setActiveTab] = useState('all');
   const [showNewInvite, setShowNewInvite] = useState(false);
 
-  // Busca direto do Supabase (sem base44)
   const { data: shares = [], isLoading } = useQuery({
     queryKey: ['sharedAccess', user?.id],
     queryFn: async () => {

@@ -31,7 +31,6 @@ export default function Subscribe() {
         const { data, error } = await supabase
         .rpc('validate_referral_code', { code: code.toUpperCase().trim() });
 
-        console.log('validate result:', data, error);
 
         if (error || !data) {
         setReferralValid(false);

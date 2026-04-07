@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import ReactMarkdown from "react-markdown";
 import { useAuth } from "@/lib/AuthContext";
 import { supabase } from "@/lib/supabase";
 import { motion, AnimatePresence } from "framer-motion";
@@ -60,7 +61,7 @@ export default function AIInsights() {
 
   // Chat
   const [showChat, setShowChat] = useState(false);
-  const [chatMessages, setChatMessages] = useState([]);
+  const [chatMessages, setChatMessages] = useState(/** @type {{role: string, content: string}[]} */ ([]));
   const [chatInput, setChatInput] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
   const chatEndRef = useRef(null);
@@ -178,12 +179,6 @@ export default function AIInsights() {
 
   const fmt = (v) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v || 0);
 
-  const renderMarkdown = (text) => {
-    return text
-      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-      .replace(/\*(.*?)\*/g, '<em>$1</em>')
-      .replace(/\n/g, '<br/>');
-  };
 
   if (loadingSaved) {
     return (
@@ -603,8 +598,9 @@ export default function AIInsights() {
                         ? 'bg-violet-600 text-white rounded-tr-sm'
                         : 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 rounded-tl-sm'
                     }`}>
-                      <p className="text-sm leading-relaxed"
-                        dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content) }} />
+                      <ReactMarkdown className="text-sm leading-relaxed prose prose-sm dark:prose-invert max-w-none">
+                        {msg.content}
+                      </ReactMarkdown>
                     </div>
                   </motion.div>
                 ))}

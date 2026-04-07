@@ -1,39 +1,32 @@
-**Welcome to your Base44 project** 
+# PlanejeApp
 
-**About**
+Aplicativo de finanças pessoais com suporte a múltiplos perfis, metas, investimentos e chat com IA financeira.
 
-View and Edit  your app on [Base44.com](http://Base44.com) 
+## Stack
 
-This project contains everything you need to run your app locally.
+- React 18 + Vite
+- Supabase (auth + banco de dados)
+- Capacitor (Android)
+- Stripe (pagamentos)
 
-**Edit the code in your local development environment**
+## Configuração local
 
-Any change pushed to the repo will also be reflected in the Base44 Builder.
-
-**Prerequisites:** 
-
-1. Clone the repository using the project's Git URL 
-2. Navigate to the project directory
-3. Install dependencies: `npm install`
-4. Create an `.env.local` file and set the right environment variables
+1. Clone o repositório
+2. Instale as dependências: `npm install`
+3. Crie um arquivo `.env` na raiz com as variáveis:
 
 ```
-VITE_BASE44_APP_ID=your_app_id
-VITE_BASE44_APP_BASE_URL=your_backend_url
-
-e.g.
-VITE_BASE44_APP_ID=cbef744a8545c389ef439ea6
-VITE_BASE44_APP_BASE_URL=https://my-to-do-list-81bfaad7.base44.app
+VITE_SUPABASE_URL=sua_url_supabase
+VITE_SUPABASE_ANON_KEY=sua_chave_anonima_supabase
+VITE_STRIPE_PUBLISHABLE_KEY=sua_chave_publica_stripe
 ```
 
-Run the app: `npm run dev`
+4. Execute: `npm run dev`
 
-**Publish your changes**
+## Build Android
 
-Open [Base44.com](http://Base44.com) and click on Publish.
-
-**Docs & Support**
-
-Documentation: [https://docs.base44.com/Integrations/Using-GitHub](https://docs.base44.com/Integrations/Using-GitHub)
-
-Support: [https://app.base44.com/support](https://app.base44.com/support)
+```bash
+npm run build
+npx cap sync android
+npx cap open android
+```
