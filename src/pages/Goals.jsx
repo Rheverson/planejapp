@@ -189,19 +189,25 @@ export default function Goals() {
         const end = parseISO(goal.end_date);
 
         transactions.forEach((t) => {
-          if (t.is_realized === false || t.type !== goal.type) return;
-          if (goal.category && t.category !== goal.category) return;
-
+          if (t.is_realized === false) return;
           const date = parseISO(t.date);
-          if (isWithinInterval(date, { start, end })) {
+          if (!isWithinInterval(date, { start, end })) return;
+
+          if (goal.type === 'investment') {
+            // Para metas de investimento: soma entradas em contas de investimento
+            const account = accounts.find(a => a.id === t.account_id);
+            if (account?.type === 'investment') {
+              if (t.type === 'income') current += t.amount;
+              else if (t.type === 'expense') current -= t.amount;
+            }
+          } else {
+            // Para metas de income/expense: filtra por tipo e categoria
+            if (t.type !== goal.type) return;
+            if (goal.category && t.category !== goal.category) return;
             current += t.amount;
           }
         });
       }
-
-      return { ...goal, current };
-    });
-  }, [goals, transactions]);
 
   const activeGoals = goalsWithProgress.filter(
     (g) => !isBefore(parseISO(g.end_date), new Date())
