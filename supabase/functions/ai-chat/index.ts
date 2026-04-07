@@ -12,25 +12,26 @@ serve(async (req) => {
   }
 
   try {
-    const { userId, message, history, month } = await req.json()
+    const { userId, message, history } = await req.json()
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     )
 
-    // Busca dados financeiros do usuário
-    const currentMonth = month || new Date().toISOString().slice(0, 7)
-    const [year, monthNum] = currentMonth.split('-')
-    const lastDay = new Date(parseInt(year), parseInt(monthNum), 0).getDate()
+    // Período: ano passado até 1 ano no futuro
+    const now = new Date()
+    const startDate = `${now.getFullYear() - 1}-01-01`
+    const endDate = `${now.getFullYear() + 1}-12-31`
 
     const [transactionsRes, accountsRes, goalsRes] = await Promise.all([
       supabase.from("transactions")
         .select("*")
         .eq("user_id", userId)
-        .gte("date", `${currentMonth}-01`)
-        .lte("date", `${currentMonth}-${lastDay}`)
-        .neq("type", "transfer"),
+        .gte("date", startDate)
+        .lte("date", endDate)
+        .neq("type", "transfer")
+        .order("date", { ascending: false }),
       supabase.from("accounts")
         .select("*")
         .eq("user_id", userId),
@@ -42,14 +43,6 @@ serve(async (req) => {
     const transactions = transactionsRes.data || []
     const accounts = accountsRes.data || []
     const goals = goalsRes.data || []
-
-    const realized = transactions.filter((t: any) => t.is_realized !== false)
-    const planned = transactions.filter((t: any) => t.is_realized === false)
-
-    const totalIncome = realized.filter((t: any) => t.type === 'income').reduce((s: number, t: any) => s + t.amount, 0)
-    const totalExpense = realized.filter((t: any) => t.type === 'expense').reduce((s: number, t: any) => s + t.amount, 0)
-    const plannedIncome = planned.filter((t: any) => t.type === 'income').reduce((s: number, t: any) => s + t.amount, 0)
-    const plannedExpense = planned.filter((t: any) => t.type === 'expense').reduce((s: number, t: any) => s + t.amount, 0)
 
     // Saldo real das contas
     const allTransactionsRes = await supabase.from("transactions")
@@ -69,59 +62,95 @@ serve(async (req) => {
     const totalBalance = regularAccounts.reduce((s: number, a: any) => s + (accountBalances[a.id] || 0), 0)
     const totalInvested = investmentAccounts.reduce((s: number, a: any) => s + (accountBalances[a.id] || 0), 0)
 
-    const byCategory: Record<string, number> = {}
-    realized.filter((t: any) => t.type === 'expense').forEach((t: any) => {
-      const cat = t.category || 'outros'
-      byCategory[cat] = (byCategory[cat] || 0) + t.amount
+    // Resumo por mês (últimos 12 meses)
+    const monthlyData: Record<string, { income: number, expense: number }> = {}
+    transactions.filter((t: any) => t.is_realized !== false).forEach((t: any) => {
+      const m = t.date.slice(0, 7)
+      if (!monthlyData[m]) monthlyData[m] = { income: 0, expense: 0 }
+      if (t.type === 'income') monthlyData[m].income += t.amount
+      else if (t.type === 'expense') monthlyData[m].expense += t.amount
     })
+
+    const monthlySummary = Object.entries(monthlyData)
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([m, d]) => `${m}: entrada R$${d.income.toFixed(0)} / saída R$${d.expense.toFixed(0)} / saldo R$${(d.income - d.expense).toFixed(0)}`)
+      .join('\n')
+
+    // Gastos por categoria (ano atual)
+    const currentYear = now.getFullYear()
+    const byCategory: Record<string, number> = {}
+    transactions
+      .filter((t: any) => t.is_realized !== false && t.type === 'expense' && t.date.startsWith(String(currentYear)))
+      .forEach((t: any) => {
+        const cat = t.category || 'outros'
+        byCategory[cat] = (byCategory[cat] || 0) + t.amount
+      })
     const topCategories = Object.entries(byCategory)
       .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
-      .map(([cat, val]) => `${cat}: R$${(val as number).toFixed(2)}`)
+      .slice(0, 8)
+      .map(([cat, val]) => `${cat}: R$${(val as number).toFixed(0)}`)
+      .join(', ')
+
+    // Contas a pagar nos próximos 30 dias
+    const next30 = new Date(now)
+    next30.setDate(next30.getDate() + 30)
+    const upcomingBills = transactions
+      .filter((t: any) => t.is_realized === false && t.type === 'expense')
+      .filter((t: any) => new Date(t.date) <= next30)
+      .reduce((s: number, t: any) => s + t.amount, 0)
+
+    // Renda média mensal (últimos 3 meses)
+    const last3Months = Object.entries(monthlyData)
+      .sort((a, b) => b[0].localeCompare(a[0]))
+      .slice(0, 3)
+    const avgIncome = last3Months.length > 0
+      ? last3Months.reduce((s, [, d]) => s + d.income, 0) / last3Months.length
+      : 0
+    const avgExpense = last3Months.length > 0
+      ? last3Months.reduce((s, [, d]) => s + d.expense, 0) / last3Months.length
+      : 0
+
+    // Metas resumidas
+    const goalsSummary = goals.length > 0
+      ? goals.map((g: any) => `${g.name} (${g.type}): meta R$${g.target_amount} até ${g.end_date}`).join(', ')
+      : 'Nenhuma'
 
     const accountsSummary = accounts.map((a: any) =>
-      `${a.name} (${a.type}): R$${(accountBalances[a.id] || 0).toFixed(2)}`
+      `${a.name} (${a.type}): R$${(accountBalances[a.id] || 0).toFixed(0)}`
     ).join(', ')
 
-    const goalsSummary = goals.length > 0
-      ? goals.map((g: any) => `${g.name} (${g.type}): meta R$${g.target_amount}`).join(', ')
-      : 'Nenhuma meta cadastrada'
+    const systemPrompt = `Você é Finn, consultor financeiro pessoal brasileiro. Responda de forma DIRETA, CURTA e DECISIVA.
 
-    const systemPrompt = `Você é um consultor financeiro pessoal e especialista em investimentos brasileiro chamado "Finn". 
-Você tem acesso aos dados financeiros reais do usuário e responde de forma SUCINTA, DIRETA e PRÁTICA.
+REGRAS DE RESPOSTA:
+- Máximo 3 frases curtas por resposta
+- Seja direto — diga SIM ou NÃO quando perguntado
+- Use números reais do perfil do usuário
+- Sem enrolação, sem introduções, sem "Com base nos seus dados..."
+- Emojis com moderação (máximo 2 por resposta)
 
-PERFIL FINANCEIRO DO USUÁRIO (${currentMonth}):
-- Renda realizada: R$${totalIncome.toFixed(2)}
-- Gastos realizados: R$${totalExpense.toFixed(2)}
-- Renda prevista: R$${plannedIncome.toFixed(2)}
-- Gastos previstos: R$${plannedExpense.toFixed(2)}
-- Saldo atual: R$${(totalIncome - totalExpense).toFixed(2)}
-- Saldo projetado fim do mês: R$${(totalIncome + plannedIncome - totalExpense - plannedExpense).toFixed(2)}
-- Saldo em contas: R$${totalBalance.toFixed(2)}
-- Total investido: R$${totalInvested.toFixed(2)}
-- Patrimônio total: R$${(totalBalance + totalInvested).toFixed(2)}
+PERFIL FINANCEIRO COMPLETO:
 
 CONTAS: ${accountsSummary}
-TOP GASTOS: ${topCategories.join(', ') || 'nenhum'}
-METAS: ${goalsSummary}
+Saldo disponível: R$${totalBalance.toFixed(0)}
+Total investido: R$${totalInvested.toFixed(0)}
+Patrimônio total: R$${(totalBalance + totalInvested).toFixed(0)}
 
-REGRAS DE COMPORTAMENTO:
-- Responda em português brasileiro
-- Seja SUCINTO — máximo 3-4 parágrafos curtos
-- Use os dados reais do usuário nas respostas
-- Se perguntarem sobre investimentos, dê opções concretas baseadas no perfil
-- Se perguntarem se podem gastar algo, calcule com base no saldo real
-- Use emojis com moderação para tornar a resposta mais amigável
-- Nunca invente dados que não foram fornecidos
-- Se não souber algo específico, seja honesto
-- Trate o usuário de forma amigável e encorajadora`
+MÉDIA DOS ÚLTIMOS 3 MESES:
+Renda média: R$${avgIncome.toFixed(0)}/mês
+Gasto médio: R$${avgExpense.toFixed(0)}/mês
+Sobra média: R$${(avgIncome - avgExpense).toFixed(0)}/mês
 
-    // Monta histórico de mensagens
+CONTAS A PAGAR (próximos 30 dias): R$${upcomingBills.toFixed(0)}
+
+TOP GASTOS (${currentYear}): ${topCategories || 'nenhum'}
+
+HISTÓRICO MENSAL:
+${monthlySummary || 'sem dados'}
+
+METAS: ${goalsSummary}`
+
     const messages = [
-      ...(history || []).map((h: any) => ({
-        role: h.role,
-        content: h.content
-      })),
+      ...(history || []).map((h: any) => ({ role: h.role, content: h.content })),
       { role: "user", content: message }
     ]
 
@@ -137,16 +166,13 @@ REGRAS DE COMPORTAMENTO:
           { role: "system", content: systemPrompt },
           ...messages
         ],
-        temperature: 0.7,
-        max_tokens: 500
+        temperature: 0.5,
+        max_tokens: 200
       })
     })
 
     const groqData = await groqRes.json()
-
-    if (!groqRes.ok) {
-      throw new Error("Erro ao chamar a IA: " + (groqData.error?.message || "Erro desconhecido"))
-    }
+    if (!groqRes.ok) throw new Error("Erro ao chamar a IA: " + (groqData.error?.message || "Erro desconhecido"))
 
     const reply = groqData.choices?.[0]?.message?.content
     if (!reply) throw new Error("Resposta vazia da IA")

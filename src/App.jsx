@@ -21,7 +21,7 @@ import { MonthProvider } from '@/lib/MonthContext';
 import { PrivacyProvider } from '@/lib/PrivacyContext';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
-import { useEffect } from 'react';
+import { useEffect, Suspense } from 'react';
 import { initPushNotifications } from '@/lib/pushNotifications';
 
 const { Pages, Layout, mainPage } = pagesConfig;
@@ -32,13 +32,17 @@ const LayoutWrapper = ({ children, currentPageName }) => Layout ?
   <Layout currentPageName={currentPageName}>{children}</Layout>
   : <>{children}</>;
 
+const PageLoader = () => (
+  <div className="fixed inset-0 flex items-center justify-center bg-white dark:bg-gray-900">
+    <div className="w-10 h-10 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
+  </div>
+);
+
 function ReferralCapture() {
   const [searchParams] = useSearchParams();
   useEffect(() => {
     const ref = searchParams.get('ref');
-    if (ref) {
-      localStorage.setItem('referral_code', ref.toUpperCase());
-    }
+    if (ref) localStorage.setItem('referral_code', ref.toUpperCase());
   }, []);
   return null;
 }
@@ -60,7 +64,6 @@ function useSubscription(userId) {
   });
 }
 
-// Hook para buscar o perfil do usuário incluindo onboarding_completed
 function useProfile(userId) {
   return useQuery({
     queryKey: ['profile', userId],
@@ -84,40 +87,24 @@ const AuthenticatedApp = () => {
   const { data: profile, isLoading: profileLoading } = useProfile(user?.id);
   const navigate = useNavigate();
 
-  // Inicializa push notifications quando usuário logar
   useEffect(() => {
-    if (user) {
-      initPushNotifications();
-    }
+    if (user) initPushNotifications();
   }, [user?.id]);
 
-  // Redireciona para onboarding tour no primeiro login
   useEffect(() => {
-    if (!user) return;
-    if (profileLoading) return;
-
+    if (!user || profileLoading) return;
     const isSubscribed = subscription && ['active', 'trialing'].includes(subscription.status);
     if (!isSubscribed) return;
-
-    // Verifica tanto no banco quanto no localStorage (retrocompatibilidade)
     const localCompleted = localStorage.getItem('onboarding_completed') === 'true';
     const dbCompleted = profile?.onboarding_completed === true;
-    const onboardingCompleted = localCompleted || dbCompleted;
-
-    if (!onboardingCompleted) {
-      const timer = setTimeout(() => {
-        navigate('/onboarding-tour');
-      }, 500);
+    if (!localCompleted && !dbCompleted) {
+      const timer = setTimeout(() => navigate('/onboarding-tour'), 500);
       return () => clearTimeout(timer);
     }
   }, [user?.id, subscription, profile, profileLoading]);
 
   if (loading || (user && (subLoading || profileLoading))) {
-    return (
-      <div className="fixed inset-0 flex items-center justify-center bg-white dark:bg-gray-900">
-        <div className="w-10 h-10 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin"></div>
-      </div>
-    );
+    return <PageLoader />;
   }
 
   if (!user) {
@@ -135,9 +122,8 @@ const AuthenticatedApp = () => {
   }
 
   const isSubscribed = subscription && ['active', 'trialing'].includes(subscription.status);
-  const needsSubscription = !isSubscribed;
 
-  if (needsSubscription) {
+  if (!isSubscribed) {
     return (
       <Routes>
         <Route path="/subscribe" element={<Subscribe />} />
@@ -148,20 +134,22 @@ const AuthenticatedApp = () => {
   }
 
   return (
-    <Routes>
-      <Route path="/onboarding-tour" element={<OnboardingTour />} />
-      <Route path="/login" element={<Navigate to="/" replace />} />
-      <Route path="/forgot-password" element={<Navigate to="/" replace />} />
-      <Route path="/onboarding/*" element={<Navigate to="/" replace />} />
-      <Route path="/subscribe" element={<Navigate to="/" replace />} />
-      <Route path="/subscription-success" element={<SubscriptionSuccess />} />
-      <Route path="/" element={<LayoutWrapper currentPageName={mainPageKey}><MainPage /></LayoutWrapper>} />
-      {Object.entries(Pages).map(([path, Page]) => (
-        <Route key={path} path={`/${path}`}
-          element={<LayoutWrapper currentPageName={path}><Page /></LayoutWrapper>} />
-      ))}
-      <Route path="*" element={<PageNotFound />} />
-    </Routes>
+    <Suspense fallback={<PageLoader />}>
+      <Routes>
+        <Route path="/onboarding-tour" element={<OnboardingTour />} />
+        <Route path="/login" element={<Navigate to="/" replace />} />
+        <Route path="/forgot-password" element={<Navigate to="/" replace />} />
+        <Route path="/onboarding/*" element={<Navigate to="/" replace />} />
+        <Route path="/subscribe" element={<Navigate to="/" replace />} />
+        <Route path="/subscription-success" element={<SubscriptionSuccess />} />
+        <Route path="/" element={<LayoutWrapper currentPageName={mainPageKey}><MainPage /></LayoutWrapper>} />
+        {Object.entries(Pages).map(([path, Page]) => (
+          <Route key={path} path={`/${path}`}
+            element={<LayoutWrapper currentPageName={path}><Page /></LayoutWrapper>} />
+        ))}
+        <Route path="*" element={<PageNotFound />} />
+      </Routes>
+    </Suspense>
   );
 };
 

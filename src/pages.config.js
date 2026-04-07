@@ -1,13 +1,14 @@
-import Accounts from './pages/Accounts';
-import Goals from './pages/Goals';
-import Home from './pages/Home';
-import Profile from './pages/Profile';
-import Reports from './pages/Reports';
-import Transactions from './pages/Transactions';
-import Referrals from './pages/Referrals';
+import { lazy } from 'react';
 import __Layout from './Layout.jsx';
-import AIInsights from './pages/AIInsights';
 
+const Accounts     = lazy(() => import('./pages/Accounts'));
+const Goals        = lazy(() => import('./pages/Goals'));
+const Home         = lazy(() => import('./pages/Home'));
+const Profile      = lazy(() => import('./pages/Profile'));
+const Reports      = lazy(() => import('./pages/Reports'));
+const Transactions = lazy(() => import('./pages/Transactions'));
+const Referrals    = lazy(() => import('./pages/Referrals'));
+const AIInsights   = lazy(() => import('./pages/AIInsights'));
 
 export const PAGES = {
     "Accounts":     Accounts,

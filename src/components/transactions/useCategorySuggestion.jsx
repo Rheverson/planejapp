@@ -279,7 +279,6 @@ const defaultPatterns = {
     "viagem": "lazer",
     "passeio": "lazer",
     "turismo": "lazer",
-    "hotel": "lazer",
     "pousada": "lazer",
     "hostel": "lazer",
     "airbnb": "lazer",
