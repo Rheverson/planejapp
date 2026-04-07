@@ -46,6 +46,8 @@ export default function GoalForm({ goal, accounts = [], onSubmit, onClose }) {
   const [startDate, setStartDate] = useState(goal?.start_date || today);
   const [endDate, setEndDate] = useState(goal?.end_date || format(addMonths(new Date(), 1), "yyyy-MM-dd"));
   const [linkedAccountId, setLinkedAccountId] = useState(goal?.linked_account_id || "");
+  const [investmentType, setInvestmentType] = useState(goal?.investment_type || "accumulate");
+  const [contributionPeriod, setContributionPeriod] = useState(goal?.contribution_period || "monthly");
 
   const categories = allCategories.filter(c => c.type === type).map(c => c.name);
   const investmentAccounts = accounts.filter(a => a.type === 'investment');
@@ -60,6 +62,9 @@ export default function GoalForm({ goal, accounts = [], onSubmit, onClose }) {
       start_date: startDate,
       end_date: endDate,
       linked_account_id: linkedAccountId || null,
+      // novos campos:
+      investment_type: type === 'investment' ? investmentType : null,
+      contribution_period: type === 'investment' && investmentType === 'contribution' ? contributionPeriod : null,
     });
   };
 

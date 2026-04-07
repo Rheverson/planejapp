@@ -188,10 +188,19 @@ export default function Transactions() {
   }, [transactions, monthStart, monthEnd, filter, searchQuery, advFilters]);
 
   const summary = useMemo(() => {
-    const income  = filteredTransactions.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
-    const expense = filteredTransactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
+    const investmentAccountIds = new Set(
+      accounts.filter(a => a.type === 'investment').map(a => a.id)
+    );
+
+    // Exclui transações de contas de investimento do resumo
+    const nonInvestmentTx = filteredTransactions.filter(
+      t => !investmentAccountIds.has(t.account_id)
+    );
+
+    const income  = nonInvestmentTx.filter(t => t.type === 'income').reduce((sum, t) => sum + Number(t.amount), 0);
+    const expense = nonInvestmentTx.filter(t => t.type === 'expense').reduce((sum, t) => sum + Number(t.amount), 0);
     return { income, expense, balance: income - expense };
-  }, [filteredTransactions]);
+  }, [filteredTransactions, accounts]);
 
   const fmt = (v) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
 

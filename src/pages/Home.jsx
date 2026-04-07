@@ -118,32 +118,53 @@ export default function Home() {
   }, [transactions, monthStart, monthEnd]);
 
   const kpis = useMemo(() => {
-    const realized = monthTransactions.filter(t => t.is_realized !== false);
-    const planned = monthTransactions.filter(t => t.is_realized === false);
-    const totalIncomeRealized = realized.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
-    const totalIncomePlanned = planned.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
-    const totalExpenseRealized = realized.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
-    const totalExpensePlanned = planned.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+    const investmentAccountIds = new Set(
+      accounts.filter(a => a.type === 'investment').map(a => a.id)
+    );
+
+    const nonInvestmentTx = monthTransactions.filter(
+      t => !investmentAccountIds.has(t.account_id)
+    );
+
+    const realized = nonInvestmentTx.filter(t => t.is_realized !== false);
+    const planned  = nonInvestmentTx.filter(t => t.is_realized === false);
+
+    const totalIncomeRealized  = realized.filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0);
+    const totalIncomePlanned   = planned.filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0);
+    const totalExpenseRealized = realized.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0);
+    const totalExpensePlanned  = planned.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0);
+
     return {
-      totalIncome: totalIncomeRealized + totalIncomePlanned,
-      totalExpense: totalExpenseRealized + totalExpensePlanned,
-      currentBalance: totalIncomeRealized - totalExpenseRealized,
-      forecastBalance: (totalIncomeRealized + totalIncomePlanned) - (totalExpenseRealized + totalExpensePlanned)
+      totalIncome:     totalIncomeRealized + totalIncomePlanned,
+      totalExpense:    totalExpenseRealized + totalExpensePlanned,
+      // Saldo Atual = só entradas realizadas do mês - saídas realizadas do mês
+      currentBalance:  totalIncomeRealized - totalExpenseRealized,
+      // Previsão = considera planejados também
+      forecastBalance: (totalIncomeRealized + totalIncomePlanned) - (totalExpenseRealized + totalExpensePlanned),
     };
-  }, [monthTransactions]);
+  }, [monthTransactions, accounts]);
 
   const accountBalances = useMemo(() => {
     const balances = {};
-    accounts.forEach(acc => { balances[acc.id] = acc.initial_balance || 0; });
+    accounts.forEach(acc => { balances[acc.id] = Number(acc.initial_balance) || 0; });
+
     transactions.forEach(t => {
       if (!t.account_id || t.is_realized === false) return;
-      if (t.type === 'income') balances[t.account_id] = (balances[t.account_id] || 0) + t.amount;
-      else if (t.type === 'expense') balances[t.account_id] = (balances[t.account_id] || 0) - t.amount;
-      else if (t.type === 'transfer') {
-        balances[t.account_id] = (balances[t.account_id] || 0) - t.amount;
-        if (t.transfer_account_id) balances[t.transfer_account_id] = (balances[t.transfer_account_id] || 0) + t.amount;
+
+      if (t.type === 'income') {
+        balances[t.account_id] = (balances[t.account_id] || 0) + Number(t.amount);
+      } else if (t.type === 'expense') {
+        balances[t.account_id] = (balances[t.account_id] || 0) - Number(t.amount);
+      } else if (t.type === 'transfer') {
+        // Cada leg: subtrai de account_id (saída) e soma em transfer_account_id (entrada)
+        // As duas legs juntas se auto-equilibram corretamente
+        balances[t.account_id] = (balances[t.account_id] || 0) - Number(t.amount);
+        if (t.transfer_account_id) {
+          balances[t.transfer_account_id] = (balances[t.transfer_account_id] || 0) + Number(t.amount);
+        }
       }
     });
+
     return balances;
   }, [accounts, transactions]);
 
@@ -307,7 +328,7 @@ export default function Home() {
 
       <AnimatePresence>
         {showTransactionForm && (
-          <TransactionForm accounts={accounts.filter(a => a.type !== 'investment')}
+          <TransactionForm accounts={accounts}
             initialType={initialType}
             onSubmit={(data) => createTransactionMutation.mutate(data)}
             onClose={() => setShowTransactionForm(false)} />

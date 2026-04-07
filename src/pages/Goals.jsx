@@ -156,56 +156,95 @@ export default function Goals() {
   });
 
   const goalsWithProgress = useMemo(() => {
+    const today = new Date();
+
+    // Retorna início e fim do período atual baseado no contribution_period
+    const getPeriodBounds = (goal) => {
+      const now = new Date();
+      if (goal.contribution_period === 'daily') {
+        const s = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const e = new Date(s); e.setDate(e.getDate() + 1);
+        return { start: s, end: e };
+      }
+      if (goal.contribution_period === 'weekly') {
+        const day = now.getDay(); // 0=dom
+        const s = new Date(now); s.setDate(now.getDate() - day);
+        s.setHours(0,0,0,0);
+        const e = new Date(s); e.setDate(s.getDate() + 7);
+        return { start: s, end: e };
+      }
+      if (goal.contribution_period === 'yearly') {
+        const s = new Date(now.getFullYear(), 0, 1);
+        const e = new Date(now.getFullYear() + 1, 0, 1);
+        return { start: s, end: e };
+      }
+      // monthly (padrão)
+      const s = new Date(now.getFullYear(), now.getMonth(), 1);
+      const e = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+      return { start: s, end: e };
+    };
+
     return goals.map((goal) => {
       let current = 0;
 
-      if (goal.linked_account_id) {
-        const start = parseISO(goal.start_date);
-        const end = parseISO(goal.end_date);
-
-        transactions.forEach((t) => {
-          if (t.is_realized === false) return;
-          if (
-            t.account_id !== goal.linked_account_id &&
-            t.transfer_account_id !== goal.linked_account_id
-          ) {
-            return;
-          }
-
-          const date = parseISO(t.date);
-          if (!isWithinInterval(date, { start, end })) return;
-
-          if (t.type === "income" && t.account_id === goal.linked_account_id) {
-            current += t.amount;
-          } else if (t.type === "expense" && t.account_id === goal.linked_account_id) {
-            current -= t.amount;
-          } else if (t.type === "transfer") {
-            if (t.transfer_account_id === goal.linked_account_id) current += t.amount;
-            if (t.account_id === goal.linked_account_id) current -= t.amount;
-          }
-        });
-      } else {
-        const start = parseISO(goal.start_date);
-        const end = parseISO(goal.end_date);
-
-        transactions.forEach((t) => {
-          if (t.is_realized === false) return;
-          const date = parseISO(t.date);
-          if (!isWithinInterval(date, { start, end })) return;
-
-          if (goal.type === 'investment') {
-            // Para metas de investimento: soma entradas em contas de investimento
-            const account = accounts.find(a => a.id === t.account_id);
-            if (account?.type === 'investment') {
-              if (t.type === 'income') current += t.amount;
-              else if (t.type === 'expense') current -= t.amount;
-            }
+      if (goal.type === 'investment') {
+        if (goal.investment_type === 'contribution') {
+          // APORTE PERIÓDICO: soma apenas entradas realizadas no período atual
+          // Despesas NÃO afetam
+          const { start, end } = getPeriodBounds(goal);
+          transactions.forEach((t) => {
+            if (!t.is_realized) return;
+            if (t.account_id !== goal.linked_account_id) return;
+            if (t.type !== 'income') return;
+            const date = parseISO(t.date);
+            if (date < start || date >= end) return;
+            current += Number(t.amount);
+          });
+        } else {
+          // ACUMULAR (padrão): saldo atual da conta = initial_balance + entradas - saídas
+          const account = accounts.find(a => a.id === goal.linked_account_id);
+          if (account) {
+            current = Number(account.initial_balance) || 0;
+            transactions.forEach((t) => {
+              if (!t.is_realized) return;
+              if (t.type === 'transfer') {
+                // transferência entrando
+                if (t.transfer_account_id === goal.linked_account_id) current += Number(t.amount);
+                // transferência saindo
+                if (t.account_id === goal.linked_account_id) current -= Number(t.amount);
+                return;
+              }
+              if (t.account_id !== goal.linked_account_id) return;
+              if (t.type === 'income') current += Number(t.amount);
+              if (t.type === 'expense') current -= Number(t.amount);
+            });
           } else {
-            // Para metas de income/expense: filtra por tipo e categoria
-            if (t.type !== goal.type) return;
-            if (goal.category && t.category !== goal.category) return;
-            current += t.amount;
+            // Sem conta vinculada: soma entradas em qualquer conta de investimento no período
+            const start = parseISO(goal.start_date);
+            const end = parseISO(goal.end_date);
+            transactions.forEach((t) => {
+              if (!t.is_realized) return;
+              const date = parseISO(t.date);
+              if (!isWithinInterval(date, { start, end })) return;
+              const acc = accounts.find(a => a.id === t.account_id);
+              if (acc?.type === 'investment') {
+                if (t.type === 'income') current += Number(t.amount);
+                if (t.type === 'expense') current -= Number(t.amount);
+              }
+            });
           }
+        }
+      } else {
+        // EXPENSE / INCOME: lógica original
+        const start = parseISO(goal.start_date);
+        const end = parseISO(goal.end_date);
+        transactions.forEach((t) => {
+          if (!t.is_realized) return;
+          const date = parseISO(t.date);
+          if (!isWithinInterval(date, { start, end })) return;
+          if (t.type !== goal.type) return;
+          if (goal.category && t.category !== goal.category) return;
+          current += Number(t.amount);
         });
       }
 

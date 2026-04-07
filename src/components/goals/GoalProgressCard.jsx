@@ -39,6 +39,17 @@ export default function GoalProgressCard({ goal, current, onEdit, onDelete, dela
             <h3 className="font-semibold text-gray-900 dark:text-white">{goal.name || goal.category}</h3>
             <div className="flex items-center gap-2">
               <p className="text-xs text-gray-500 capitalize">{goal.category}</p>
+              {goal.type === 'investment' && (
+                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                  goal.investment_type === 'contribution'
+                    ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400'
+                    : 'bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400'
+                }`}>
+                  {goal.investment_type === 'contribution'
+                    ? `📅 ${({ daily: 'Diário', weekly: 'Semanal', monthly: 'Mensal', yearly: 'Anual' })[goal.contribution_period] || 'Mensal'}`
+                    : '🏦 Acumular'}
+                </span>
+              )}
               {goal.end_date && (
                 <p className="text-xs text-gray-400">
                   · {daysLeft === 0 ? 'Hoje!' : `${daysLeft} dias restantes`}
