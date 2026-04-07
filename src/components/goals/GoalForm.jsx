@@ -62,7 +62,6 @@ export default function GoalForm({ goal, accounts = [], onSubmit, onClose }) {
       start_date: startDate,
       end_date: endDate,
       linked_account_id: linkedAccountId || null,
-      // novos campos:
       investment_type: type === 'investment' ? investmentType : null,
       contribution_period: type === 'investment' && investmentType === 'contribution' ? contributionPeriod : null,
     });
@@ -85,13 +84,14 @@ export default function GoalForm({ goal, accounts = [], onSubmit, onClose }) {
 
         <form onSubmit={handleSubmit} className="px-4 py-3 space-y-3 pb-5">
 
+          {/* Tipo principal */}
           <div className="flex gap-1.5 p-1 bg-gray-100 rounded-xl">
             {[
               { val: "income",     label: "Entrada",      Icon: TrendingUp,   active: "bg-emerald-500" },
               { val: "expense",    label: "Saída",        Icon: TrendingDown, active: "bg-red-500" },
               { val: "investment", label: "Investimento", Icon: PiggyBank,    active: "bg-violet-500" },
             ].map(({ val, label, Icon, active }) => (
-              <button key={val} type="button" onClick={() => { setType(val); setCategory(""); }}
+              <button key={val} type="button" onClick={() => { setType(val); setCategory(""); setInvestmentType("accumulate"); }}
                 className={`flex-1 flex items-center justify-center gap-1 py-2 rounded-lg text-xs font-medium transition-all ${
                   type === val ? `${active} text-white shadow-sm` : "text-gray-600 hover:bg-gray-200"
                 }`}>
@@ -100,6 +100,60 @@ export default function GoalForm({ goal, accounts = [], onSubmit, onClose }) {
             ))}
           </div>
 
+          {/* Subtipo investimento — LOGO APÓS selecionar Investimento */}
+          {type === "investment" && (
+            <div className="space-y-1">
+              <Label className="text-xs font-medium text-gray-600">Tipo de meta</Label>
+              <div className="flex gap-1.5 p-1 bg-gray-100 rounded-xl">
+                {[
+                  { val: "accumulate",   label: "🏦 Acumular" },
+                  { val: "contribution", label: "📅 Aporte periódico" },
+                ].map(({ val, label }) => (
+                  <button key={val} type="button"
+                    onClick={() => setInvestmentType(val)}
+                    className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${
+                      investmentType === val
+                        ? "bg-violet-500 text-white shadow-sm"
+                        : "text-gray-600 hover:bg-gray-200"
+                    }`}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-gray-400 px-1">
+                {investmentType === 'accumulate'
+                  ? '🏦 Acompanha o saldo total da conta vinculada'
+                  : '📅 Acompanha quanto você aportou no período'}
+              </p>
+            </div>
+          )}
+
+          {/* Período do aporte */}
+          {type === "investment" && investmentType === 'contribution' && (
+            <div className="space-y-1">
+              <Label className="text-xs font-medium text-gray-600">Repetir a cada</Label>
+              <div className="flex gap-1.5 flex-wrap">
+                {[
+                  { val: 'daily',   label: 'Diário' },
+                  { val: 'weekly',  label: 'Semanal' },
+                  { val: 'monthly', label: 'Mensal' },
+                  { val: 'yearly',  label: 'Anual' },
+                ].map(({ val, label }) => (
+                  <button key={val} type="button"
+                    onClick={() => setContributionPeriod(val)}
+                    className={`px-4 py-1.5 rounded-full text-xs font-semibold border transition-all ${
+                      contributionPeriod === val
+                        ? "bg-violet-500 text-white border-violet-500"
+                        : "bg-white text-gray-600 border-gray-200 hover:border-violet-300"
+                    }`}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Nome */}
           <div className="space-y-1">
             <Label className="text-xs font-medium text-gray-600">Nome da meta</Label>
             <Input placeholder="Ex: Reserva de emergência, Viagem..." value={name}
@@ -107,6 +161,7 @@ export default function GoalForm({ goal, accounts = [], onSubmit, onClose }) {
               className="h-10 text-sm border-gray-200 rounded-xl" required />
           </div>
 
+          {/* Categoria */}
           <div className="space-y-1">
             <Label className="text-xs font-medium text-gray-600">Categoria</Label>
             <Select value={category} onValueChange={setCategory}>
@@ -121,8 +176,11 @@ export default function GoalForm({ goal, accounts = [], onSubmit, onClose }) {
             </Select>
           </div>
 
+          {/* Valor */}
           <div className="space-y-1">
-            <Label className="text-xs font-medium text-gray-600">Valor da meta</Label>
+            <Label className="text-xs font-medium text-gray-600">
+              {type === 'investment' && investmentType === 'contribution' ? 'Valor do aporte' : 'Valor da meta'}
+            </Label>
             <div className="relative">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">R$</span>
               <Input type="number" step="0.01" placeholder="0,00" value={targetAmount}
@@ -131,35 +189,39 @@ export default function GoalForm({ goal, accounts = [], onSubmit, onClose }) {
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label className="text-xs font-medium text-gray-600">Período</Label>
-            <div className="flex gap-1.5 flex-wrap">
-              {presetPeriods.map(({ label, getEnd }) => (
-                <button key={label} type="button"
-                  onClick={() => { setStartDate(today); setEndDate(getEnd()); }}
-                  className={`px-3 py-1 rounded-full text-xs font-semibold border transition-all ${
-                    endDate === getEnd()
-                      ? "bg-blue-600 text-white border-blue-600"
-                      : "bg-white text-gray-600 border-gray-200 hover:border-blue-300"
-                  }`}>
-                  {label}
-                </button>
-              ))}
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div className="space-y-1">
-                <Label className="text-xs text-gray-500">Início</Label>
-                <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)}
-                  className="h-10 text-sm border-gray-200 rounded-xl" required />
+          {/* Período — só para acumular e metas normais */}
+          {!(type === 'investment' && investmentType === 'contribution') && (
+            <div className="space-y-2">
+              <Label className="text-xs font-medium text-gray-600">Período</Label>
+              <div className="flex gap-1.5 flex-wrap">
+                {presetPeriods.map(({ label, getEnd }) => (
+                  <button key={label} type="button"
+                    onClick={() => { setStartDate(today); setEndDate(getEnd()); }}
+                    className={`px-3 py-1 rounded-full text-xs font-semibold border transition-all ${
+                      endDate === getEnd()
+                        ? "bg-blue-600 text-white border-blue-600"
+                        : "bg-white text-gray-600 border-gray-200 hover:border-blue-300"
+                    }`}>
+                    {label}
+                  </button>
+                ))}
               </div>
-              <div className="space-y-1">
-                <Label className="text-xs text-gray-500">Fim</Label>
-                <Input type="date" value={endDate} min={startDate} onChange={(e) => setEndDate(e.target.value)}
-                  className="h-10 text-sm border-gray-200 rounded-xl" required />
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <Label className="text-xs text-gray-500">Início</Label>
+                  <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)}
+                    className="h-10 text-sm border-gray-200 rounded-xl" required />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs text-gray-500">Fim</Label>
+                  <Input type="date" value={endDate} min={startDate} onChange={(e) => setEndDate(e.target.value)}
+                    className="h-10 text-sm border-gray-200 rounded-xl" required />
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
+          {/* Conta vinculada — só para investimento */}
           {type === "investment" && investmentAccounts.length > 0 && (
             <div className="space-y-1">
               <Label className="text-xs font-medium text-gray-600">Conta vinculada</Label>
@@ -177,7 +239,7 @@ export default function GoalForm({ goal, accounts = [], onSubmit, onClose }) {
           )}
 
           <Button type="submit" className={`w-full h-11 rounded-xl text-sm font-semibold ${
-            type === "income"     ? "bg-emerald-500 hover:bg-emerald-600"
+            type === "income"      ? "bg-emerald-500 hover:bg-emerald-600"
             : type === "investment" ? "bg-violet-500 hover:bg-violet-600"
             : "bg-red-500 hover:bg-red-600"
           }`}>
