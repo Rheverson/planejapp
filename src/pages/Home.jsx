@@ -92,11 +92,16 @@ export default function Home() {
 
   const createTransferMutation = useMutation({
     mutationFn: async ({ fromAccountId, toAccountId, amount, date, description }) => {
-      const pairId = crypto.randomUUID();
-      const { error } = await supabase.from('transactions').insert([
-        { description: description || 'Transferência', amount: parseFloat(amount), type: 'transfer', account_id: fromAccountId, transfer_account_id: toAccountId, transfer_pair_id: pairId, date, is_realized: true, user_id: activeOwnerId },
-        { description: description || 'Transferência', amount: parseFloat(amount), type: 'transfer', account_id: toAccountId, transfer_account_id: fromAccountId, transfer_pair_id: pairId, date, is_realized: true, user_id: activeOwnerId }
-      ]);
+      const { error } = await supabase.from('transactions').insert([{
+        description: description || 'Transferência',
+        amount: parseFloat(amount),
+        type: 'transfer',
+        account_id: fromAccountId,           // origem
+        transfer_account_id: toAccountId,    // destino
+        date,
+        is_realized: true,
+        user_id: activeOwnerId
+      }]);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -149,21 +154,20 @@ export default function Home() {
     accounts.forEach(acc => { balances[acc.id] = Number(acc.initial_balance) || 0; });
 
     transactions.forEach(t => {
-      if (!t.account_id || t.is_realized === false) return;
-
-      if (t.type === 'income') {
+      if (t.is_realized === false) return;
+      if (t.type === 'income' && t.account_id) {
         balances[t.account_id] = (balances[t.account_id] || 0) + Number(t.amount);
-      } else if (t.type === 'expense') {
+      } else if (t.type === 'expense' && t.account_id) {
         balances[t.account_id] = (balances[t.account_id] || 0) - Number(t.amount);
       } else if (t.type === 'transfer') {
-        // Cada leg: subtrai de account_id (saída) e soma em transfer_account_id (entrada)
-        // As duas legs juntas se auto-equilibram corretamente
-        balances[t.account_id] = (balances[t.account_id] || 0) - Number(t.amount);
-        if (t.transfer_account_id) {
-          balances[t.transfer_account_id] = (balances[t.transfer_account_id] || 0) + Number(t.amount);
-        }
+        // 1 registro: subtrai da origem, soma no destino
+        if (t.account_id) balances[t.account_id] = (balances[t.account_id] || 0) - Number(t.amount);
+        if (t.transfer_account_id) balances[t.transfer_account_id] = (balances[t.transfer_account_id] || 0) + Number(t.amount);
       }
     });
+
+    return balances;
+  }, [accounts, transactions]);
 
     return balances;
   }, [accounts, transactions]);

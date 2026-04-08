@@ -32,15 +32,18 @@ function AccountDetailModal({ account, transactions, onClose }) {
 
   // Saldo atual (todas as transações realizadas)
   const currentBalance = useMemo(() => {
-  let bal = Number(account.initial_balance) || 0;
-
-  // Processa income e expense normalmente
-  transactions.forEach(t => {
-    if (t.is_realized === false) return;
-    if (t.account_id !== account.id) return;
-    if (t.type === 'income') bal += Number(t.amount);
-    else if (t.type === 'expense') bal -= Number(t.amount);
-  });
+    let bal = Number(account.initial_balance) || 0;
+    transactions.forEach(t => {
+      if (t.is_realized === false) return;
+      if (t.type === 'income' && t.account_id === account.id) bal += Number(t.amount);
+      else if (t.type === 'expense' && t.account_id === account.id) bal -= Number(t.amount);
+      else if (t.type === 'transfer') {
+        if (t.account_id === account.id) bal -= Number(t.amount);           // saiu desta conta
+        if (t.transfer_account_id === account.id) bal += Number(t.amount);  // entrou nesta conta
+      }
+    });
+    return bal;
+  }, [account, transactions]);
 
   // Transferências: só uma leg por par
   const processedPairs = new Set();

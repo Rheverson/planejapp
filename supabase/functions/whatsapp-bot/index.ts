@@ -178,14 +178,19 @@ Data de hoje: ${today}`
       if (!fromAcc || !toAcc) {
         return twilioReply(`❌ Conta não encontrada. Suas contas: ${accountsList}`)
       }
-      const pairId = crypto.randomUUID()
-      const { error } = await supabase.from('transactions').insert([
-        { user_id, type: 'transfer', amount: p.amount, description: p.description || 'Transferência',
-          account_id: fromAcc.id, transfer_account_id: toAcc.id, transfer_pair_id: pairId, date: p.date, is_realized: true },
-        { user_id, type: 'transfer', amount: p.amount, description: p.description || 'Transferência',
-          account_id: toAcc.id, transfer_account_id: fromAcc.id, transfer_pair_id: pairId, date: p.date, is_realized: true }
-      ])
+      // 1 registro apenas
+      const { error } = await supabase.from('transactions').insert({
+        user_id,
+        type: 'transfer',
+        amount: p.amount,
+        description: p.description || 'Transferência',
+        account_id: fromAcc.id,
+        transfer_account_id: toAcc.id,
+        date: p.date,
+        is_realized: true
+      })
       txError = error
+    }
 
     } else if (p.intent === 'goal') {
       const goal = userGoals.find((g: any) => g.name.toLowerCase().includes(p.goal_name.toLowerCase()))
