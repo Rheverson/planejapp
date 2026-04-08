@@ -63,7 +63,7 @@ export default function Layout({ children, currentPageName }) {
           initial={{ opacity: 0, scale: 0.8 }}
           animate={{ opacity: 1, scale: 1 }}
           className="fixed top-0 right-0 z-40"
-          style={{ top: 'calc(env(safe-area-inset-top, 0px) + 12px)', right: '16px' }}
+          style={{ top: '48px', right: '16px' }}
         >
           <Link to={createPageUrl("Profile")}>
             <motion.div
@@ -86,7 +86,7 @@ export default function Layout({ children, currentPageName }) {
 
       <main
         className="dark:bg-gray-900"
-        style={{ paddingBottom: 'calc(80px + env(safe-area-inset-bottom, 0px))' }}
+        style={{ paddingBottom: 'calc(96px + env(safe-area-inset-bottom, 0px))' }}
       >
         {children}
       </main>
@@ -103,7 +103,7 @@ export default function Layout({ children, currentPageName }) {
           style={{
             display: 'grid',
             gridTemplateColumns: '1fr 1fr 72px 1fr 1fr',
-            height: '64px',
+            height: '72px',
           }}
         >
           {/* Left items */}
@@ -138,7 +138,7 @@ export default function Layout({ children, currentPageName }) {
               className={`w-16 h-16 rounded-2xl flex items-center justify-center transition-all duration-300 relative ${
                 isAIActive ? 'finn-glow-active' : 'finn-glow'
               } bg-gradient-to-br from-violet-500 via-purple-600 to-indigo-600`}
-              style={{ marginBottom: '4px' }}
+              style={{ marginBottom: '16px' }}
             >
               {isAIActive && (
                 <motion.div
@@ -160,7 +160,7 @@ export default function Layout({ children, currentPageName }) {
               className={`absolute text-[10px] font-bold transition-colors duration-300 ${
                 isAIActive ? 'text-violet-600 dark:text-violet-400' : 'text-gray-500 dark:text-gray-400'
               }`}
-              style={{ bottom: '-2px' }}
+              style={{ bottom: '4px' }}
             >
               Finn
             </span>
