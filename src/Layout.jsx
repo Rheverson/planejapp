@@ -63,7 +63,7 @@ export default function Layout({ children, currentPageName }) {
           initial={{ opacity: 0, scale: 0.8 }}
           animate={{ opacity: 1, scale: 1 }}
           className="fixed top-0 right-0 z-40"
-          style={{ top: '48px', right: '16px' }}
+          style={{ top: '44px', right: '16px' }}
         >
           <Link to={createPageUrl("Profile")}>
             <motion.div
@@ -94,7 +94,7 @@ export default function Layout({ children, currentPageName }) {
       <motion.nav
         initial={{ y: 100 }} animate={{ y: 0 }}
         transition={{ type: "spring", stiffness: 300, damping: 30 }}
-        className="fixed bottom-0 left-0 right-0 bg-white/95 dark:bg-gray-800/95 backdrop-blur-lg border-t border-gray-200/50 dark:border-gray-700/50 z-50 shadow-[0_-4px_20px_rgba(0,0,0,0.05)]"
+        className="fixed bottom-0 left-0 right-0 bg-white/95 dark:bg-gray-800/95 backdrop-blur-lg border-t border-gray-200/50 dark:border-gray-700/50 z-50 shadow-[0_-4px_20px_rgba(0,0,0,0.05)] overflow-visible"
         style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
       >
         {/* Grid simétrico: 2 + centro(72px) + 2 */}
@@ -103,7 +103,7 @@ export default function Layout({ children, currentPageName }) {
           style={{
             display: 'grid',
             gridTemplateColumns: '1fr 1fr 72px 1fr 1fr',
-            height: '72px',
+            height: '68px',
           }}
         >
           {/* Left items */}
@@ -130,15 +130,16 @@ export default function Layout({ children, currentPageName }) {
           })}
 
           {/* Centro — Finn */}
-          <div className="relative flex items-end justify-center pb-1">
+          <div className="relative">
+            {/* Botão sobe acima da navbar */}
             <motion.button
               whileTap={{ scale: 0.92 }}
               whileHover={{ scale: 1.05 }}
               onClick={() => navigate(createPageUrl('AIInsights'))}
-              className={`w-16 h-16 rounded-2xl flex items-center justify-center transition-all duration-300 relative ${
+              className={`absolute left-1/2 -translate-x-1/2 w-16 h-16 rounded-2xl flex items-center justify-center transition-all duration-300 ${
                 isAIActive ? 'finn-glow-active' : 'finn-glow'
               } bg-gradient-to-br from-violet-500 via-purple-600 to-indigo-600`}
-              style={{ marginBottom: '16px' }}
+              style={{ bottom: '12px' }}
             >
               {isAIActive && (
                 <motion.div
@@ -155,12 +156,12 @@ export default function Layout({ children, currentPageName }) {
               </motion.div>
             </motion.button>
 
-            {/* Label Finn abaixo da nav */}
+            {/* Label centralizado na parte inferior */}
             <span
-              className={`absolute text-[10px] font-bold transition-colors duration-300 ${
+              className={`absolute left-1/2 -translate-x-1/2 text-[10px] font-bold transition-colors duration-300 ${
                 isAIActive ? 'text-violet-600 dark:text-violet-400' : 'text-gray-500 dark:text-gray-400'
               }`}
-              style={{ bottom: '4px' }}
+              style={{ bottom: '6px' }}
             >
               Finn
             </span>
