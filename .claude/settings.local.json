@@ -6,7 +6,12 @@
       "Bash(node -e \"console.log\\(require\\('c:/Users/admve/OneDrive/Rheverson/FAPP/node_modules/@vitejs/plugin-react/package.json'\\).version\\)\")",
       "Bash(node -e \"const p = require\\('c:/Users/admve/OneDrive/Rheverson/FAPP/node_modules/@babel/parser/package.json'\\); console.log\\(p.version, p.type, p.main, p.exports\\)\")",
       "Bash(rm -rf node_modules/@babel/parser)",
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "Bash(supabase inspect:*)",
+      "Bash(supabase --help)",
+      "Read(//c/Users/admve/.supabase/**)",
+      "Read(//c/Users/admve/.config/supabase/**)",
+      "Read(//c/Users/admve/.config/**)"
     ]
   }
 }
