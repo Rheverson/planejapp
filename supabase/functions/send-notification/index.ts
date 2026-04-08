@@ -48,11 +48,13 @@ serve(async (req) => {
 
     console.log(`Notificações: period=${period} dia=${day}`)
 
-    // Buscar todos usuários com token ativo
+    // Buscar apenas o token mais recente do usuário
     const { data: tokens } = await supabase
       .from('push_tokens')
-      .select('user_id, updated_at')
+      .select('token, platform')
+      .eq('user_id', user_id)
       .order('updated_at', { ascending: false })
+      .limit(1)  // ← só 1 token!
 
     const userIds = [...new Set(tokens?.map((t: any) => t.user_id) || [])]
     console.log(`${userIds.length} usuários`)
@@ -174,7 +176,7 @@ async function handleUser(userId: string, period: string, day: number, month: nu
         )
       }
     }
-    
+
     // Dia de pagamento
     if (day === payday) {
       await sendPush(userId,
