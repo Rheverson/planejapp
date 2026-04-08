@@ -62,23 +62,15 @@ export default function Layout({ children, currentPageName }) {
         <motion.div
           initial={{ opacity: 0, scale: 0.8 }}
           animate={{ opacity: 1, scale: 1 }}
-          className="fixed top-0 right-0 z-40"
+          className="fixed z-40"
           style={{ top: '44px', right: '16px' }}
         >
           <Link to={createPageUrl("Profile")}>
             <motion.div
               whileTap={{ scale: 0.9 }}
-              className={`w-9 h-9 rounded-full flex items-center justify-center transition-all shadow-md ${
-                currentPageName === 'Profile'
-                  ? 'bg-blue-600 shadow-blue-200 dark:shadow-blue-900'
-                  : 'bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm border border-gray-200/50 dark:border-gray-700/50 shadow-gray-200 dark:shadow-gray-900'
-              }`}
+              className="w-9 h-9 rounded-full flex items-center justify-center bg-white/20 border border-white/30"
             >
-              <User className={`w-4 h-4 ${
-                currentPageName === 'Profile'
-                  ? 'text-white'
-                  : 'text-gray-600 dark:text-gray-300'
-              }`} />
+              <User className="w-4 h-4 text-white" />
             </motion.div>
           </Link>
         </motion.div>
@@ -130,16 +122,22 @@ export default function Layout({ children, currentPageName }) {
           })}
 
           {/* Centro — Finn */}
-          <div className="relative">
-            {/* Botão sobe acima da navbar */}
+          <div className="flex flex-col items-center justify-end pb-1 relative">
+            {/* Label fica dentro do grid, visível */}
+            <span className={`text-[10px] font-bold mb-0.5 transition-colors duration-300 ${
+              isAIActive ? 'text-violet-600 dark:text-violet-400' : 'text-gray-500 dark:text-gray-400'
+            }`}>
+              Finn
+            </span>
+
+            {/* Botão posicionado acima da label */}
             <motion.button
               whileTap={{ scale: 0.92 }}
               whileHover={{ scale: 1.05 }}
               onClick={() => navigate(createPageUrl('AIInsights'))}
-              className={`absolute left-1/2 -translate-x-1/2 w-16 h-16 rounded-2xl flex items-center justify-center transition-all duration-300 ${
+              className={`absolute bottom-6 w-16 h-16 rounded-2xl flex items-center justify-center ${
                 isAIActive ? 'finn-glow-active' : 'finn-glow'
               } bg-gradient-to-br from-violet-500 via-purple-600 to-indigo-600`}
-              style={{ bottom: '12px' }}
             >
               {isAIActive && (
                 <motion.div
@@ -155,16 +153,6 @@ export default function Layout({ children, currentPageName }) {
                 <Sparkles className="w-7 h-7 text-white relative z-10" />
               </motion.div>
             </motion.button>
-
-            {/* Label centralizado na parte inferior */}
-            <span
-              className={`absolute left-1/2 -translate-x-1/2 text-[10px] font-bold transition-colors duration-300 ${
-                isAIActive ? 'text-violet-600 dark:text-violet-400' : 'text-gray-500 dark:text-gray-400'
-              }`}
-              style={{ bottom: '6px' }}
-            >
-              Finn
-            </span>
           </div>
 
           {/* Right items */}
