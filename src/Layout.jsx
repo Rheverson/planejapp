@@ -98,7 +98,7 @@ export default function Layout({ children, currentPageName }) {
           className="max-w-lg mx-auto relative"
           style={{
             display: 'grid',
-            gridTemplateColumns: '1fr 1fr 72px 1fr 1fr',
+            gridTemplateColumns: '1fr 1fr 60px 1fr 1fr',
             height: '68px',
           }}
         >
@@ -139,7 +139,7 @@ export default function Layout({ children, currentPageName }) {
               whileTap={{ scale: 0.92 }}
               whileHover={{ scale: 1.05 }}
               onClick={() => navigate(createPageUrl('AIInsights'))}
-              className={`absolute bottom-6 w-16 h-16 rounded-2xl flex items-center justify-center ${
+              className={`absolute bottom-6 w-14 h-14 rounded-2xl flex items-center justify-center ${
                 isAIActive ? 'finn-glow-active' : 'finn-glow'
               } bg-gradient-to-br from-violet-500 via-purple-600 to-indigo-600`}
             >
@@ -154,7 +154,7 @@ export default function Layout({ children, currentPageName }) {
                 animate={{ rotate: isAIActive ? [0, 10, -10, 0] : 0 }}
                 transition={{ duration: 2, repeat: isAIActive ? Infinity : 0, repeatDelay: 3 }}
               >
-                <Sparkles className="w-7 h-7 text-white relative z-10" />
+                <Sparkles className="w-6 h-6 text-white relative z-10" />
               </motion.div>
             </motion.button>
           </div>
