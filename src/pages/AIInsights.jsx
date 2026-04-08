@@ -277,7 +277,7 @@ function ChatTab({ user }) {
 
       {/* Input */}
       <div className="px-4 pt-3 bg-white dark:bg-gray-800 border-t border-gray-100 dark:border-gray-700 flex-shrink-0"
-        style={{ paddingBottom: 'max(16px, env(safe-area-inset-bottom))' }}>
+        style={{ paddingBottom: '12px' }}>
         <div className="flex gap-2 items-end">
           <input ref={inputRef} value={input} onChange={e => setInput(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
@@ -583,11 +583,13 @@ export default function AIInsights() {
   const [activeTab, setActiveTab] = useState('chat');
 
   return (
+    // Container principal
     <div className="flex flex-col bg-gray-50 dark:bg-gray-900"
-  style={{ height: 'calc(100dvh - env(safe-area-inset-bottom, 0px))', maxHeight: '100dvh' }}>
+      style={{ height: 'calc(100dvh - 68px - env(safe-area-inset-bottom, 0px))' }}>
 
       {/* Header */}
-      <div className="relative bg-gradient-to-br from-violet-600 via-purple-700 to-indigo-800 pt-12 pb-0 px-5 flex-shrink-0">
+      <div className="relative bg-gradient-to-br from-violet-600 via-purple-700 to-indigo-800 pb-0 px-5 flex-shrink-0"
+        style={{ paddingTop: 'max(48px, calc(env(safe-area-inset-top, 0px) + 12px))' }}>
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           <div className="absolute -top-10 -right-10 w-40 h-40 bg-white/5 rounded-full blur-2xl" />
           <div className="absolute top-5 -left-5 w-24 h-24 bg-violet-400/20 rounded-full blur-xl" />

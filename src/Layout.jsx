@@ -78,7 +78,11 @@ export default function Layout({ children, currentPageName }) {
 
       <main
         className="dark:bg-gray-900"
-        style={{ paddingBottom: 'calc(96px + env(safe-area-inset-bottom, 0px))' }}
+        style={{ 
+          paddingBottom: currentPageName === 'AIInsights' 
+            ? '0px'  // chat gerencia o próprio espaço
+            : 'calc(96px + env(safe-area-inset-bottom, 0px))'
+        }}
       >
         {children}
       </main>
