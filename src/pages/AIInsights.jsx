@@ -9,12 +9,12 @@ import {
   Sparkles, Send, Plus, X, Check, AlertCircle,
   TrendingUp, TrendingDown, Wallet, MessageCircle,
   BarChart2, RefreshCw, Clock, ChevronDown, ChevronUp,
-  CheckCircle2, AlertTriangle, Info, PiggyBank, Calendar
+  CheckCircle2, AlertTriangle, Info, PiggyBank, Calendar,
+  ArrowLeftRight
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-// ── Helpers ────────────────────────────────────────────────
 const QUICK_QUESTIONS = [
   { icon: "💰", text: "Posso gastar R$500 essa semana?" },
   { icon: "📊", text: "Como estão minhas finanças?" },
@@ -22,12 +22,6 @@ const QUICK_QUESTIONS = [
   { icon: "🎯", text: "Estou no caminho certo?" },
   { icon: "🏦", text: "Quanto tenho investido?" },
   { icon: "⚠️", text: "Tenho contas vencendo?" },
-];
-
-const LAUNCH_SUGGESTIONS = [
-  { icon: "💸", text: "Lançar uma despesa" },
-  { icon: "💰", text: "Registrar uma entrada" },
-  { icon: "🔄", text: "Fazer uma transferência" },
 ];
 
 const scoreColors = {
@@ -56,6 +50,17 @@ const months = [
 const currentYear = new Date().getFullYear();
 const years = Array.from({ length: 3 }, (_, i) => currentYear - i);
 
+const CATEGORIES = [
+  { value: 'alimentação', label: '🍔 Alimentação' },
+  { value: 'transporte', label: '🚗 Transporte' },
+  { value: 'moradia', label: '🏠 Moradia' },
+  { value: 'saúde', label: '❤️ Saúde' },
+  { value: 'educação', label: '📚 Educação' },
+  { value: 'lazer', label: '🎉 Lazer' },
+  { value: 'compras', label: '🛍️ Compras' },
+  { value: 'outros', label: '📦 Outros' },
+];
+
 function parsePendingTx(content) {
   try {
     const match = content?.match(/__PENDING_TX__(.*?)__END_TX__/s);
@@ -70,6 +75,99 @@ function cleanContent(content) {
 
 const fmt = (v) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v || 0);
 
+// ── Card de confirmação reutilizável ───────────────────────
+function ConfirmCard({ pendingTx, onConfirm, onCancel, confirmLoading }) {
+  if (!pendingTx) return null;
+
+  const isTransfer = pendingTx.intent === 'transfer';
+
+  return (
+    <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
+      <div className="bg-white dark:bg-gray-800 rounded-2xl border border-violet-200 dark:border-violet-800 overflow-hidden shadow-lg mx-1">
+        <div className="bg-gradient-to-r from-violet-50 to-indigo-50 dark:from-violet-900/30 dark:to-indigo-900/30 px-4 py-3 border-b border-violet-100 dark:border-violet-800 flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 text-violet-600" />
+          <p className="text-sm font-semibold text-violet-700 dark:text-violet-300">
+            {isTransfer ? 'Confirmar transferência' : 'Confirmar lançamento'}
+          </p>
+        </div>
+        <div className="px-4 py-4 space-y-3">
+          <div className="flex justify-between items-center">
+            <span className="text-xs text-gray-500">Valor</span>
+            <span className={`text-xl font-bold ${isTransfer ? 'text-blue-600' : pendingTx.type === 'expense' ? 'text-red-600' : 'text-emerald-600'}`}>
+              {fmt(pendingTx.amount)}
+            </span>
+          </div>
+          {isTransfer ? (
+            <>
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-gray-500">De</span>
+                <span className="text-sm font-medium text-gray-800 dark:text-gray-200 flex items-center gap-1">
+                  <Wallet className="w-3.5 h-3.5 text-gray-400" />{pendingTx.from_account}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-gray-500">Para</span>
+                <span className="text-sm font-medium text-gray-800 dark:text-gray-200 flex items-center gap-1">
+                  <Wallet className="w-3.5 h-3.5 text-gray-400" />{pendingTx.to_account}
+                </span>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-gray-500">Tipo</span>
+                <span className={`text-sm font-semibold flex items-center gap-1 ${pendingTx.type === 'expense' ? 'text-red-600' : 'text-emerald-600'}`}>
+                  {pendingTx.type === 'expense'
+                    ? <><TrendingDown className="w-3.5 h-3.5" /> Saída</>
+                    : <><TrendingUp className="w-3.5 h-3.5" /> Entrada</>}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-gray-500">Descrição</span>
+                <span className="text-sm font-medium text-gray-800 dark:text-gray-200">{pendingTx.description}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-gray-500">Categoria</span>
+                <span className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-2 py-1 rounded-full capitalize">{pendingTx.category}</span>
+              </div>
+              {pendingTx.account_name && (
+                <div className="flex justify-between items-center">
+                  <span className="text-xs text-gray-500">Conta</span>
+                  <span className="text-sm font-medium text-gray-800 dark:text-gray-200 flex items-center gap-1">
+                    <Wallet className="w-3.5 h-3.5 text-gray-400" />{pendingTx.account_name}
+                  </span>
+                </div>
+              )}
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-gray-500">Status</span>
+                <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${pendingTx.is_realized ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                  {pendingTx.is_realized ? '✅ Realizado' : '📋 Previsto'}
+                </span>
+              </div>
+            </>
+          )}
+          <div className="flex justify-between items-center">
+            <span className="text-xs text-gray-500">Data</span>
+            <span className="text-sm text-gray-700 dark:text-gray-300">{pendingTx.date}</span>
+          </div>
+        </div>
+        <div className="flex gap-2 px-4 pb-4">
+          <button onClick={onCancel}
+            className="flex-1 h-11 rounded-xl border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 text-sm font-medium flex items-center justify-center gap-2">
+            <X className="w-4 h-4" /> Cancelar
+          </button>
+          <button onClick={onConfirm} disabled={confirmLoading}
+            className="flex-1 h-11 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 text-white text-sm font-semibold flex items-center justify-center gap-2 shadow-md disabled:opacity-60">
+            {confirmLoading
+              ? <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }} className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full" />
+              : <><Check className="w-4 h-4" /> Confirmar</>}
+          </button>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
 // ── Aba Chat ───────────────────────────────────────────────
 function ChatTab({ user }) {
   const [messages, setMessages] = useState([]);
@@ -78,9 +176,13 @@ function ChatTab({ user }) {
   const [pendingTx, setPendingTx] = useState(null);
   const [confirmLoading, setConfirmLoading] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(true);
+  const [wizard, setWizard] = useState(null);
+  // wizard: { type: 'expense'|'income'|'transfer', step: string, data: {} }
+
   const endRef = useRef(null);
   const inputRef = useRef(null);
   const currentMonth = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+  const today = new Date().toISOString().split('T')[0];
 
   useEffect(() => {
     setMessages([{ role: 'assistant', content: `Olá! Sou o **Finn** ✨\n\nSeu consultor financeiro pessoal. Posso responder perguntas e **registrar transações** por você.\n\nComo posso te ajudar hoje?` }]);
@@ -88,16 +190,159 @@ function ChatTab({ user }) {
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, pendingTx]);
 
+  // ── Wizard de lançamento rápido ──────────────────────────
+  const startWizard = async (type) => {
+    setShowSuggestions(false);
+    setPendingTx(null);
+
+    const { data: accs } = await supabase.from('accounts').select('id, name, type').eq('user_id', user.id);
+    const accounts = accs || [];
+
+    const label = type === 'expense' ? 'despesa' : type === 'income' ? 'entrada' : 'transferência';
+    const emoji = type === 'expense' ? '💸' : type === 'income' ? '💰' : '🔄';
+
+    setWizard({ type, step: 'amount', data: { _accounts: accounts } });
+    setMessages(prev => [...prev, {
+      role: 'assistant',
+      content: `${emoji} Vamos registrar uma **${label}**!\n\nQual o **valor**? (ex: 50 ou 32,90)`
+    }]);
+  };
+
+  const handleWizardInput = async (value) => {
+    const w = { ...wizard, data: { ...wizard.data } };
+
+    if (w.step === 'amount') {
+      const amount = parseFloat(value.replace(',', '.').replace(/[^0-9.]/g, ''));
+      if (!amount || amount <= 0) {
+        setMessages(prev => [...prev, { role: 'assistant', content: '❓ Valor inválido. Ex: **50** ou **32,90**' }]);
+        return;
+      }
+      w.data.amount = amount;
+
+      if (w.type === 'transfer') {
+        const accList = w.data._accounts.map(a => `• **${a.name}**`).join('\n');
+        w.step = 'from_account';
+        setWizard(w);
+        setMessages(prev => [...prev, { role: 'assistant', content: `De qual conta sai o dinheiro?\n\n${accList}` }]);
+      } else {
+        w.step = 'description';
+        setWizard(w);
+        setMessages(prev => [...prev, { role: 'assistant', content: `O que foi? (ex: mercado, uber, salário)` }]);
+      }
+      return;
+    }
+
+    if (w.step === 'description') {
+      w.data.description = value;
+      w.step = 'category';
+      setWizard(w);
+      const catList = CATEGORIES.map(c => `• ${c.label}`).join('\n');
+      setMessages(prev => [...prev, { role: 'assistant', content: `Qual categoria?\n\n${catList}` }]);
+      return;
+    }
+
+    if (w.step === 'category') {
+      const found = CATEGORIES.find(c =>
+        c.value.includes(value.toLowerCase()) ||
+        c.label.toLowerCase().includes(value.toLowerCase())
+      );
+      if (!found) {
+        setMessages(prev => [...prev, { role: 'assistant', content: `❓ Não reconheci. Digite uma das opções:\nalimentação, transporte, moradia, saúde, educação, lazer, compras, outros` }]);
+        return;
+      }
+      w.data.category = found.value;
+      w.step = 'account';
+      setWizard(w);
+      const accList = w.data._accounts.map(a => `• **${a.name}**`).join('\n');
+      setMessages(prev => [...prev, { role: 'assistant', content: `Qual conta?\n\n${accList}` }]);
+      return;
+    }
+
+    if (w.step === 'account') {
+      const found = w.data._accounts.find(a => a.name.toLowerCase().includes(value.toLowerCase()));
+      if (!found) {
+        const accList = w.data._accounts.map(a => `• **${a.name}**`).join('\n');
+        setMessages(prev => [...prev, { role: 'assistant', content: `❓ Não encontrei. Escolha:\n\n${accList}` }]);
+        return;
+      }
+      w.data.account_id = found.id;
+      w.data.account_name = found.name;
+      setWizard(null);
+      setPendingTx({
+        type: w.type,
+        amount: w.data.amount,
+        description: w.data.description,
+        category: w.data.category,
+        account_name: w.data.account_name,
+        account_id: w.data.account_id,
+        date: today,
+        is_realized: true,
+      });
+      setMessages(prev => [...prev, { role: 'assistant', content: `Confira os dados abaixo 👇` }]);
+      return;
+    }
+
+    if (w.step === 'from_account') {
+      const found = w.data._accounts.find(a => a.name.toLowerCase().includes(value.toLowerCase()));
+      if (!found) {
+        const accList = w.data._accounts.map(a => `• **${a.name}**`).join('\n');
+        setMessages(prev => [...prev, { role: 'assistant', content: `❓ Não encontrei. Escolha:\n\n${accList}` }]);
+        return;
+      }
+      w.data.from_account_id = found.id;
+      w.data.from_account_name = found.name;
+      w.step = 'to_account';
+      setWizard(w);
+      const remaining = w.data._accounts.filter(a => a.id !== found.id).map(a => `• **${a.name}**`).join('\n');
+      setMessages(prev => [...prev, { role: 'assistant', content: `Para qual conta vai o dinheiro?\n\n${remaining}` }]);
+      return;
+    }
+
+    if (w.step === 'to_account') {
+      const found = w.data._accounts.find(a =>
+        a.name.toLowerCase().includes(value.toLowerCase()) &&
+        a.id !== w.data.from_account_id
+      );
+      if (!found) {
+        const remaining = w.data._accounts.filter(a => a.id !== w.data.from_account_id).map(a => `• **${a.name}**`).join('\n');
+        setMessages(prev => [...prev, { role: 'assistant', content: `❓ Escolha:\n\n${remaining}` }]);
+        return;
+      }
+      w.data.to_account_id = found.id;
+      w.data.to_account_name = found.name;
+      setWizard(null);
+      setPendingTx({
+        intent: 'transfer',
+        amount: w.data.amount,
+        from_account: w.data.from_account_name,
+        to_account: w.data.to_account_name,
+        from_account_id: w.data.from_account_id,
+        to_account_id: w.data.to_account_id,
+        date: today,
+        description: 'Transferência',
+      });
+      setMessages(prev => [...prev, { role: 'assistant', content: `Confira os dados abaixo 👇` }]);
+      return;
+    }
+  };
+
+  // ── Envio de mensagem ────────────────────────────────────
   const sendMessage = async (text) => {
     const message = (text || input).trim();
     if (!message || loading) return;
     setInput("");
+    setMessages(prev => [...prev, { role: 'user', content: message }]);
+
+    // Se wizard ativo, processa localmente
+    if (wizard) {
+      await handleWizardInput(message);
+      return;
+    }
+
     setShowSuggestions(false);
-    const newMessages = [...messages, { role: 'user', content: message }];
-    setMessages(newMessages);
     setLoading(true);
     try {
-      const history = newMessages.slice(1, -1).map(m => ({ role: m.role, content: cleanContent(m.content) }));
+      const history = messages.slice(1).map(m => ({ role: m.role, content: cleanContent(m.content) }));
       const { data: result, error: err } = await supabase.functions.invoke('ai-chat', {
         body: { userId: user.id, message, history, month: currentMonth }
       });
@@ -114,30 +359,64 @@ function ChatTab({ user }) {
     }
   };
 
+  // ── Confirmar transação ──────────────────────────────────
   const confirmTransaction = async () => {
     if (!pendingTx || confirmLoading) return;
     setConfirmLoading(true);
     try {
-      let accountId = null;
-      if (pendingTx.account_name) {
-        const { data: accs } = await supabase.from('accounts').select('id, name').eq('user_id', user.id).ilike('name', `%${pendingTx.account_name}%`).limit(1);
-        accountId = accs?.[0]?.id || null;
+      if (pendingTx.intent === 'transfer') {
+        const { error } = await supabase.from('transactions').insert({
+          user_id: user.id,
+          type: 'transfer',
+          amount: pendingTx.amount,
+          description: 'Transferência',
+          account_id: pendingTx.from_account_id,
+          transfer_account_id: pendingTx.to_account_id,
+          date: pendingTx.date,
+          is_realized: true
+        });
+        if (error) throw error;
+        setPendingTx(null);
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          content: `✅ **Transferência lançada!**\n\n🔄 **${fmt(pendingTx.amount)}**\n🏦 ${pendingTx.from_account} → ${pendingTx.to_account}`
+        }]);
+      } else {
+        // Resolve account_id se vier da IA (por nome)
+        let accountId = pendingTx.account_id || null;
+        if (!accountId && pendingTx.account_name) {
+          const { data: accs } = await supabase.from('accounts').select('id').eq('user_id', user.id).ilike('name', `%${pendingTx.account_name}%`).limit(1);
+          accountId = accs?.[0]?.id || null;
+        }
+        const { error } = await supabase.from('transactions').insert({
+          user_id: user.id,
+          type: pendingTx.type,
+          amount: pendingTx.amount,
+          description: pendingTx.description,
+          category: pendingTx.category,
+          account_id: accountId,
+          date: pendingTx.date || today,
+          is_realized: pendingTx.is_realized ?? true
+        });
+        if (error) throw error;
+        setPendingTx(null);
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          content: `✅ **Lançado!**\n\n${pendingTx.type === 'expense' ? '💸' : '💰'} **${fmt(pendingTx.amount)}** — ${pendingTx.description}\n📂 ${pendingTx.category}\n🏦 ${pendingTx.account_name || ''}`
+        }]);
       }
-      const { error } = await supabase.from('transactions').insert({
-        user_id: user.id, type: pendingTx.type, amount: pendingTx.amount,
-        description: pendingTx.description, category: pendingTx.category,
-        account_id: accountId, date: pendingTx.date || new Date().toISOString().split('T')[0],
-        is_realized: pendingTx.is_realized ?? true
-      });
-      if (error) throw error;
-      setPendingTx(null);
-      setMessages(prev => [...prev, { role: 'assistant', content: `✅ **Lançado!**\n\n${pendingTx.type === 'expense' ? '💸' : '💰'} **${fmt(pendingTx.amount)}** — ${pendingTx.description}\n📂 ${pendingTx.category}${accountId ? `\n🏦 ${pendingTx.account_name}` : ''}` }]);
     } catch {
       setMessages(prev => [...prev, { role: 'assistant', content: '❌ Erro ao salvar. Tente novamente.' }]);
       setPendingTx(null);
     } finally {
       setConfirmLoading(false);
     }
+  };
+
+  const cancelTransaction = () => {
+    setPendingTx(null);
+    setWizard(null);
+    setMessages(prev => [...prev, { role: 'assistant', content: '❌ Cancelado. Me diga se quiser tentar novamente!' }]);
   };
 
   return (
@@ -166,69 +445,19 @@ function ChatTab({ user }) {
           </motion.div>
         ))}
 
-        {/* Card confirmação */}
+        {/* Card de confirmação */}
         <AnimatePresence>
           {pendingTx && (
-            <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
-              <div className="bg-white dark:bg-gray-800 rounded-2xl border border-violet-200 dark:border-violet-800 overflow-hidden shadow-lg">
-                <div className="bg-gradient-to-r from-violet-50 to-indigo-50 dark:from-violet-900/30 dark:to-indigo-900/30 px-4 py-3 border-b border-violet-100 dark:border-violet-800 flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 text-violet-600" />
-                  <p className="text-sm font-semibold text-violet-700 dark:text-violet-300">Confirmar lançamento</p>
-                </div>
-                <div className="px-4 py-4 space-y-3">
-                  <div className="flex justify-between items-center">
-                    <span className="text-xs text-gray-500">Valor</span>
-                    <span className={`text-xl font-bold ${pendingTx.type === 'expense' ? 'text-red-600' : 'text-emerald-600'}`}>{fmt(pendingTx.amount)}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-xs text-gray-500">Tipo</span>
-                    <span className={`text-sm font-semibold flex items-center gap-1 ${pendingTx.type === 'expense' ? 'text-red-600' : 'text-emerald-600'}`}>
-                      {pendingTx.type === 'expense' ? <><TrendingDown className="w-3.5 h-3.5" /> Saída</> : <><TrendingUp className="w-3.5 h-3.5" /> Entrada</>}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-xs text-gray-500">Descrição</span>
-                    <span className="text-sm font-medium text-gray-800 dark:text-gray-200">{pendingTx.description}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-xs text-gray-500">Categoria</span>
-                    <span className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-2 py-1 rounded-full capitalize">{pendingTx.category}</span>
-                  </div>
-                  {pendingTx.account_name && (
-                    <div className="flex justify-between items-center">
-                      <span className="text-xs text-gray-500">Conta</span>
-                      <span className="text-sm font-medium text-gray-800 dark:text-gray-200 flex items-center gap-1"><Wallet className="w-3.5 h-3.5 text-gray-400" />{pendingTx.account_name}</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between items-center">
-                    <span className="text-xs text-gray-500">Data</span>
-                    <span className="text-sm text-gray-700 dark:text-gray-300">{pendingTx.date}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-xs text-gray-500">Status</span>
-                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${pendingTx.is_realized ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
-                      {pendingTx.is_realized ? '✅ Realizado' : '📋 Previsto'}
-                    </span>
-                  </div>
-                </div>
-                <div className="flex gap-2 px-4 pb-4">
-                  <button onClick={() => { setPendingTx(null); setMessages(prev => [...prev, { role: 'assistant', content: '❌ Cancelado!' }]); }}
-                    className="flex-1 h-11 rounded-xl border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 text-sm font-medium flex items-center justify-center gap-2">
-                    <X className="w-4 h-4" /> Cancelar
-                  </button>
-                  <button onClick={confirmTransaction} disabled={confirmLoading}
-                    className="flex-1 h-11 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 text-white text-sm font-semibold flex items-center justify-center gap-2 shadow-md disabled:opacity-60">
-                    {confirmLoading
-                      ? <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }} className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full" />
-                      : <><Check className="w-4 h-4" /> Confirmar</>}
-                  </button>
-                </div>
-              </div>
-            </motion.div>
+            <ConfirmCard
+              pendingTx={pendingTx}
+              onConfirm={confirmTransaction}
+              onCancel={cancelTransaction}
+              confirmLoading={confirmLoading}
+            />
           )}
         </AnimatePresence>
 
-        {/* Loading */}
+        {/* Loading IA */}
         {loading && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex gap-3">
             <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center flex-shrink-0 shadow-md shadow-violet-200 dark:shadow-violet-900">
@@ -248,9 +477,9 @@ function ChatTab({ user }) {
         <div ref={endRef} />
       </div>
 
-      {/* Sugestões */}
+      {/* Sugestões iniciais */}
       <AnimatePresence>
-        {showSuggestions && messages.length <= 1 && (
+        {showSuggestions && messages.length <= 1 && !wizard && (
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
             className="px-4 pb-2 flex-shrink-0">
             <p className="text-xs text-gray-400 mb-2 font-medium">Perguntas frequentes</p>
@@ -262,13 +491,19 @@ function ChatTab({ user }) {
                 </button>
               ))}
             </div>
+
             <p className="text-xs text-gray-400 mb-2 mt-3 font-medium">Lançamentos rápidos</p>
             <div className="flex gap-2">
-              {LAUNCH_SUGGESTIONS.map((s, i) => (
-                <button key={i} onClick={() => sendMessage(s.text)}
-                  className="flex-1 flex items-center justify-center gap-1.5 text-xs bg-violet-50 dark:bg-violet-900/20 text-violet-700 dark:text-violet-300 border border-violet-200 dark:border-violet-800 rounded-xl px-2 py-2 hover:bg-violet-100 transition-all font-medium">
-                  <span>{s.icon}</span> {s.text}
-                </button>
+              {[
+                { icon: "💸", label: "Despesa",      type: "expense"  },
+                { icon: "💰", label: "Entrada",      type: "income"   },
+                { icon: "🔄", label: "Transferência", type: "transfer" },
+              ].map((s, i) => (
+                <motion.button key={i} whileTap={{ scale: 0.96 }}
+                  onClick={() => startWizard(s.type)}
+                  className="flex-1 flex items-center justify-center gap-1.5 text-xs bg-violet-50 dark:bg-violet-900/20 text-violet-700 dark:text-violet-300 border border-violet-200 dark:border-violet-800 rounded-xl px-2 py-2.5 hover:bg-violet-100 transition-all font-medium">
+                  <span>{s.icon}</span> {s.label}
+                </motion.button>
               ))}
             </div>
           </motion.div>
@@ -281,7 +516,7 @@ function ChatTab({ user }) {
         <div className="flex gap-2 items-end">
           <input ref={inputRef} value={input} onChange={e => setInput(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
-            placeholder="Pergunte ou registre um gasto..."
+            placeholder={wizard ? "Digite sua resposta..." : "Pergunte ou registre um gasto..."}
             className="flex-1 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-2xl px-4 py-3 text-sm text-gray-800 dark:text-gray-200 placeholder-gray-400 outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100 dark:focus:ring-violet-900/30 transition-all" />
           <motion.button whileTap={{ scale: 0.9 }} onClick={() => sendMessage()} disabled={!input.trim() || loading}
             className="w-12 h-12 bg-gradient-to-br from-violet-600 to-indigo-600 disabled:opacity-40 rounded-2xl flex items-center justify-center shadow-md shadow-violet-200 dark:shadow-violet-900/50">
@@ -310,9 +545,7 @@ function AnalysisTab({ user }) {
   const month = `${selectedYear}-${selectedMonth}`;
   const monthLabel = format(new Date(`${selectedYear}-${selectedMonth}-02`), 'MMMM yyyy', { locale: ptBR });
 
-  useEffect(() => {
-    loadSavedInsights();
-  }, [user?.id]);
+  useEffect(() => { loadSavedInsights(); }, [user?.id]);
 
   const loadSavedInsights = async () => {
     setLoadingSaved(true);
@@ -356,7 +589,6 @@ function AnalysisTab({ user }) {
 
   return (
     <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
-
       {usage && (
         <div className="bg-violet-50 dark:bg-violet-900/20 rounded-xl p-3 border border-violet-200 dark:border-violet-800 flex items-center justify-between">
           <div className="flex items-center gap-2"><Clock className="w-4 h-4 text-violet-600" /><p className="text-sm text-violet-700 dark:text-violet-300">Análises restantes esta semana</p></div>
@@ -445,7 +677,6 @@ function AnalysisTab({ user }) {
 
       {data && !loading && (
         <>
-          {/* Score */}
           <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
             className={`bg-gradient-to-br ${scoreColors[data.insights?.score_color] || scoreColors.blue} rounded-2xl p-6 text-white`}>
             <div className="flex items-center justify-between mb-4">
@@ -468,7 +699,7 @@ function AnalysisTab({ user }) {
                 <p className="text-white text-sm font-semibold">{data.insights.alerta_projecao}</p>
               </div>
             )}
-            <div className="grid grid-cols-3 gap-2 mb-3">
+            <div className="grid grid-cols-3 gap-2">
               {[['Entradas', data.meta?.totalIncome], ['Saídas', data.meta?.totalExpense], ['Poupança', null]].map(([label, val], i) => (
                 <div key={i} className="bg-white/20 rounded-xl p-2.5 text-center">
                   <p className="text-white/70 text-xs">{label}</p>
@@ -476,22 +707,8 @@ function AnalysisTab({ user }) {
                 </div>
               ))}
             </div>
-            <p className="text-white/70 text-xs font-semibold mb-2 uppercase tracking-wide">Projeção fim do mês</p>
-            <div className="grid grid-cols-3 gap-2">
-              {[['Entradas', data.meta?.totalIncomeProjected], ['Saídas', data.meta?.totalExpenseProjected]].map(([label, val], i) => (
-                <div key={i} className="bg-white/20 rounded-xl p-2.5 text-center">
-                  <p className="text-white/70 text-xs">{label}</p>
-                  <p className="text-white font-bold text-xs">{fmt(val)}</p>
-                </div>
-              ))}
-              <div className={`rounded-xl p-2.5 text-center ${data.meta?.isProjectedNegative ? 'bg-red-500/40 border border-red-300/50' : 'bg-white/20'}`}>
-                <p className="text-white/70 text-xs">Saldo final</p>
-                <p className="text-white font-bold text-xs">{fmt(data.meta?.balanceProjected)}</p>
-              </div>
-            </div>
           </motion.div>
 
-          {/* Insights */}
           {data.insights?.insights?.length > 0 && (
             <div className="space-y-3">
               <h3 className="text-sm font-bold text-gray-700 dark:text-gray-300 px-1">💡 Insights do mês</h3>
@@ -527,7 +744,6 @@ function AnalysisTab({ user }) {
             </div>
           )}
 
-          {/* Recomendações */}
           {data.insights?.recomendacoes?.length > 0 && (
             <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
               <div className="px-5 pt-4 pb-2"><h3 className="text-sm font-bold text-gray-700 dark:text-gray-300">✂️ Onde reduzir custos</h3></div>
@@ -550,24 +766,20 @@ function AnalysisTab({ user }) {
             </div>
           )}
 
-          {/* Investimento */}
           {data.insights?.investimento_sugerido && (
             <div className={`rounded-2xl p-5 text-white ${data.meta?.isProjectedNegative ? 'bg-gradient-to-br from-red-500 to-rose-600' : 'bg-gradient-to-br from-emerald-500 to-teal-600'}`}>
               <div className="flex items-center gap-2 mb-3"><PiggyBank className="w-5 h-5 text-white" /><h3 className="text-sm font-bold">💰 Quanto investir</h3></div>
               <p className="text-3xl font-bold">{fmt(data.insights.investimento_sugerido.valor)}</p>
               <p className="text-white/80 text-sm mb-2">{data.insights.investimento_sugerido.percentual} da sua renda</p>
-              <p className="text-white/80 text-sm mb-3">{data.insights.investimento_sugerido.justificativa}</p>
+              <p className="text-white/80 text-sm">{data.insights.investimento_sugerido.justificativa}</p>
             </div>
           )}
 
-          {/* Botões */}
           <div className="flex gap-3 pb-4">
-            <Button onClick={() => setShowPeriodSelector(true)} variant="outline"
-              className="flex-1 h-12 rounded-2xl border-gray-200 text-gray-600 font-medium">
+            <Button onClick={() => setShowPeriodSelector(true)} variant="outline" className="flex-1 h-12 rounded-2xl border-gray-200 text-gray-600 font-medium">
               <RefreshCw className="w-4 h-4 mr-2" /> Nova análise
             </Button>
-            <button onClick={deleteInsights}
-              className="h-12 px-4 rounded-2xl border border-red-200 text-red-500 text-sm font-medium hover:bg-red-50 transition-colors">
+            <button onClick={deleteInsights} className="h-12 px-4 rounded-2xl border border-red-200 text-red-500 text-sm font-medium hover:bg-red-50 transition-colors">
               Apagar
             </button>
           </div>
@@ -583,7 +795,6 @@ export default function AIInsights() {
   const [activeTab, setActiveTab] = useState('chat');
 
   return (
-    // Container principal
     <div className="flex flex-col bg-gray-50 dark:bg-gray-900"
       style={{ height: 'calc(100dvh - 68px - env(safe-area-inset-bottom, 0px))' }}>
 
@@ -634,7 +845,7 @@ export default function AIInsights() {
         </div>
       </div>
 
-      {/* Conteúdo da aba */}
+      {/* Conteúdo */}
       <AnimatePresence mode="wait">
         <motion.div key={activeTab} initial={{ opacity: 0, x: activeTab === 'chat' ? -20 : 20 }}
           animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }}

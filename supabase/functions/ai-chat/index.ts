@@ -23,6 +23,7 @@ serve(async (req) => {
     const startDate = `${now.getFullYear() - 1}-01-01`
     const endDate = `${now.getFullYear() + 1}-12-31`
     const nowStr = now.toISOString().slice(0, 10)
+    const currentMonthStr = nowStr.slice(0, 7)
 
     const [transactionsRes, accountsRes, goalsRes] = await Promise.all([
       supabase.from("transactions").select("*").eq("user_id", userId).gte("date", startDate).lte("date", endDate).neq("type", "transfer").order("date", { ascending: true }),
@@ -77,9 +78,17 @@ serve(async (req) => {
 
     const currentYear = now.getFullYear()
     const byCategory: Record<string, number> = {}
-    transactions.filter((t: any) => t.is_realized !== false && t.type === 'expense' && t.date.startsWith(String(currentYear)))
+    transactions
+      .filter((t: any) => t.is_realized !== false && t.type === 'expense' && t.date.startsWith(String(currentYear)))
       .forEach((t: any) => { const cat = t.category || 'outros'; byCategory[cat] = (byCategory[cat] || 0) + parseFloat(t.amount) })
-    const topCategories = Object.entries(byCategory).sort((a, b) => b[1] - a[1]).map(([cat, val]) => `${cat}: R$${(val as number).toFixed(0)}`).join(', ')
+    const topCategories = Object.entries(byCategory).sort((a, b) => b[1] - a[1])
+      .map(([cat, val]) => `${cat}: R$${(val as number).toFixed(0)}`).join(', ')
+
+    // Gastos por categoria só do mês atual
+    const currentMonthByCategory: Record<string, number> = {}
+    transactions
+      .filter((t: any) => t.is_realized !== false && t.type === 'expense' && t.date.startsWith(currentMonthStr))
+      .forEach((t: any) => { const cat = t.category || 'outros'; currentMonthByCategory[cat] = (currentMonthByCategory[cat] || 0) + parseFloat(t.amount) })
 
     const upcomingDetailed = transactions.filter((t: any) => t.is_realized === false && t.date >= nowStr)
       .sort((a: any, b: any) => a.date.localeCompare(b.date))
@@ -89,12 +98,20 @@ serve(async (req) => {
       .sort((a: any, b: any) => b.date.localeCompare(a.date)).slice(0, 20)
       .map((t: any) => `${t.date} | ${t.type === 'income' ? 'ENTRADA' : 'SAÍDA'} | ${t.description} (${t.category || 'sem categoria'}): R$${parseFloat(t.amount).toFixed(2)}`).join('\n')
 
-    const last3Months = Object.entries(monthlyData).filter(([m]) => m <= nowStr.slice(0, 7)).sort((a, b) => b[0].localeCompare(a[0])).slice(0, 3)
+    const last3Months = Object.entries(monthlyData)
+      .filter(([m]) => m <= currentMonthStr)
+      .sort((a, b) => b[0].localeCompare(a[0])).slice(0, 3)
     const avgIncome = last3Months.length > 0 ? last3Months.reduce((s, [, d]) => s + d.income, 0) / last3Months.length : 0
     const avgExpense = last3Months.length > 0 ? last3Months.reduce((s, [, d]) => s + d.expense, 0) / last3Months.length : 0
 
+    // Metas com progresso calculado
     const goalsSummary = goals.length > 0
-      ? goals.map((g: any) => `${g.name} (${g.type}) | meta: R$${g.target_amount} | prazo: ${g.end_date} | categoria: ${g.category || 'geral'}`).join('\n')
+      ? goals.map((g: any) => {
+          const gastoCategoria = currentMonthByCategory[g.category?.toLowerCase()] || 0
+          const progresso = g.target_amount > 0 ? ((gastoCategoria / g.target_amount) * 100).toFixed(0) : 0
+          const restante = Math.max(0, g.target_amount - gastoCategoria)
+          return `${g.name} (${g.type}) | limite: R$${g.target_amount} | gasto este mês: R$${gastoCategoria.toFixed(2)} | restante: R$${restante.toFixed(2)} | progresso: ${progresso}% | categoria: ${g.category || 'geral'} | prazo: ${g.end_date}`
+        }).join('\n')
       : 'Nenhuma meta cadastrada'
 
     const accountNames = accounts.map((a: any) => a.name).join(', ')
@@ -136,19 +153,39 @@ ${recentRealized || 'nenhuma'}
 GASTOS POR CATEGORIA (${currentYear} realizados):
 ${topCategories || 'nenhum'}
 
-METAS ATIVAS:
+GASTOS POR CATEGORIA (mês atual ${currentMonthStr}):
+${Object.entries(currentMonthByCategory).map(([cat, val]) => `${cat}: R$${(val as number).toFixed(2)}`).join(', ') || 'nenhum'}
+
+METAS ATIVAS (com progresso):
 ${goalsSummary}
 
-═══ LANÇAMENTOS ═══
-Se o usuário pedir para registrar, lançar, anotar ou adicionar uma transação (despesa, entrada, gasto, receita), além da resposta normal SEMPRE adicione ao final:
+═══ REGRAS DE LANÇAMENTO ═══
+
+⚠️ CRÍTICO: Só gere o bloco __PENDING_TX__ se o usuário EXPLICITAMENTE usar verbos de ação como:
+"gastei", "paguei", "comprei", "recebi", "ganhei", "lança", "registra", "anota", "adiciona", "coloca"
+
+❌ NUNCA gere lançamento para perguntas/consultas como:
+- "Posso gastar X?" → responda com análise da meta da categoria + saldo
+- "Quanto gastei?" → responda com dados reais
+- "Como estão minhas finanças?" → análise geral
+- "Tenho saldo para X?" → compare com saldo e metas
+- "Estou no caminho certo?" → análise geral
+
+✅ Para perguntas sobre "posso gastar X em categoria Y?":
+1. Verifique a meta de expense dessa categoria
+2. Mostre: meta limite | já gastou | restante
+3. Diga SIM ou NÃO com base nos dados reais
+Exemplo: "Sua meta de alimentação é R$1.100. Já gastou R$987 (89%). Restam R$113 — cuidado! ⚠️"
+
+✅ Quando for lançamento explícito, adicione ao FINAL da resposta:
 __PENDING_TX__{"type":"expense","amount":0.00,"description":"...","category":"alimentação","account_name":"...","date":"${nowStr}","is_realized":true}__END_TX__
 
-Regras do JSON:
-- type: "expense" para gastos/saídas, "income" para entradas/receitas
+Regras do JSON de lançamento:
+- type: "expense" para gastos/saídas | "income" para entradas/receitas
 - category: alimentação | transporte | moradia | saúde | educação | lazer | compras | outros
-- account_name: nome da conta mencionada. Contas disponíveis: ${accountNames}
+- account_name: conta mencionada. Disponíveis: ${accountNames}
 - date: data mencionada ou hoje (${nowStr})
-- is_realized: true se já aconteceu, false se for previsto/futuro
+- is_realized: true se já aconteceu | false se for previsto/futuro
 - Valores com vírgula (23,99) → ponto (23.99)`
 
     const messages = [
@@ -162,7 +199,7 @@ Regras do JSON:
       body: JSON.stringify({
         model: "llama-3.3-70b-versatile",
         messages: [{ role: "system", content: systemPrompt }, ...messages],
-        temperature: 0.3,
+        temperature: 0.2,
         max_tokens: 400
       })
     })
