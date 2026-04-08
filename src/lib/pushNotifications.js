@@ -53,7 +53,7 @@ export async function initPushNotifications() {
       console.log('Push clicado:', JSON.stringify(action));
     });
 
-  } catch (err: any) {
+  } catch (err) {
     console.error('Push init error:', err?.message || err);
   }
 }
