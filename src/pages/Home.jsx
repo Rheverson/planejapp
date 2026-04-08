@@ -169,9 +169,6 @@ export default function Home() {
     return balances;
   }, [accounts, transactions]);
 
-    return balances;
-  }, [accounts, transactions]);
-
   const regularAccounts = accounts.filter(a => a.type !== 'investment');
   const investmentAccounts = accounts.filter(a => a.type === 'investment');
   const totalBalance = regularAccounts.reduce((sum, acc) => sum + (accountBalances[acc.id] || 0), 0);

@@ -97,9 +97,9 @@ Deno.serve(async (req) => {
     supabase.from('goals').select('id, name, type, linked_account_id, investment_type').eq('user_id', user_id).eq('type', 'investment')
   ])
   const userAccounts = accountsRes.data || []
-  const userGoals   = goalsRes.data || []
+  const userGoals = goalsRes.data || []
   const accountsList = userAccounts.map((a: any) => a.name).join(', ')
-  const goalsList    = userGoals.map((g: any) => g.name).join(', ')
+  const goalsList = userGoals.map((g: any) => g.name).join(', ')
 
   // 3. Verificar pendente
   const { data: pending } = await supabase
@@ -112,7 +112,6 @@ Deno.serve(async (req) => {
     .maybeSingle()
 
   if (pending) {
-    // Confirmação — só palavras exatas
     const CONFIRM_WORDS = ['sim', 's', 'yes', 'ok', 'confirmar', 'confirma', '✅']
     const CANCEL_WORDS  = ['não', 'nao', 'n', 'no', 'cancelar', 'cancela', '❌']
     const isConfirm = CONFIRM_WORDS.includes(msgLower)
@@ -124,7 +123,7 @@ Deno.serve(async (req) => {
       return twilioReply('❌ Lançamento cancelado. Me mande um novo quando quiser!')
     }
 
-    // CORREÇÃO — qualquer coisa que não seja confirmação exata vai para o Groq corrigir
+    // CORREÇÃO
     if (!isConfirm) {
       const groqCorrection = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
@@ -138,7 +137,7 @@ Deno.serve(async (req) => {
               role: 'system',
               content: `O usuário quer corrigir um lançamento pendente. Retorne SOMENTE JSON com os campos a alterar.
 Campos: amount (number), account_name (string), from_account (string), to_account (string), date (YYYY-MM-DD), category (string), description (string), is_realized (boolean), goal_name (string)
-Exemplos: {"account_name":"Flash"} ou {"amount":35.00} ou {"is_realized":false} ou {"date":"2026-04-10"}
+Exemplos: {"account_name":"Flash"} ou {"amount":35.00} ou {"is_realized":false}
 Contas disponíveis: ${accountsList}
 Data de hoje: ${today}`
             },
@@ -149,23 +148,15 @@ Data de hoje: ${today}`
 
       const corrData = await groqCorrection.json()
       const corrText = corrData.choices?.[0]?.message?.content ?? ''
-      console.log('CORRECTION RAW:', corrText)
       const correction = extractJSON(corrText)
 
       if (correction && Object.keys(correction).length > 0) {
         const updatedPayload = { ...pending.payload, ...correction }
         await supabase.from('whatsapp_pending').update({ payload: updatedPayload }).eq('id', pending.id)
-        return twilioReply(
-          `✏️ Corrigido! Confirma agora?\n\n` +
-          buildConfirmMessage(updatedPayload)
-        )
+        return twilioReply(`✏️ Corrigido! Confirma agora?\n\n` + buildConfirmMessage(updatedPayload))
       }
 
-      // Não entendeu a correção
-      return twilioReply(
-        `⏳ Não entendi a correção. O lançamento atual:\n\n` +
-        buildConfirmMessage(pending.payload)
-      )
+      return twilioReply(`⏳ Não entendi a correção. O lançamento atual:\n\n` + buildConfirmMessage(pending.payload))
     }
 
     // CONFIRMAR
@@ -178,7 +169,6 @@ Data de hoje: ${today}`
       if (!fromAcc || !toAcc) {
         return twilioReply(`❌ Conta não encontrada. Suas contas: ${accountsList}`)
       }
-      // 1 registro apenas
       const { error } = await supabase.from('transactions').insert({
         user_id,
         type: 'transfer',
@@ -190,7 +180,6 @@ Data de hoje: ${today}`
         is_realized: true
       })
       txError = error
-    }
 
     } else if (p.intent === 'goal') {
       const goal = userGoals.find((g: any) => g.name.toLowerCase().includes(p.goal_name.toLowerCase()))
@@ -198,18 +187,28 @@ Data de hoje: ${today}`
         return twilioReply(`❌ Meta "${p.goal_name}" não tem conta vinculada. Configure no app.`)
       }
       const { error } = await supabase.from('transactions').insert({
-        user_id, type: 'income', amount: p.amount,
-        description: `Aporte: ${goal.name}`, category: 'investimentos',
-        account_id: goal.linked_account_id, date: p.date, is_realized: p.is_realized ?? true
+        user_id,
+        type: 'income',
+        amount: p.amount,
+        description: `Aporte: ${goal.name}`,
+        category: 'investimentos',
+        account_id: goal.linked_account_id,
+        date: p.date,
+        is_realized: p.is_realized ?? true
       })
       txError = error
 
     } else {
       const acc = userAccounts.find((a: any) => a.name.toLowerCase().includes((p.account_name || '').toLowerCase()))
       const { error } = await supabase.from('transactions').insert({
-        user_id, type: p.type, amount: p.amount,
-        description: p.description, category: p.category,
-        account_id: acc?.id || null, date: p.date, is_realized: p.is_realized ?? true
+        user_id,
+        type: p.type,
+        amount: p.amount,
+        description: p.description,
+        category: p.category,
+        account_id: acc?.id || null,
+        date: p.date,
+        is_realized: p.is_realized ?? true
       })
       txError = error
     }

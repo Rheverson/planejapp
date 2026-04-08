@@ -45,30 +45,6 @@ function AccountDetailModal({ account, transactions, onClose }) {
     return bal;
   }, [account, transactions]);
 
-  // Transferências: só uma leg por par
-  const processedPairs = new Set();
-    transactions.forEach(t => {
-      if (t.type !== 'transfer' || t.is_realized === false) return;
-      if (!t.transfer_pair_id || processedPairs.has(t.transfer_pair_id)) return;
-      processedPairs.add(t.transfer_pair_id);
-
-      const legs = transactions
-        .filter(x => x.transfer_pair_id === t.transfer_pair_id)
-        .sort((a, b) => a.id.localeCompare(b.id));
-
-      if (legs.length !== 2) return;
-
-      const origem  = legs[0].account_id;
-      const destino = legs[0].transfer_account_id;
-      const valor   = Number(legs[0].amount);
-
-      if (account.id === origem)  bal -= valor;
-      if (account.id === destino) bal += valor;
-    });
-
-    return bal;
-  }, [account, transactions]);
-
   // Transações do mês para esta conta
   const monthTx = useMemo(() => {
     return transactions.filter(t => {
@@ -253,38 +229,20 @@ export default function Accounts() {
   });
 
   const accountBalances = useMemo(() => {
-  const balances = {};
-  accounts.forEach(acc => { balances[acc.id] = Number(acc.initial_balance) || 0; });
+    const balances = {};
+    accounts.forEach(acc => { balances[acc.id] = Number(acc.initial_balance) || 0; });
 
-  // Income e expense normalmente
-  transactions.forEach(t => {
-    if (t.is_realized === false) return;
-    if (t.type === 'income' && t.account_id) {
-      balances[t.account_id] = (balances[t.account_id] || 0) + Number(t.amount);
-    } else if (t.type === 'expense' && t.account_id) {
-      balances[t.account_id] = (balances[t.account_id] || 0) - Number(t.amount);
-    }
-  });
-
-  // Transferências: processa só UMA leg por par ordenando pelo id
-  const processedPairs = new Set();
     transactions.forEach(t => {
-      if (t.type !== 'transfer' || t.is_realized === false) return;
-      if (!t.transfer_pair_id || processedPairs.has(t.transfer_pair_id)) return;
-      processedPairs.add(t.transfer_pair_id);
-
-      const legs = transactions
-        .filter(x => x.transfer_pair_id === t.transfer_pair_id)
-        .sort((a, b) => a.id.localeCompare(b.id)); // garante ordem consistente
-
-      if (legs.length !== 2) return;
-
-      const origem  = legs[0].account_id;
-      const destino = legs[0].transfer_account_id;
-      const valor   = Number(legs[0].amount);
-
-      balances[origem]  = (balances[origem]  || 0) - valor;
-      balances[destino] = (balances[destino] || 0) + valor;
+      if (t.is_realized === false) return;
+      if (t.type === 'income' && t.account_id) {
+        balances[t.account_id] = (balances[t.account_id] || 0) + Number(t.amount);
+      } else if (t.type === 'expense' && t.account_id) {
+        balances[t.account_id] = (balances[t.account_id] || 0) - Number(t.amount);
+      } else if (t.type === 'transfer') {
+        // 1 registro por transferência: subtrai da origem, soma no destino
+        if (t.account_id) balances[t.account_id] = (balances[t.account_id] || 0) - Number(t.amount);
+        if (t.transfer_account_id) balances[t.transfer_account_id] = (balances[t.transfer_account_id] || 0) + Number(t.amount);
+      }
     });
 
     return balances;
