@@ -2,20 +2,24 @@ import React, { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { createPageUrl } from "./utils";
 import { motion } from "framer-motion";
-import { Home, ArrowLeftRight, Wallet, User, Target, Sparkles } from "lucide-react";
+import { Home, ArrowLeftRight, Wallet, Target, Sparkles, User } from "lucide-react";
 
 const navItems = [
   { name: "Home",       icon: Home,          page: "Home"         },
   { name: "Transações", icon: ArrowLeftRight, page: "Transactions" },
+  // centro = Finn
   { name: "Metas",      icon: Target,        page: "Goals"        },
   { name: "Contas",     icon: Wallet,        page: "Accounts"     },
-  { name: "Perfil",     icon: User,          page: "Profile"      },
 ];
+
+// Páginas onde o ícone de perfil NÃO aparece
+const HIDE_PROFILE_ICON = ["AIInsights", "Profile"];
 
 export default function Layout({ children, currentPageName }) {
   const [darkMode, setDarkMode] = useState(false);
   const navigate = useNavigate();
   const isAIActive = currentPageName === "AIInsights";
+  const showProfileIcon = !HIDE_PROFILE_ICON.includes(currentPageName);
 
   useEffect(() => {
     const savedDarkMode = localStorage.getItem('darkMode') === 'true';
@@ -31,9 +35,8 @@ export default function Layout({ children, currentPageName }) {
     return () => window.removeEventListener('darkModeChange', handleDarkModeChange);
   }, []);
 
-  // Split nav items: 2 left, center button, 3 right
-  const leftItems  = navItems.slice(0, 2);
-  const rightItems = navItems.slice(2);
+  const leftItems  = navItems.slice(0, 2); // Home, Transações
+  const rightItems = navItems.slice(2);    // Metas, Contas
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-200">
@@ -54,54 +57,89 @@ export default function Layout({ children, currentPageName }) {
         }
       `}</style>
 
-      <main className="pb-24 dark:bg-gray-900">{children}</main>
+      {/* Ícone de perfil flutuante no canto superior direito */}
+      {showProfileIcon && (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="fixed top-0 right-0 z-40"
+          style={{ top: 'calc(env(safe-area-inset-top, 0px) + 12px)', right: '16px' }}
+        >
+          <Link to={createPageUrl("Profile")}>
+            <motion.div
+              whileTap={{ scale: 0.9 }}
+              className={`w-9 h-9 rounded-full flex items-center justify-center transition-all shadow-md ${
+                currentPageName === 'Profile'
+                  ? 'bg-blue-600 shadow-blue-200 dark:shadow-blue-900'
+                  : 'bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm border border-gray-200/50 dark:border-gray-700/50 shadow-gray-200 dark:shadow-gray-900'
+              }`}
+            >
+              <User className={`w-4 h-4 ${
+                currentPageName === 'Profile'
+                  ? 'text-white'
+                  : 'text-gray-600 dark:text-gray-300'
+              }`} />
+            </motion.div>
+          </Link>
+        </motion.div>
+      )}
+
+      <main
+        className="dark:bg-gray-900"
+        style={{ paddingBottom: 'calc(80px + env(safe-area-inset-bottom, 0px))' }}
+      >
+        {children}
+      </main>
 
       <motion.nav
         initial={{ y: 100 }} animate={{ y: 0 }}
         transition={{ type: "spring", stiffness: 300, damping: 30 }}
         className="fixed bottom-0 left-0 right-0 bg-white/95 dark:bg-gray-800/95 backdrop-blur-lg border-t border-gray-200/50 dark:border-gray-700/50 z-50 shadow-[0_-4px_20px_rgba(0,0,0,0.05)]"
-        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+        style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
       >
-        <div className="flex items-center justify-between h-16 max-w-lg mx-auto px-2 relative">
-
+        {/* Grid simétrico: 2 + centro(72px) + 2 */}
+        <div
+          className="max-w-lg mx-auto relative"
+          style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr 72px 1fr 1fr',
+            height: '64px',
+          }}
+        >
           {/* Left items */}
           {leftItems.map((item) => {
             const isActive = currentPageName === item.page;
             return (
               <Link key={item.page} to={createPageUrl(item.page)}
-                className="flex flex-col items-center justify-center flex-1 min-w-0 h-full relative">
+                className="flex flex-col items-center justify-center h-full relative">
                 {isActive && (
                   <motion.div layoutId="activeIndicator"
                     className="absolute top-0 h-0.5 w-8 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-b-full"
                     transition={{ type: "spring", stiffness: 380, damping: 30 }} />
                 )}
-                <motion.div className="flex flex-col items-center" animate={{ y: isActive ? -1 : 0 }}>
-                  <div className={`p-1.5 rounded-xl transition-all duration-300 ${isActive ? 'bg-blue-50 dark:bg-blue-900/40' : ''}`}>
-                    <item.icon className={`w-5 h-5 transition-colors duration-300 ${
-                      isActive ? 'text-blue-600 dark:text-blue-400' : 'text-gray-400 dark:text-gray-500'
-                    }`} />
-                  </div>
-                  <span className={`text-[10px] mt-0.5 transition-all duration-300 ${
-                    isActive ? 'text-blue-600 dark:text-blue-400 font-bold' : 'text-gray-400 dark:text-gray-500'
-                  }`}>{item.name}</span>
-                </motion.div>
+                <div className={`p-1.5 rounded-xl transition-all duration-300 ${isActive ? 'bg-blue-50 dark:bg-blue-900/40' : ''}`}>
+                  <item.icon className={`w-5 h-5 transition-colors duration-300 ${
+                    isActive ? 'text-blue-600 dark:text-blue-400' : 'text-gray-400 dark:text-gray-500'
+                  }`} />
+                </div>
+                <span className={`text-[10px] mt-0.5 transition-all duration-300 ${
+                  isActive ? 'text-blue-600 dark:text-blue-400 font-bold' : 'text-gray-400 dark:text-gray-500'
+                }`}>{item.name}</span>
               </Link>
             );
           })}
 
-          {/* Botão central FINN */}
-          <div className="flex flex-col items-center justify-center px-2" style={{ marginTop: '-28px' }}>
+          {/* Centro — Finn */}
+          <div className="relative flex items-end justify-center pb-1">
             <motion.button
               whileTap={{ scale: 0.92 }}
               whileHover={{ scale: 1.05 }}
               onClick={() => navigate(createPageUrl('AIInsights'))}
-              className={`relative w-16 h-16 rounded-2xl flex items-center justify-center transition-all duration-300 ${
-                isAIActive
-                  ? 'bg-gradient-to-br from-violet-500 via-purple-600 to-indigo-600 finn-glow-active'
-                  : 'bg-gradient-to-br from-violet-500 via-purple-600 to-indigo-600 finn-glow'
-              }`}
+              className={`w-16 h-16 rounded-2xl flex items-center justify-center transition-all duration-300 relative ${
+                isAIActive ? 'finn-glow-active' : 'finn-glow'
+              } bg-gradient-to-br from-violet-500 via-purple-600 to-indigo-600`}
+              style={{ marginBottom: '4px' }}
             >
-              {/* Pulse ring quando ativo */}
               {isAIActive && (
                 <motion.div
                   className="absolute inset-0 rounded-2xl bg-violet-400"
@@ -113,12 +151,19 @@ export default function Layout({ children, currentPageName }) {
                 animate={{ rotate: isAIActive ? [0, 10, -10, 0] : 0 }}
                 transition={{ duration: 2, repeat: isAIActive ? Infinity : 0, repeatDelay: 3 }}
               >
-                <Sparkles className="w-7 h-7 text-white" />
+                <Sparkles className="w-7 h-7 text-white relative z-10" />
               </motion.div>
             </motion.button>
-            <span className={`text-[10px] mt-1 font-bold transition-colors duration-300 ${
-              isAIActive ? 'text-violet-600 dark:text-violet-400' : 'text-gray-500 dark:text-gray-400'
-            }`}>Finn</span>
+
+            {/* Label Finn abaixo da nav */}
+            <span
+              className={`absolute text-[10px] font-bold transition-colors duration-300 ${
+                isAIActive ? 'text-violet-600 dark:text-violet-400' : 'text-gray-500 dark:text-gray-400'
+              }`}
+              style={{ bottom: '-2px' }}
+            >
+              Finn
+            </span>
           </div>
 
           {/* Right items */}
@@ -126,22 +171,20 @@ export default function Layout({ children, currentPageName }) {
             const isActive = currentPageName === item.page;
             return (
               <Link key={item.page} to={createPageUrl(item.page)}
-                className="flex flex-col items-center justify-center flex-1 min-w-0 h-full relative">
+                className="flex flex-col items-center justify-center h-full relative">
                 {isActive && (
                   <motion.div layoutId="activeIndicator"
                     className="absolute top-0 h-0.5 w-8 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-b-full"
                     transition={{ type: "spring", stiffness: 380, damping: 30 }} />
                 )}
-                <motion.div className="flex flex-col items-center" animate={{ y: isActive ? -1 : 0 }}>
-                  <div className={`p-1.5 rounded-xl transition-all duration-300 ${isActive ? 'bg-blue-50 dark:bg-blue-900/40' : ''}`}>
-                    <item.icon className={`w-5 h-5 transition-colors duration-300 ${
-                      isActive ? 'text-blue-600 dark:text-blue-400' : 'text-gray-400 dark:text-gray-500'
-                    }`} />
-                  </div>
-                  <span className={`text-[10px] mt-0.5 transition-all duration-300 ${
-                    isActive ? 'text-blue-600 dark:text-blue-400 font-bold' : 'text-gray-400 dark:text-gray-500'
-                  }`}>{item.name}</span>
-                </motion.div>
+                <div className={`p-1.5 rounded-xl transition-all duration-300 ${isActive ? 'bg-blue-50 dark:bg-blue-900/40' : ''}`}>
+                  <item.icon className={`w-5 h-5 transition-colors duration-300 ${
+                    isActive ? 'text-blue-600 dark:text-blue-400' : 'text-gray-400 dark:text-gray-500'
+                  }`} />
+                </div>
+                <span className={`text-[10px] mt-0.5 transition-all duration-300 ${
+                  isActive ? 'text-blue-600 dark:text-blue-400 font-bold' : 'text-gray-400 dark:text-gray-500'
+                }`}>{item.name}</span>
               </Link>
             );
           })}

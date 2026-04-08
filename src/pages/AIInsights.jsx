@@ -583,7 +583,8 @@ export default function AIInsights() {
   const [activeTab, setActiveTab] = useState('chat');
 
   return (
-    <div className="flex flex-col bg-gray-50 dark:bg-gray-900" style={{ height: '100dvh' }}>
+    <div className="flex flex-col bg-gray-50 dark:bg-gray-900"
+  style={{ height: 'calc(100dvh - env(safe-area-inset-bottom, 0px))', maxHeight: '100dvh' }}>
 
       {/* Header */}
       <div className="relative bg-gradient-to-br from-violet-600 via-purple-700 to-indigo-800 pt-12 pb-0 px-5 flex-shrink-0">
