@@ -7,13 +7,12 @@ import { Home, ArrowLeftRight, Wallet, Target, Sparkles, User } from "lucide-rea
 const navItems = [
   { name: "Home",       icon: Home,          page: "Home"         },
   { name: "Transações", icon: ArrowLeftRight, page: "Transactions" },
-  // centro = Finn
   { name: "Metas",      icon: Target,        page: "Goals"        },
   { name: "Contas",     icon: Wallet,        page: "Accounts"     },
 ];
 
-// Páginas onde o ícone de perfil NÃO aparece
 const HIDE_PROFILE_ICON = ["AIInsights", "Profile"];
+const NAV_HEIGHT = 68;
 
 export default function Layout({ children, currentPageName }) {
   const [darkMode, setDarkMode] = useState(false);
@@ -35,8 +34,8 @@ export default function Layout({ children, currentPageName }) {
     return () => window.removeEventListener('darkModeChange', handleDarkModeChange);
   }, []);
 
-  const leftItems  = navItems.slice(0, 2); // Home, Transações
-  const rightItems = navItems.slice(2);    // Metas, Contas
+  const leftItems  = navItems.slice(0, 2);
+  const rightItems = navItems.slice(2);
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-200">
@@ -57,7 +56,7 @@ export default function Layout({ children, currentPageName }) {
         }
       `}</style>
 
-      {/* Ícone de perfil flutuante no canto superior direito */}
+      {/* Ícone de perfil flutuante */}
       {showProfileIcon && (
         <motion.div
           initial={{ opacity: 0, scale: 0.8 }}
@@ -76,30 +75,31 @@ export default function Layout({ children, currentPageName }) {
         </motion.div>
       )}
 
+      {/* Main — sem padding para AIInsights pois ele ocupa tela cheia */}
       <main
         className="dark:bg-gray-900"
-        style={{ 
-          paddingBottom: currentPageName === 'AIInsights' 
-            ? '0px'  // chat gerencia o próprio espaço
-            : 'calc(96px + env(safe-area-inset-bottom, 0px))'
+        style={{
+          paddingBottom: currentPageName === 'AIInsights'
+            ? '0'
+            : `calc(${NAV_HEIGHT}px + 28px + env(safe-area-inset-bottom, 0px))`
         }}
       >
         {children}
       </main>
 
+      {/* Navbar */}
       <motion.nav
         initial={{ y: 100 }} animate={{ y: 0 }}
         transition={{ type: "spring", stiffness: 300, damping: 30 }}
         className="fixed bottom-0 left-0 right-0 bg-white/95 dark:bg-gray-800/95 backdrop-blur-lg border-t border-gray-200/50 dark:border-gray-700/50 z-50 shadow-[0_-4px_20px_rgba(0,0,0,0.05)] overflow-visible"
         style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
       >
-        {/* Grid simétrico: 2 + centro(72px) + 2 */}
         <div
           className="max-w-lg mx-auto relative"
           style={{
             display: 'grid',
             gridTemplateColumns: '1fr 1fr 60px 1fr 1fr',
-            height: '68px',
+            height: `${NAV_HEIGHT}px`,
           }}
         >
           {/* Left items */}
@@ -127,14 +127,11 @@ export default function Layout({ children, currentPageName }) {
 
           {/* Centro — Finn */}
           <div className="flex flex-col items-center justify-end pb-1 relative">
-            {/* Label fica dentro do grid, visível */}
             <span className={`text-[10px] font-bold mb-0.5 transition-colors duration-300 ${
               isAIActive ? 'text-violet-600 dark:text-violet-400' : 'text-gray-500 dark:text-gray-400'
             }`}>
               Finn
             </span>
-
-            {/* Botão posicionado acima da label */}
             <motion.button
               whileTap={{ scale: 0.92 }}
               whileHover={{ scale: 1.05 }}
