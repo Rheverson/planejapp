@@ -29,6 +29,11 @@ function formatCurrency(value: number): string {
   return `R$ ${Number(value).toFixed(2).replace('.', ',')}`
 }
 
+function formatDate(date: string): string {
+  const [y, m, d] = date.split('-')
+  return `${d}/${m}/${y}`
+}
+
 function buildConfirmMessage(p: any): string {
   if (p.intent === 'transfer') {
     return (
@@ -36,7 +41,7 @@ function buildConfirmMessage(p: any): string {
       `🔄 *${formatCurrency(p.amount)}*\n` +
       `🏦 De: ${p.from_account}\n` +
       `🏦 Para: ${p.to_account}\n` +
-      `📅 ${p.date}\n\n` +
+      `📅 ${formatDate(p.date)}\n\n` +
       `Responda *SIM* para confirmar, *NÃO* para cancelar\nOu corrija: "muda para R$300"`
     )
   }
@@ -46,7 +51,7 @@ function buildConfirmMessage(p: any): string {
       `🎯 *${p.goal_name}*\n` +
       `💰 ${formatCurrency(p.amount)}\n` +
       `🏦 ${p.account_name || 'conta da meta'}\n` +
-      `📅 ${p.date}\n` +
+      `📅 ${formatDate(p.date)}\n` +
       `${p.is_realized ? '✅ Realizado' : '📋 Previsto'}\n\n` +
       `Responda *SIM* para confirmar ou *NÃO* para cancelar\nOu corrija algo`
     )
@@ -57,7 +62,7 @@ function buildConfirmMessage(p: any): string {
     `📝 ${p.description}\n` +
     `📂 ${p.category}\n` +
     `🏦 ${p.account_name}\n` +
-    `📅 ${p.date}\n` +
+    `📅 ${formatDate(p.date)}\n` +
     `${p.is_realized ? '✅ Realizado' : '📋 Previsto'}\n\n` +
     `Responda *SIM* para confirmar ou *NÃO* para cancelar\nOu corrija: "muda a conta para Flash"`
   )
