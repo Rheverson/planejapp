@@ -5,7 +5,10 @@ import { useAuth } from "@/lib/AuthContext";
 import { useSharedProfile } from "@/lib/SharedProfileContext";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, TrendingUp, TrendingDown, Wallet, ChevronRight, ArrowLeftRight, PiggyBank, BarChart2, Eye, EyeOff } from "lucide-react";
+import {
+  Plus, TrendingUp, TrendingDown, Wallet, ChevronRight,
+  ArrowLeftRight, PiggyBank, BarChart2, Eye, EyeOff
+} from "lucide-react";
 import { startOfMonth, endOfMonth, isWithinInterval, parseISO, format } from "date-fns";
 import { createPageUrl } from "@/utils";
 import { toast } from "sonner";
@@ -13,14 +16,88 @@ import { useMonth } from "@/lib/MonthContext";
 import { usePrivacy } from "@/lib/PrivacyContext";
 import ReferralBanner from "@/components/referral/ReferralBanner";
 import ReferralInviteModal from "@/components/referral/ReferralInviteModal";
-
-import KPICard from "@/components/dashboard/KPICard";
-import AccountCard from "@/components/dashboard/AccountCard";
 import TransactionItem from "@/components/transactions/TransactionItem";
 import TransactionForm from "@/components/transactions/TransactionForm";
 import TransferForm from "@/components/transactions/TransferForm";
 import MonthSelector from "@/components/common/MonthSelector";
 import EmptyState from "@/components/common/EmptyState";
+
+const fmt = (v) =>
+  new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
+
+// ── Mini barra de progresso ──────────────────────────────────
+function ProgressBar({ value, max, color }) {
+  const pct = max > 0 ? Math.min((value / max) * 100, 100) : 0;
+  const bgMap = { green: "#dcfce7", red: "#fee2e2", blue: "#dbeafe", violet: "#ede9fe" };
+  const fgMap = { green: "#16a34a", red: "#dc2626", blue: "#1d4ed8", violet: "#7c3aed" };
+  return (
+    <div style={{ height: 3, background: bgMap[color] || "#f1f5f9", borderRadius: 2, marginTop: 8 }}>
+      <motion.div
+        initial={{ width: 0 }}
+        animate={{ width: `${pct}%` }}
+        transition={{ duration: 0.8, ease: "easeOut" }}
+        style={{ height: 3, background: fgMap[color] || "#64748b", borderRadius: 2 }}
+      />
+    </div>
+  );
+}
+
+// ── Card KPI compacto ─────────────────────────────────────────
+function KPICardNew({ title, value, color, subtitle, bar, barMax, navigateTo, hidden }) {
+  const textColors = {
+    green: "#16a34a", red: "#dc2626", blue: "#1d4ed8", violet: "#7c3aed"
+  };
+  const content = (
+    <div style={{
+      background: "white",
+      borderRadius: 14,
+      padding: "12px 14px",
+      border: "0.5px solid #e2e8f0",
+    }} className="dark:bg-gray-800 dark:border-gray-700">
+      <p style={{ fontSize: 10, fontWeight: 500, color: "#94a3b8", margin: "0 0 4px", letterSpacing: "0.3px" }}>
+        {title.toUpperCase()}
+      </p>
+      <p style={{ fontSize: 18, fontWeight: 500, color: textColors[color] || "#1e293b", margin: 0 }}>
+        {hidden ? "R$ ••••" : fmt(value)}
+      </p>
+      {subtitle && (
+        <p style={{ fontSize: 10, color: "#94a3b8", margin: "2px 0 0" }}>{subtitle}</p>
+      )}
+      {bar && <ProgressBar value={value} max={barMax} color={color} />}
+    </div>
+  );
+  if (navigateTo) return <Link to={navigateTo} style={{ textDecoration: "none" }}>{content}</Link>;
+  return content;
+}
+
+// ── Card de conta compacto ───────────────────────────────────
+function AccountCardNew({ account, balance, hidden }) {
+  const iconColors = {
+    bank: { bg: "#dbeafe", stroke: "#1d4ed8" },
+    digital: { bg: "#ede9fe", stroke: "#7c3aed" },
+    wallet: { bg: "#dcfce7", stroke: "#16a34a" },
+    investment: { bg: "#fef3c7", stroke: "#d97706" },
+  };
+  const ic = iconColors[account.type] || { bg: "#f1f5f9", stroke: "#64748b" };
+  return (
+    <div style={{
+      minWidth: 130, background: "#f8fafc", borderRadius: 10,
+      padding: "10px 12px", border: "0.5px solid #e2e8f0", flexShrink: 0
+    }} className="dark:bg-gray-700 dark:border-gray-600">
+      <div style={{
+        width: 28, height: 28, background: ic.bg, borderRadius: 7,
+        display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 6
+      }}>
+        <Wallet style={{ width: 13, height: 13, color: ic.stroke }} />
+      </div>
+      <p style={{ fontSize: 10, color: "#94a3b8", margin: "0 0 2px" }}>{account.name}</p>
+      <p style={{ fontSize: 13, fontWeight: 500, color: balance < 0 ? "#dc2626" : "#1e293b", margin: 0 }}
+         className="dark:text-white">
+        {hidden ? "R$ ••••" : fmt(balance)}
+      </p>
+    </div>
+  );
+}
 
 export default function Home() {
   const { user } = useAuth();
@@ -34,13 +111,12 @@ export default function Home() {
   const queryClient = useQueryClient();
   const [showReferralModal, setShowReferralModal] = useState(false);
   const [showReferralBanner, setShowReferralBanner] = useState(
-    () => localStorage.getItem('referral_banner_dismissed') !== 'true'
+    () => localStorage.getItem("referral_banner_dismissed") !== "true"
   );
 
-  // Modal de inatividade — aparece 3s após abrir o app se passou 2h
   useEffect(() => {
     if (isViewingSharedProfile) return;
-    const INACTIVITY_KEY = 'last_referral_shown';
+    const INACTIVITY_KEY = "last_referral_shown";
     const TWO_HOURS = 2 * 60 * 60 * 1000;
     const lastShown = localStorage.getItem(INACTIVITY_KEY);
     const now = Date.now();
@@ -54,214 +130,235 @@ export default function Home() {
   }, [isViewingSharedProfile]);
 
   const { data: accounts = [] } = useQuery({
-    queryKey: ['accounts', activeOwnerId],
+    queryKey: ["accounts", activeOwnerId],
     queryFn: async () => {
-      const { data, error } = await supabase.from('accounts').select('*').eq('user_id', activeOwnerId).order('name');
+      const { data, error } = await supabase.from("accounts").select("*").eq("user_id", activeOwnerId).order("name");
       if (error) throw error;
       return data;
     },
-    enabled: !!activeOwnerId
+    enabled: !!activeOwnerId,
   });
 
   const { data: transactions = [] } = useQuery({
-    queryKey: ['transactions', activeOwnerId],
+    queryKey: ["transactions", activeOwnerId],
     queryFn: async () => {
-      const { data, error } = await supabase.from('transactions').select('*').eq('user_id', activeOwnerId).order('date', { ascending: false });
+      const { data, error } = await supabase.from("transactions").select("*").eq("user_id", activeOwnerId).order("date", { ascending: false });
       if (error) throw error;
       return data;
     },
-    enabled: !!activeOwnerId
+    enabled: !!activeOwnerId,
   });
 
   const createTransactionMutation = useMutation({
     mutationFn: async (newTransaction) => {
-      const { data, error } = await supabase.from('transactions').insert([{
-        ...newTransaction, user_id: activeOwnerId, amount: parseFloat(newTransaction.amount)
+      const { data, error } = await supabase.from("transactions").insert([{
+        ...newTransaction, user_id: activeOwnerId, amount: parseFloat(newTransaction.amount),
       }]).select();
       if (error) throw error;
       return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['transactions'] });
-      queryClient.invalidateQueries({ queryKey: ['accounts'] });
+      queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["accounts"] });
       setShowTransactionForm(false);
-      toast.success('Transação adicionada!');
+      toast.success("Transação adicionada!");
     },
-    onError: (err) => toast.error('Erro ao salvar: ' + err.message)
+    onError: (err) => toast.error("Erro ao salvar: " + err.message),
   });
 
   const createTransferMutation = useMutation({
     mutationFn: async ({ fromAccountId, toAccountId, amount, date, description }) => {
-      const { error } = await supabase.from('transactions').insert([{
-        description: description || 'Transferência',
+      const { error } = await supabase.from("transactions").insert([{
+        description: description || "Transferência",
         amount: parseFloat(amount),
-        type: 'transfer',
-        account_id: fromAccountId,           // origem
-        transfer_account_id: toAccountId,    // destino
+        type: "transfer",
+        account_id: fromAccountId,
+        transfer_account_id: toAccountId,
         date,
         is_realized: true,
-        user_id: activeOwnerId
+        user_id: activeOwnerId,
       }]);
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      queryClient.invalidateQueries({ queryKey: ["transactions"] });
       setShowTransferForm(false);
-      toast.success('Transferência realizada!');
+      toast.success("Transferência realizada!");
     },
-    onError: (err) => toast.error('Erro: ' + err.message)
+    onError: (err) => toast.error("Erro: " + err.message),
   });
 
   const monthStart = startOfMonth(selectedDate);
   const monthEnd = endOfMonth(selectedDate);
 
   const monthTransactions = useMemo(() => {
-    return transactions.filter(t => {
-      if (t.type === 'transfer') return false;
+    return transactions.filter((t) => {
+      if (t.type === "transfer") return false;
       return isWithinInterval(parseISO(t.date), { start: monthStart, end: monthEnd });
     });
   }, [transactions, monthStart, monthEnd]);
 
   const kpis = useMemo(() => {
-    const investmentAccountIds = new Set(
-      accounts.filter(a => a.type === 'investment').map(a => a.id)
-    );
-
-    const nonInvestmentTx = monthTransactions.filter(
-      t => !investmentAccountIds.has(t.account_id)
-    );
-
-    const realized = nonInvestmentTx.filter(t => t.is_realized !== false);
-    const planned  = nonInvestmentTx.filter(t => t.is_realized === false);
-
-    const totalIncomeRealized  = realized.filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0);
-    const totalIncomePlanned   = planned.filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0);
-    const totalExpenseRealized = realized.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0);
-    const totalExpensePlanned  = planned.filter(t => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0);
-
+    const investmentAccountIds = new Set(accounts.filter((a) => a.type === "investment").map((a) => a.id));
+    const nonInvestmentTx = monthTransactions.filter((t) => !investmentAccountIds.has(t.account_id));
+    const realized = nonInvestmentTx.filter((t) => t.is_realized !== false);
+    const planned = nonInvestmentTx.filter((t) => t.is_realized === false);
+    const totalIncomeRealized  = realized.filter((t) => t.type === "income").reduce((s, t) => s + Number(t.amount), 0);
+    const totalIncomePlanned   = planned.filter((t) => t.type === "income").reduce((s, t) => s + Number(t.amount), 0);
+    const totalExpenseRealized = realized.filter((t) => t.type === "expense").reduce((s, t) => s + Number(t.amount), 0);
+    const totalExpensePlanned  = planned.filter((t) => t.type === "expense").reduce((s, t) => s + Number(t.amount), 0);
     return {
       totalIncome:     totalIncomeRealized + totalIncomePlanned,
       totalExpense:    totalExpenseRealized + totalExpensePlanned,
-      // Saldo Atual = só entradas realizadas do mês - saídas realizadas do mês
       currentBalance:  totalIncomeRealized - totalExpenseRealized,
-      // Previsão = considera planejados também
       forecastBalance: (totalIncomeRealized + totalIncomePlanned) - (totalExpenseRealized + totalExpensePlanned),
     };
   }, [monthTransactions, accounts]);
 
   const accountBalances = useMemo(() => {
     const balances = {};
-    accounts.forEach(acc => { balances[acc.id] = Number(acc.initial_balance) || 0; });
-
-    transactions.forEach(t => {
+    accounts.forEach((acc) => { balances[acc.id] = Number(acc.initial_balance) || 0; });
+    transactions.forEach((t) => {
       if (t.is_realized === false) return;
-      if (t.type === 'income' && t.account_id) {
-        balances[t.account_id] = (balances[t.account_id] || 0) + Number(t.amount);
-      } else if (t.type === 'expense' && t.account_id) {
-        balances[t.account_id] = (balances[t.account_id] || 0) - Number(t.amount);
-      } else if (t.type === 'transfer') {
-        // 1 registro: subtrai da origem, soma no destino
+      if (t.type === "income" && t.account_id) balances[t.account_id] = (balances[t.account_id] || 0) + Number(t.amount);
+      else if (t.type === "expense" && t.account_id) balances[t.account_id] = (balances[t.account_id] || 0) - Number(t.amount);
+      else if (t.type === "transfer") {
         if (t.account_id) balances[t.account_id] = (balances[t.account_id] || 0) - Number(t.amount);
         if (t.transfer_account_id) balances[t.transfer_account_id] = (balances[t.transfer_account_id] || 0) + Number(t.amount);
       }
     });
-
     return balances;
   }, [accounts, transactions]);
 
-  const regularAccounts = accounts.filter(a => a.type !== 'investment');
-  const investmentAccounts = accounts.filter(a => a.type === 'investment');
-  const totalBalance = regularAccounts.reduce((sum, acc) => sum + (accountBalances[acc.id] || 0), 0);
-  const totalInvested = investmentAccounts.reduce((sum, acc) => sum + (accountBalances[acc.id] || 0), 0);
-  const expenseCount = monthTransactions.filter(t => t.type === 'expense' && t.is_realized !== false).length;
-  const savingsRate = kpis.totalIncome > 0
+  const regularAccounts    = accounts.filter((a) => a.type !== "investment");
+  const investmentAccounts = accounts.filter((a) => a.type === "investment");
+  const totalBalance  = regularAccounts.reduce((s, a) => s + (accountBalances[a.id] || 0), 0);
+  const totalInvested = investmentAccounts.reduce((s, a) => s + (accountBalances[a.id] || 0), 0);
+  const expenseCount  = monthTransactions.filter((t) => t.type === "expense" && t.is_realized !== false).length;
+  const savingsRate   = kpis.totalIncome > 0
     ? Math.max(0, (((kpis.totalIncome - kpis.totalExpense) / kpis.totalIncome) * 100)).toFixed(0)
     : null;
   const recentTransactions = monthTransactions.slice(0, 5);
-  const fmt = (v) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 pb-24 transition-colors duration-200">
-      <div className="bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 dark:from-blue-700 dark:via-blue-800 dark:to-indigo-900 text-white">
-        <div className="px-5 pt-12 pb-4">
+
+      {/* ── HEADER COMPACTO ─────────────────────────────────── */}
+      <div className="bg-gradient-to-br from-blue-700 via-blue-800 to-indigo-900 text-white">
+        <div className="px-5 pt-12 pb-3">
           {isViewingSharedProfile && (
-            <p className="text-blue-200 text-xs font-medium mb-2">👁 Visualizando perfil compartilhado</p>
+            <p className="text-blue-300 text-xs font-medium mb-2">👁 Visualizando perfil compartilhado</p>
           )}
-          <div className="flex items-center gap-2 mb-1">
-            <p className="text-blue-200 text-sm font-medium">Saldo disponível</p>
-            <button onClick={toggle} className="p-1 bg-white/10 hover:bg-white/20 rounded-full transition-colors">
-              {hidden ? <EyeOff className="w-3.5 h-3.5 text-white/60" /> : <Eye className="w-3.5 h-3.5 text-white/60" />}
-            </button>
+
+          {/* Saldo + olho + perfil */}
+          <div className="flex items-start justify-between mb-1">
+            <div>
+              <div className="flex items-center gap-1.5 mb-1">
+                <p className="text-blue-300 text-xs font-medium tracking-wide uppercase">Saldo disponível</p>
+                <button onClick={toggle} className="p-0.5 rounded-full hover:bg-white/10 transition-colors">
+                  {hidden
+                    ? <EyeOff className="w-3 h-3 text-blue-300" />
+                    : <Eye className="w-3 h-3 text-blue-300" />}
+                </button>
+              </div>
+              <motion.p
+                key={String(hidden)}
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="text-3xl font-medium tracking-tight"
+              >
+                {hidden ? "R$ ••••••" : fmt(totalBalance)}
+              </motion.p>
+              {totalInvested > 0 && (
+                <p className="text-blue-300 text-xs mt-1 flex items-center gap-1">
+                  <PiggyBank className="w-3 h-3" />
+                  {hidden ? "+ R$ •••••• investido" : `+ ${fmt(totalInvested)} investido`}
+                </p>
+              )}
+            </div>
           </div>
-          <motion.h1 key={String(hidden)} initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }}
-            className="text-4xl font-bold mb-1 tracking-tight">
-            {hidden ? "R$ ••••••" : fmt(totalBalance)}
-          </motion.h1>
-          {totalInvested > 0 && (
-            <p className="text-blue-200 text-sm mb-4 flex items-center gap-1">
-              <PiggyBank className="w-3.5 h-3.5" />
-              {hidden ? "+ R$ •••••• investido" : `+ ${fmt(totalInvested)} investido`}
-            </p>
-          )}
-          <div className="mb-4">
+
+          {/* Seletor de mês compacto */}
+          <div className="mt-3">
             <MonthSelector selectedDate={selectedDate} onChange={setSelectedDate} />
           </div>
         </div>
 
+        {/* Botões de ação */}
         {canAdd && (
-          <div className="flex gap-2 px-5 pb-6">
-            <motion.button whileTap={{ scale: 0.95 }}
-              onClick={() => { setInitialType("income"); setShowTransactionForm(true); }}
-              className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-white/10 backdrop-blur-sm rounded-xl text-white text-sm font-medium">
-              <TrendingUp className="w-4 h-4" /> Entrada
-            </motion.button>
-            <motion.button whileTap={{ scale: 0.95 }}
-              onClick={() => { setInitialType("expense"); setShowTransactionForm(true); }}
-              className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-white/10 backdrop-blur-sm rounded-xl text-white text-sm font-medium">
-              <TrendingDown className="w-4 h-4" /> Saída
-            </motion.button>
-            <motion.button whileTap={{ scale: 0.95 }} onClick={() => setShowTransferForm(true)}
-              className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-white/10 backdrop-blur-sm rounded-xl text-white text-sm font-medium">
-              <ArrowLeftRight className="w-4 h-4" /> Transferir
-            </motion.button>
+          <div className="flex gap-2 px-5 py-3">
+            {[
+              { label: "Entrada", icon: TrendingUp, type: "income", action: () => { setInitialType("income"); setShowTransactionForm(true); } },
+              { label: "Saída",   icon: TrendingDown, type: "expense", action: () => { setInitialType("expense"); setShowTransactionForm(true); } },
+              { label: "Transferir", icon: ArrowLeftRight, type: "transfer", action: () => setShowTransferForm(true) },
+            ].map((btn) => (
+              <motion.button
+                key={btn.label}
+                whileTap={{ scale: 0.94 }}
+                onClick={btn.action}
+                className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-white/10 hover:bg-white/15 backdrop-blur-sm rounded-xl text-white text-xs font-medium border border-white/15 transition-colors"
+              >
+                <btn.icon className="w-3.5 h-3.5" />
+                {btn.label}
+              </motion.button>
+            ))}
           </div>
         )}
       </div>
 
-      <div className="px-5 -mt-4 relative z-10">
-        <div className="grid grid-cols-2 gap-3 mb-6">
-          <KPICard title="Entradas" value={kpis.totalIncome} type="income" delay={0.1}
-            navigateTo={`/Transactions?filter=income&month=${format(selectedDate, 'yyyy-MM')}`} />
-          <KPICard title="Saídas" value={kpis.totalExpense} type="expense" delay={0.2}
-            navigateTo={`/Transactions?filter=expense&month=${format(selectedDate, 'yyyy-MM')}`} />
-          <KPICard title="Saldo Atual" value={kpis.currentBalance} type="balance" subtitle="Realizado" delay={0.3}
-            navigateTo={`/Transactions?filter=realized&month=${format(selectedDate, 'yyyy-MM')}`} />
-          <KPICard title="Previsão" value={kpis.forecastBalance} type="forecast" subtitle="Com planejado" delay={0.4}
-            navigateTo={`/Transactions?filter=planned&month=${format(selectedDate, 'yyyy-MM')}`} />
+      {/* ── CONTEÚDO ─────────────────────────────────────────── */}
+      <div className="px-4 pt-4 space-y-3">
+
+        {/* KPIs 2x2 */}
+        <div className="grid grid-cols-2 gap-2.5">
+          <KPICardNew
+            title="Entradas" value={kpis.totalIncome} color="green"
+            bar barMax={kpis.totalIncome} hidden={hidden}
+            navigateTo={`/Transactions?filter=income&month=${format(selectedDate, "yyyy-MM")}`}
+          />
+          <KPICardNew
+            title="Saídas" value={kpis.totalExpense} color="red"
+            bar barMax={kpis.totalIncome} hidden={hidden}
+            navigateTo={`/Transactions?filter=expense&month=${format(selectedDate, "yyyy-MM")}`}
+          />
+          <KPICardNew
+            title="Saldo Atual" value={kpis.currentBalance}
+            color={kpis.currentBalance >= 0 ? "blue" : "red"}
+            subtitle="Realizado" hidden={hidden}
+            navigateTo={`/Transactions?filter=realized&month=${format(selectedDate, "yyyy-MM")}`}
+          />
+          <KPICardNew
+            title="Previsão" value={kpis.forecastBalance}
+            color={kpis.forecastBalance >= 0 ? "violet" : "red"}
+            subtitle="Com planejado" hidden={hidden}
+            navigateTo={`/Transactions?filter=planned&month=${format(selectedDate, "yyyy-MM")}`}
+          />
         </div>
 
-        {/* Banner de indicação */}
+        {/* Banner indicação */}
         {showReferralBanner && !isViewingSharedProfile && (
           <ReferralBanner
             onOpen={() => setShowReferralModal(true)}
             onDismiss={() => {
               setShowReferralBanner(false);
-              localStorage.setItem('referral_banner_dismissed', 'true');
+              localStorage.setItem("referral_banner_dismissed", "true");
             }}
           />
         )}
 
-        {/* Botão Relatórios */}
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.45 }} className="mb-6">
-          <Link to={createPageUrl("Reports")}>
-            <div className="flex items-center gap-4 bg-white dark:bg-gray-800 rounded-2xl px-4 py-3.5 border border-gray-100 dark:border-gray-700 shadow-sm hover:shadow-md transition-shadow">
-              <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-700 flex items-center justify-center flex-shrink-0">
-                <BarChart2 className="w-5 h-5 text-slate-600 dark:text-slate-300" />
+        {/* Relatórios */}
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
+          <Link to={createPageUrl("Reports")} style={{ textDecoration: "none" }}>
+            <div className="flex items-center gap-3 bg-white dark:bg-gray-800 rounded-2xl px-4 py-3 border border-gray-100 dark:border-gray-700">
+              <div className="w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-700 flex items-center justify-center flex-shrink-0">
+                <BarChart2 className="w-4 h-4 text-slate-500 dark:text-slate-300" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-gray-900 dark:text-white">Ver Relatórios</p>
-                <p className="text-xs text-gray-400 dark:text-gray-500 truncate">
-                  {expenseCount > 0 ? `${expenseCount} gastos${savingsRate !== null ? ` · ${savingsRate}% poupado` : ""} este mês` : "Análise de gastos e metas"}
+                <p className="text-sm font-medium text-gray-900 dark:text-white">Ver Relatórios</p>
+                <p className="text-xs text-gray-400 truncate">
+                  {expenseCount > 0
+                    ? `${expenseCount} gastos${savingsRate !== null ? ` · ${savingsRate}% poupado` : ""} este mês`
+                    : "Análise de gastos e metas"}
                 </p>
               </div>
               <ChevronRight className="w-4 h-4 text-gray-300 dark:text-gray-600 flex-shrink-0" />
@@ -271,76 +368,92 @@ export default function Home() {
 
         {/* Contas */}
         {accounts.length > 0 && (
-          <div className="mb-6">
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
+            className="bg-white dark:bg-gray-800 rounded-2xl px-4 py-3 border border-gray-100 dark:border-gray-700">
             <div className="flex items-center justify-between mb-3">
-              <h2 className="text-lg font-bold text-gray-900 dark:text-white">Minhas Contas</h2>
-              <Link to={createPageUrl("Accounts")} className="flex items-center gap-1 text-sm text-blue-600 font-medium">
-                Ver todas <ChevronRight className="w-4 h-4" />
+              <p className="text-sm font-medium text-gray-900 dark:text-white">Minhas contas</p>
+              <Link to={createPageUrl("Accounts")} className="text-xs text-blue-600 font-medium flex items-center gap-0.5">
+                Ver todas <ChevronRight className="w-3.5 h-3.5" />
               </Link>
             </div>
-            <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1">
-              {regularAccounts.map((account, index) => (
-                <AccountCard key={account.id} account={account} balance={accountBalances[account.id] || 0} delay={index * 0.1} />
+            <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+              {regularAccounts.map((acc) => (
+                <AccountCardNew key={acc.id} account={acc} balance={accountBalances[acc.id] || 0} hidden={hidden} />
               ))}
             </div>
             {investmentAccounts.length > 0 && (
               <div className="mt-3">
-                <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-2 flex items-center gap-1">
-                  <PiggyBank className="w-3.5 h-3.5" /> Investimentos
+                <p className="text-xs font-medium text-gray-400 dark:text-gray-500 mb-2 flex items-center gap-1">
+                  <PiggyBank className="w-3 h-3" /> Investimentos
                 </p>
-                <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1">
-                  {investmentAccounts.map((account, index) => (
-                    <AccountCard key={account.id} account={account} balance={accountBalances[account.id] || 0} delay={index * 0.1} />
+                <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+                  {investmentAccounts.map((acc) => (
+                    <AccountCardNew key={acc.id} account={acc} balance={accountBalances[acc.id] || 0} hidden={hidden} />
                   ))}
                 </div>
               </div>
             )}
-          </div>
+          </motion.div>
         )}
 
         {/* Transações recentes */}
-        <div>
+        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}
+          className="bg-white dark:bg-gray-800 rounded-2xl px-4 py-3 border border-gray-100 dark:border-gray-700">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-lg font-bold text-gray-900 dark:text-white">Transações Recentes</h2>
-            <Link to={createPageUrl("Transactions")} className="flex items-center gap-1 text-sm text-blue-600 font-medium">
-              Ver todas <ChevronRight className="w-4 h-4" />
+            <p className="text-sm font-medium text-gray-900 dark:text-white">Transações recentes</p>
+            <Link to={createPageUrl("Transactions")} className="text-xs text-blue-600 font-medium flex items-center gap-0.5">
+              Ver todas <ChevronRight className="w-3.5 h-3.5" />
             </Link>
           </div>
           {recentTransactions.length > 0 ? (
-            <div className="space-y-3">
+            <div className="space-y-1">
               {recentTransactions.map((transaction, index) => (
-                <TransactionItem key={transaction.id} transaction={transaction} delay={index * 0.05} />
+                <TransactionItem key={transaction.id} transaction={transaction} delay={index * 0.04} compact />
               ))}
             </div>
           ) : (
-            <EmptyState icon={Wallet} title="Nenhuma transação"
+            <EmptyState
+              icon={Wallet}
+              title="Nenhuma transação"
               description="Adicione sua primeira entrada ou saída."
-              action="Adicionar Transação" onAction={() => setShowTransactionForm(true)} />
+              action="Adicionar"
+              onAction={() => setShowTransactionForm(true)}
+            />
           )}
-        </div>
+        </motion.div>
+
       </div>
 
+      {/* FAB */}
       {canAdd && (
-        <motion.button whileTap={{ scale: 0.9 }} onClick={() => setShowTransactionForm(true)}
-          className="fixed bottom-24 right-5 w-14 h-14 bg-blue-600 text-white rounded-full shadow-lg shadow-blue-600/30 flex items-center justify-center z-40">
-          <Plus className="w-6 h-6" />
+        <motion.button
+          whileTap={{ scale: 0.9 }}
+          onClick={() => setShowTransactionForm(true)}
+          className="fixed bottom-24 right-5 w-13 h-13 bg-blue-700 text-white rounded-full shadow-lg shadow-blue-700/30 flex items-center justify-center z-40"
+          style={{ width: 52, height: 52 }}
+        >
+          <Plus className="w-5 h-5" />
         </motion.button>
       )}
 
       <AnimatePresence>
         {showTransactionForm && (
-          <TransactionForm accounts={accounts}
+          <TransactionForm
+            accounts={accounts}
             initialType={initialType}
             onSubmit={(data) => createTransactionMutation.mutate(data)}
-            onClose={() => setShowTransactionForm(false)} />
+            onClose={() => setShowTransactionForm(false)}
+          />
         )}
       </AnimatePresence>
 
       <AnimatePresence>
         {showTransferForm && (
-          <TransferForm accounts={accounts}
+          <TransferForm
+            accounts={accounts}
             onSubmit={(data) => createTransferMutation.mutate(data)}
-            onClose={() => setShowTransferForm(false)} />
+            onClose={() => setShowTransferForm(false)}
+          />
         )}
       </AnimatePresence>
 
