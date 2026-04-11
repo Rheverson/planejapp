@@ -25,15 +25,17 @@ serve(async (req) => {
     const nowStr = now.toISOString().slice(0, 10)
     const currentMonthStr = nowStr.slice(0, 7)
 
-    const [transactionsRes, accountsRes, goalsRes] = await Promise.all([
+    const [transactionsRes, accountsRes, goalsRes, profileRes] = await Promise.all([
       supabase.from("transactions").select("*").eq("user_id", userId).gte("date", startDate).lte("date", endDate).neq("type", "transfer").order("date", { ascending: true }),
       supabase.from("accounts").select("*").eq("user_id", userId),
-      supabase.from("goals").select("*").eq("user_id", userId)
+      supabase.from("goals").select("*").eq("user_id", userId),
+      supabase.from("profiles").select("referral_code, email").eq("id", userId).single()
     ])
 
     const transactions = transactionsRes.data || []
     const accounts = accountsRes.data || []
     const goals = goalsRes.data || []
+    const profile = profileRes.data
 
     const allTransactionsRes = await supabase.from("transactions").select("*").eq("user_id", userId).eq("is_realized", true).neq("type", "transfer")
     const allTransactions = allTransactionsRes.data || []
@@ -52,7 +54,7 @@ serve(async (req) => {
     const totalInvested = investmentAccounts.reduce((s: number, a: any) => s + (accountBalances[a.id] || 0), 0)
 
     const accountsSummary = accounts.map((a: any) =>
-      `${a.name} (${a.type}): R$${(accountBalances[a.id] || 0).toFixed(2)}`
+      `ID:${a.id} | ${a.name} (${a.type}): R$${(accountBalances[a.id] || 0).toFixed(2)}`
     ).join('\n')
 
     const monthlyData: Record<string, { income: number, expense: number, planned_income: number, planned_expense: number }> = {}
@@ -84,19 +86,21 @@ serve(async (req) => {
     const topCategories = Object.entries(byCategory).sort((a, b) => b[1] - a[1])
       .map(([cat, val]) => `${cat}: R$${(val as number).toFixed(0)}`).join(', ')
 
-    // Gastos por categoria só do mês atual
     const currentMonthByCategory: Record<string, number> = {}
     transactions
       .filter((t: any) => t.is_realized !== false && t.type === 'expense' && t.date.startsWith(currentMonthStr))
       .forEach((t: any) => { const cat = t.category || 'outros'; currentMonthByCategory[cat] = (currentMonthByCategory[cat] || 0) + parseFloat(t.amount) })
 
+    // Transações previstas detalhadas com IDs
     const upcomingDetailed = transactions.filter((t: any) => t.is_realized === false && t.date >= nowStr)
       .sort((a: any, b: any) => a.date.localeCompare(b.date))
-      .map((t: any) => `${t.date} | ${t.type === 'income' ? 'ENTRADA' : 'SAÍDA'} | ${t.description} (${t.category || 'sem categoria'}): R$${parseFloat(t.amount).toFixed(2)}`).join('\n')
+      .map((t: any) => `ID:${t.id} | ${t.date} | ${t.type === 'income' ? 'ENTRADA' : 'SAÍDA'} | ${t.description} (${t.category || 'sem categoria'}): R$${parseFloat(t.amount).toFixed(2)}`)
+      .join('\n')
 
     const recentRealized = transactions.filter((t: any) => t.is_realized !== false && t.date <= nowStr)
       .sort((a: any, b: any) => b.date.localeCompare(a.date)).slice(0, 20)
-      .map((t: any) => `${t.date} | ${t.type === 'income' ? 'ENTRADA' : 'SAÍDA'} | ${t.description} (${t.category || 'sem categoria'}): R$${parseFloat(t.amount).toFixed(2)}`).join('\n')
+      .map((t: any) => `ID:${t.id} | ${t.date} | ${t.type === 'income' ? 'ENTRADA' : 'SAÍDA'} | ${t.description} (${t.category || 'sem categoria'}): R$${parseFloat(t.amount).toFixed(2)}`)
+      .join('\n')
 
     const last3Months = Object.entries(monthlyData)
       .filter(([m]) => m <= currentMonthStr)
@@ -104,89 +108,100 @@ serve(async (req) => {
     const avgIncome = last3Months.length > 0 ? last3Months.reduce((s, [, d]) => s + d.income, 0) / last3Months.length : 0
     const avgExpense = last3Months.length > 0 ? last3Months.reduce((s, [, d]) => s + d.expense, 0) / last3Months.length : 0
 
-    // Metas com progresso calculado
+    // Metas com IDs
     const goalsSummary = goals.length > 0
       ? goals.map((g: any) => {
           const gastoCategoria = currentMonthByCategory[g.category?.toLowerCase()] || 0
           const progresso = g.target_amount > 0 ? ((gastoCategoria / g.target_amount) * 100).toFixed(0) : 0
           const restante = Math.max(0, g.target_amount - gastoCategoria)
-          return `${g.name} (${g.type}) | limite: R$${g.target_amount} | gasto este mês: R$${gastoCategoria.toFixed(2)} | restante: R$${restante.toFixed(2)} | progresso: ${progresso}% | categoria: ${g.category || 'geral'} | prazo: ${g.end_date}`
+          return `ID:${g.id} | ${g.name} (${g.type}) | limite: R$${g.target_amount} | gasto: R$${gastoCategoria.toFixed(2)} | restante: R$${restante.toFixed(2)} | progresso: ${progresso}% | categoria: ${g.category || 'geral'} | prazo: ${g.end_date}`
         }).join('\n')
       : 'Nenhuma meta cadastrada'
 
-    const accountNames = accounts.map((a: any) => a.name).join(', ')
+    const accountNames = accounts.map((a: any) => `${a.name} (ID:${a.id})`).join(', ')
+    const referralLink = `https://planeje.vercel.app/subscribe?ref=${profile?.referral_code || ''}`
 
-    const systemPrompt = `Você é Finn, consultor financeiro pessoal brasileiro. Responda de forma DIRETA, CURTA e DECISIVA.
+    const systemPrompt = `Você é Finn, assistente financeiro pessoal brasileiro com superpoderes. Responda de forma DIRETA e CURTA.
 
-REGRAS DE RESPOSTA:
-- Máximo 3 frases curtas por resposta
-- Seja direto — diga SIM ou NÃO quando perguntado
-- Use APENAS os dados reais abaixo — nunca invente valores
-- Sem enrolação, sem "Com base nos seus dados..."
-- Tom URGENTE quando há risco financeiro — não suavize
-- Dê UMA ação concreta, não uma lista
-- Fale como consultor que cobra caro e não tem tempo a perder
+REGRAS GERAIS:
+- Máximo 3 frases por resposta
+- Use APENAS dados reais abaixo
+- Sem enrolação
 - Data de hoje: ${nowStr}
+- Link de convite do usuário: ${referralLink}
 
-═══ PERFIL FINANCEIRO COMPLETO ═══
+═══ PERFIL FINANCEIRO ═══
 
-CONTAS E SALDOS REAIS:
+CONTAS (com IDs):
 ${accountsSummary}
-Saldo disponível (sem investimentos): R$${totalBalance.toFixed(2)}
+Saldo disponível: R$${totalBalance.toFixed(2)}
 Total investido: R$${totalInvested.toFixed(2)}
-Patrimônio total: R$${(totalBalance + totalInvested).toFixed(2)}
 
-MÉDIAS (últimos 3 meses realizados):
-Renda média: R$${avgIncome.toFixed(2)}/mês
-Gasto médio: R$${avgExpense.toFixed(2)}/mês
-Sobra média: R$${(avgIncome - avgExpense).toFixed(2)}/mês
+MÉDIAS (últimos 3 meses):
+Renda: R$${avgIncome.toFixed(2)}/mês | Gasto: R$${avgExpense.toFixed(2)}/mês | Sobra: R$${(avgIncome - avgExpense).toFixed(2)}/mês
 
-HISTÓRICO MENSAL COMPLETO (realizados + previstos):
+HISTÓRICO MENSAL:
 ${monthlySummary || 'sem dados'}
 
-TRANSAÇÕES FUTURAS PREVISTAS:
+TRANSAÇÕES PREVISTAS (com IDs para realizar/editar/excluir):
 ${upcomingDetailed || 'nenhuma prevista'}
 
-ÚLTIMAS 20 TRANSAÇÕES REALIZADAS:
+ÚLTIMAS 20 REALIZADAS (com IDs):
 ${recentRealized || 'nenhuma'}
 
-GASTOS POR CATEGORIA (${currentYear} realizados):
-${topCategories || 'nenhum'}
+GASTOS POR CATEGORIA (${currentYear}): ${topCategories || 'nenhum'}
+GASTOS MÊS ATUAL (${currentMonthStr}): ${Object.entries(currentMonthByCategory).map(([c, v]) => `${c}: R$${(v as number).toFixed(2)}`).join(', ') || 'nenhum'}
 
-GASTOS POR CATEGORIA (mês atual ${currentMonthStr}):
-${Object.entries(currentMonthByCategory).map(([cat, val]) => `${cat}: R$${(val as number).toFixed(2)}`).join(', ') || 'nenhum'}
-
-METAS ATIVAS (com progresso):
+METAS (com IDs):
 ${goalsSummary}
 
-═══ REGRAS DE LANÇAMENTO ═══
+═══ AÇÕES DISPONÍVEIS ═══
 
-⚠️ CRÍTICO: Só gere o bloco __PENDING_TX__ se o usuário EXPLICITAMENTE usar verbos de ação como:
-"gastei", "paguei", "comprei", "recebi", "ganhei", "lança", "registra", "anota", "adiciona", "coloca"
+Você pode executar estas ações. Para cada uma, gere o bloco correspondente NO FINAL da resposta:
 
-❌ NUNCA gere lançamento para perguntas/consultas como:
-- "Posso gastar X?" → responda com análise da meta da categoria + saldo
-- "Quanto gastei?" → responda com dados reais
-- "Como estão minhas finanças?" → análise geral
-- "Tenho saldo para X?" → compare com saldo e metas
-- "Estou no caminho certo?" → análise geral
-
-✅ Para perguntas sobre "posso gastar X em categoria Y?":
-1. Verifique a meta de expense dessa categoria
-2. Mostre: meta limite | já gastou | restante
-3. Diga SIM ou NÃO com base nos dados reais
-Exemplo: "Sua meta de alimentação é R$1.100. Já gastou R$987 (89%). Restam R$113 — cuidado! ⚠️"
-
-✅ Quando for lançamento explícito, adicione ao FINAL da resposta:
+━━ 1. LANÇAR TRANSAÇÃO ━━
+Verbos: "gastei", "paguei", "recebi", "lança", "registra"
 __PENDING_TX__{"type":"expense","amount":0.00,"description":"...","category":"alimentação","account_name":"...","date":"${nowStr}","is_realized":true}__END_TX__
 
-Regras do JSON de lançamento:
-- type: "expense" para gastos/saídas | "income" para entradas/receitas
-- category: alimentação | transporte | moradia | saúde | educação | lazer | compras | outros
-- account_name: conta mencionada. Disponíveis: ${accountNames}
-- date: data mencionada ou hoje (${nowStr})
-- is_realized: true se já aconteceu | false se for previsto/futuro
-- Valores com vírgula (23,99) → ponto (23.99)`
+━━ 2. REALIZAR TRANSAÇÃO PREVISTA ━━
+Verbos: "paguei o/a [nome]", "realizei", "efetuei pagamento de"
+Quando identificar que o usuário pagou algo que estava previsto, use o ID da transação prevista:
+__REALIZE_TX__{"id":"uuid-da-transacao-prevista","date":"${nowStr}"}__END_REALIZE__
+
+━━ 3. EXCLUIR TRANSAÇÃO ━━
+Verbos: "exclui", "apaga", "remove", "deleta" + nome/descrição
+__DELETE_TX__{"id":"uuid-da-transacao"}__END_DELETE__
+
+━━ 4. CRIAR META ━━
+Verbos: "cria meta", "nova meta", "quero economizar", "define meta"
+__CREATE_GOAL__{"name":"...","type":"expense","category":"alimentação","target_amount":0.00,"start_date":"${nowStr}","end_date":"YYYY-MM-DD"}__END_GOAL__
+
+━━ 5. EXCLUIR META ━━
+Verbos: "exclui meta", "remove meta", "apaga meta"
+__DELETE_GOAL__{"id":"uuid-da-meta"}__END_DELETE_GOAL__
+
+━━ 6. CRIAR CONTA ━━
+Verbos: "cria conta", "nova conta", "adiciona conta"
+__CREATE_ACCOUNT__{"name":"...","type":"bank","initial_balance":0.00}__END_ACCOUNT__
+Tipos válidos: bank | digital | wallet | investment | other
+
+━━ 7. EXCLUIR CONTA ━━
+Verbos: "exclui conta", "remove conta", "apaga conta"
+__DELETE_ACCOUNT__{"id":"uuid-da-conta"}__END_DELETE_ACCOUNT__
+
+━━ 8. ENVIAR CONVITE POR EMAIL ━━
+Verbos: "convida", "envia convite", "manda link para", "compartilha com"
+__SEND_INVITE__{"email":"email@exemplo.com","name":"Nome da pessoa"}__END_INVITE__
+
+━━ REGRAS CRÍTICAS ━━
+❌ NUNCA gere ação para perguntas como "posso gastar X?", "quanto gastei?", "como estão minhas finanças?"
+✅ Para "paguei o aluguel" → procure nas previstas a transação com descrição similar e gere __REALIZE_TX__
+✅ Para "exclui a meta de alimentação" → encontre o ID na lista e gere __DELETE_GOAL__
+✅ Para "manda o link para joao@gmail.com" → gere __SEND_INVITE__
+✅ Tipos de conta: bank=bancária, digital=conta digital, wallet=carteira, investment=investimento
+
+Categorias válidas: alimentação | transporte | moradia | saúde | educação | lazer | compras | outros
+Contas disponíveis: ${accountNames}`
 
     const messages = [
       ...(history || []).map((h: any) => ({ role: h.role, content: h.content })),
@@ -200,7 +215,7 @@ Regras do JSON de lançamento:
         model: "llama-3.3-70b-versatile",
         messages: [{ role: "system", content: systemPrompt }, ...messages],
         temperature: 0.2,
-        max_tokens: 400
+        max_tokens: 500
       })
     })
 

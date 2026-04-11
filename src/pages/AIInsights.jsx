@@ -9,12 +9,12 @@ import {
   Sparkles, Send, X, Check, AlertCircle,
   TrendingUp, TrendingDown, Wallet, MessageCircle,
   BarChart2, RefreshCw, Clock, ChevronDown, ChevronUp,
-  CheckCircle2, AlertTriangle, Info, PiggyBank, Calendar
+  CheckCircle2, AlertTriangle, Info, PiggyBank, Calendar,
+  Target, Building2, Mail, Trash2, CheckCheck
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-// ── Constantes ─────────────────────────────────────────────
 const NAV_HEIGHT = 68;
 
 const QUICK_QUESTIONS = [
@@ -63,94 +63,210 @@ const months = [
 const currentYear = new Date().getFullYear();
 const years = Array.from({ length: 3 }, (_, i) => currentYear - i);
 
-// ── Helpers ────────────────────────────────────────────────
-function parsePendingTx(content) {
+// ── Parsers ────────────────────────────────────────────────
+function parseBlock(content, tag, endTag) {
   try {
-    const match = content?.match(/__PENDING_TX__(.*?)__END_TX__/s);
+    const match = content?.match(new RegExp(`${tag}(.*?)${endTag}`, 's'));
     if (match) return JSON.parse(match[1]);
   } catch {}
   return null;
 }
 
+function parsePendingTx(content)    { return parseBlock(content, '__PENDING_TX__', '__END_TX__') }
+function parseRealizeTx(content)    { return parseBlock(content, '__REALIZE_TX__', '__END_REALIZE__') }
+function parseDeleteTx(content)     { return parseBlock(content, '__DELETE_TX__', '__END_DELETE__') }
+function parseCreateGoal(content)   { return parseBlock(content, '__CREATE_GOAL__', '__END_GOAL__') }
+function parseDeleteGoal(content)   { return parseBlock(content, '__DELETE_GOAL__', '__END_DELETE_GOAL__') }
+function parseCreateAccount(content){ return parseBlock(content, '__CREATE_ACCOUNT__', '__END_ACCOUNT__') }
+function parseDeleteAccount(content){ return parseBlock(content, '__DELETE_ACCOUNT__', '__END_DELETE_ACCOUNT__') }
+function parseSendInvite(content)   { return parseBlock(content, '__SEND_INVITE__', '__END_INVITE__') }
+
 function cleanContent(content) {
-  return content?.replace(/__PENDING_TX__.*?__END_TX__/s, '').trim() || '';
+  return content
+    ?.replace(/__PENDING_TX__.*?__END_TX__/s, '')
+    ?.replace(/__REALIZE_TX__.*?__END_REALIZE__/s, '')
+    ?.replace(/__DELETE_TX__.*?__END_DELETE__/s, '')
+    ?.replace(/__CREATE_GOAL__.*?__END_GOAL__/s, '')
+    ?.replace(/__DELETE_GOAL__.*?__END_DELETE_GOAL__/s, '')
+    ?.replace(/__CREATE_ACCOUNT__.*?__END_ACCOUNT__/s, '')
+    ?.replace(/__DELETE_ACCOUNT__.*?__END_DELETE_ACCOUNT__/s, '')
+    ?.replace(/__SEND_INVITE__.*?__END_INVITE__/s, '')
+    ?.trim() || '';
 }
 
 const fmt = (v) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v || 0);
 
-// ── Card de confirmação ────────────────────────────────────
-function ConfirmCard({ pendingTx, onConfirm, onCancel, confirmLoading }) {
-  if (!pendingTx) return null;
-  const isTransfer = pendingTx.intent === 'transfer';
+// ── Card de confirmação universal ──────────────────────────
+function ActionCard({ action, onConfirm, onCancel, confirmLoading }) {
+  if (!action) return null;
+
+  const configs = {
+    tx: {
+      icon: action.type === 'expense' ? TrendingDown : TrendingUp,
+      color: action.intent === 'transfer' ? 'text-blue-600' : action.type === 'expense' ? 'text-red-600' : 'text-emerald-600',
+      title: action.intent === 'transfer' ? 'Confirmar transferência' : 'Confirmar lançamento',
+      headerColor: 'from-violet-50 to-indigo-50 dark:from-violet-900/30 dark:to-indigo-900/30',
+      borderColor: 'border-violet-200 dark:border-violet-800',
+    },
+    realize: {
+      icon: CheckCheck,
+      color: 'text-emerald-600',
+      title: 'Realizar transação prevista',
+      headerColor: 'from-emerald-50 to-teal-50 dark:from-emerald-900/30 dark:to-teal-900/30',
+      borderColor: 'border-emerald-200 dark:border-emerald-800',
+    },
+    delete_tx: {
+      icon: Trash2,
+      color: 'text-red-600',
+      title: 'Excluir transação',
+      headerColor: 'from-red-50 to-rose-50 dark:from-red-900/30 dark:to-rose-900/30',
+      borderColor: 'border-red-200 dark:border-red-800',
+    },
+    create_goal: {
+      icon: Target,
+      color: 'text-violet-600',
+      title: 'Criar nova meta',
+      headerColor: 'from-violet-50 to-indigo-50 dark:from-violet-900/30 dark:to-indigo-900/30',
+      borderColor: 'border-violet-200 dark:border-violet-800',
+    },
+    delete_goal: {
+      icon: Trash2,
+      color: 'text-red-600',
+      title: 'Excluir meta',
+      headerColor: 'from-red-50 to-rose-50 dark:from-red-900/30 dark:to-rose-900/30',
+      borderColor: 'border-red-200 dark:border-red-800',
+    },
+    create_account: {
+      icon: Building2,
+      color: 'text-blue-600',
+      title: 'Criar nova conta',
+      headerColor: 'from-blue-50 to-indigo-50 dark:from-blue-900/30 dark:to-indigo-900/30',
+      borderColor: 'border-blue-200 dark:border-blue-800',
+    },
+    delete_account: {
+      icon: Trash2,
+      color: 'text-red-600',
+      title: 'Excluir conta',
+      headerColor: 'from-red-50 to-rose-50 dark:from-red-900/30 dark:to-rose-900/30',
+      borderColor: 'border-red-200 dark:border-red-800',
+    },
+    send_invite: {
+      icon: Mail,
+      color: 'text-blue-600',
+      title: 'Enviar convite por email',
+      headerColor: 'from-blue-50 to-indigo-50 dark:from-blue-900/30 dark:to-indigo-900/30',
+      borderColor: 'border-blue-200 dark:border-blue-800',
+    },
+  };
+
+  const cfg = configs[action._type] || configs.tx;
+  const Icon = cfg.icon;
 
   return (
     <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
-      <div className="bg-white dark:bg-gray-800 rounded-2xl border border-violet-200 dark:border-violet-800 overflow-hidden shadow-lg mx-1">
-        <div className="bg-gradient-to-r from-violet-50 to-indigo-50 dark:from-violet-900/30 dark:to-indigo-900/30 px-4 py-3 border-b border-violet-100 dark:border-violet-800 flex items-center gap-2">
-          <AlertCircle className="w-4 h-4 text-violet-600" />
-          <p className="text-sm font-semibold text-violet-700 dark:text-violet-300">
-            {isTransfer ? 'Confirmar transferência' : 'Confirmar lançamento'}
-          </p>
+      <div className={`bg-white dark:bg-gray-800 rounded-2xl border ${cfg.borderColor} overflow-hidden shadow-lg mx-1`}>
+        <div className={`bg-gradient-to-r ${cfg.headerColor} px-4 py-3 border-b ${cfg.borderColor} flex items-center gap-2`}>
+          <Icon className={`w-4 h-4 ${cfg.color}`} />
+          <p className={`text-sm font-semibold ${cfg.color}`}>{cfg.title}</p>
         </div>
         <div className="px-4 py-4 space-y-3">
-          <div className="flex justify-between items-center">
-            <span className="text-xs text-gray-500">Valor</span>
-            <span className={`text-xl font-bold ${isTransfer ? 'text-blue-600' : pendingTx.type === 'expense' ? 'text-red-600' : 'text-emerald-600'}`}>
-              {fmt(pendingTx.amount)}
-            </span>
-          </div>
-          {isTransfer ? (
+          {/* TX normal */}
+          {action._type === 'tx' && !action.intent && (
             <>
-              <div className="flex justify-between items-center">
-                <span className="text-xs text-gray-500">De</span>
-                <span className="text-sm font-medium text-gray-800 dark:text-gray-200 flex items-center gap-1"><Wallet className="w-3.5 h-3.5 text-gray-400" />{pendingTx.from_account}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-xs text-gray-500">Para</span>
-                <span className="text-sm font-medium text-gray-800 dark:text-gray-200 flex items-center gap-1"><Wallet className="w-3.5 h-3.5 text-gray-400" />{pendingTx.to_account}</span>
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="flex justify-between items-center">
-                <span className="text-xs text-gray-500">Tipo</span>
-                <span className={`text-sm font-semibold flex items-center gap-1 ${pendingTx.type === 'expense' ? 'text-red-600' : 'text-emerald-600'}`}>
-                  {pendingTx.type === 'expense' ? <><TrendingDown className="w-3.5 h-3.5" /> Saída</> : <><TrendingUp className="w-3.5 h-3.5" /> Entrada</>}
+              <Row label="Valor" value={<span className={`text-xl font-bold ${cfg.color}`}>{fmt(action.amount)}</span>} />
+              <Row label="Tipo" value={<span className={`text-sm font-semibold ${cfg.color}`}>{action.type === 'expense' ? '💸 Saída' : '💰 Entrada'}</span>} />
+              <Row label="Descrição" value={action.description} />
+              <Row label="Categoria" value={<span className="text-xs bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded-full capitalize">{action.category}</span>} />
+              {action.account_name && <Row label="Conta" value={action.account_name} />}
+              <Row label="Data" value={action.date} />
+              <Row label="Status" value={
+                <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${action.is_realized ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                  {action.is_realized ? '✅ Realizado' : '📋 Previsto'}
                 </span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-xs text-gray-500">Descrição</span>
-                <span className="text-sm font-medium text-gray-800 dark:text-gray-200">{pendingTx.description}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-xs text-gray-500">Categoria</span>
-                <span className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-2 py-1 rounded-full capitalize">{pendingTx.category}</span>
-              </div>
-              {pendingTx.account_name && (
-                <div className="flex justify-between items-center">
-                  <span className="text-xs text-gray-500">Conta</span>
-                  <span className="text-sm font-medium text-gray-800 dark:text-gray-200 flex items-center gap-1"><Wallet className="w-3.5 h-3.5 text-gray-400" />{pendingTx.account_name}</span>
-                </div>
-              )}
-              <div className="flex justify-between items-center">
-                <span className="text-xs text-gray-500">Status</span>
-                <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${pendingTx.is_realized ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
-                  {pendingTx.is_realized ? '✅ Realizado' : '📋 Previsto'}
-                </span>
-              </div>
+              } />
             </>
           )}
-          <div className="flex justify-between items-center">
-            <span className="text-xs text-gray-500">Data</span>
-            <span className="text-sm text-gray-700 dark:text-gray-300">{pendingTx.date}</span>
-          </div>
+          {/* Transferência */}
+          {action._type === 'tx' && action.intent === 'transfer' && (
+            <>
+              <Row label="Valor" value={<span className={`text-xl font-bold ${cfg.color}`}>{fmt(action.amount)}</span>} />
+              <Row label="De" value={action.from_account} />
+              <Row label="Para" value={action.to_account} />
+              <Row label="Data" value={action.date} />
+            </>
+          )}
+          {/* Realizar prevista */}
+          {action._type === 'realize' && (
+            <>
+              <Row label="Descrição" value={action.description} />
+              <Row label="Valor" value={<span className="text-lg font-bold text-emerald-600">{fmt(action.amount)}</span>} />
+              <Row label="Data realização" value={action.date} />
+              <p className="text-xs text-gray-400">A transação prevista será marcada como realizada.</p>
+            </>
+          )}
+          {/* Excluir TX */}
+          {action._type === 'delete_tx' && (
+            <>
+              <Row label="Descrição" value={action.description} />
+              <Row label="Valor" value={fmt(action.amount)} />
+              <p className="text-xs text-red-500 font-medium">⚠️ Esta ação não pode ser desfeita!</p>
+            </>
+          )}
+          {/* Criar meta */}
+          {action._type === 'create_goal' && (
+            <>
+              <Row label="Nome" value={action.name} />
+              <Row label="Tipo" value={action.type === 'expense' ? '📉 Limite de gasto' : action.type === 'income' ? '📈 Meta de renda' : '💹 Investimento'} />
+              <Row label="Categoria" value={action.category} />
+              <Row label="Valor" value={<span className="text-lg font-bold text-violet-600">{fmt(action.target_amount)}</span>} />
+              <Row label="Período" value={`${action.start_date} até ${action.end_date}`} />
+            </>
+          )}
+          {/* Excluir meta */}
+          {action._type === 'delete_goal' && (
+            <>
+              <Row label="Meta" value={action.name} />
+              <p className="text-xs text-red-500 font-medium">⚠️ Esta ação não pode ser desfeita!</p>
+            </>
+          )}
+          {/* Criar conta */}
+          {action._type === 'create_account' && (
+            <>
+              <Row label="Nome" value={action.name} />
+              <Row label="Tipo" value={
+                { bank: '🏦 Bancária', digital: '📱 Digital', wallet: '👛 Carteira', investment: '📈 Investimento', other: '📦 Outro' }[action.type] || action.type
+              } />
+              <Row label="Saldo inicial" value={fmt(action.initial_balance)} />
+            </>
+          )}
+          {/* Excluir conta */}
+          {action._type === 'delete_account' && (
+            <>
+              <Row label="Conta" value={action.name} />
+              <p className="text-xs text-red-500 font-medium">⚠️ Todas as transações desta conta serão mantidas, mas a conta será removida!</p>
+            </>
+          )}
+          {/* Enviar convite */}
+          {action._type === 'send_invite' && (
+            <>
+              <Row label="Para" value={action.email} />
+              {action.name && <Row label="Nome" value={action.name} />}
+              <p className="text-xs text-gray-400">O link de convite do Planeje será enviado por email.</p>
+            </>
+          )}
         </div>
         <div className="flex gap-2 px-4 pb-4">
           <button onClick={onCancel} className="flex-1 h-11 rounded-xl border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 text-sm font-medium flex items-center justify-center gap-2">
             <X className="w-4 h-4" /> Cancelar
           </button>
           <button onClick={onConfirm} disabled={confirmLoading}
-            className="flex-1 h-11 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 text-white text-sm font-semibold flex items-center justify-center gap-2 shadow-md disabled:opacity-60">
+            className={`flex-1 h-11 rounded-xl text-white text-sm font-semibold flex items-center justify-center gap-2 shadow-md disabled:opacity-60 ${
+              ['delete_tx','delete_goal','delete_account'].includes(action._type)
+                ? 'bg-red-500 hover:bg-red-600'
+                : action._type === 'realize'
+                ? 'bg-emerald-500 hover:bg-emerald-600'
+                : 'bg-gradient-to-r from-violet-600 to-indigo-600'
+            }`}>
             {confirmLoading
               ? <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }} className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full" />
               : <><Check className="w-4 h-4" /> Confirmar</>}
@@ -161,15 +277,24 @@ function ConfirmCard({ pendingTx, onConfirm, onCancel, confirmLoading }) {
   );
 }
 
+function Row({ label, value }) {
+  return (
+    <div className="flex justify-between items-center">
+      <span className="text-xs text-gray-500">{label}</span>
+      <span className="text-sm font-medium text-gray-800 dark:text-gray-200">{value}</span>
+    </div>
+  );
+}
+
 // ── Aba Chat ───────────────────────────────────────────────
 function ChatTab({ user }) {
-  const [messages, setMessages]         = useState([]);
-  const [input, setInput]               = useState("");
-  const [loading, setLoading]           = useState(false);
-  const [pendingTx, setPendingTx]       = useState(null);
+  const [messages, setMessages]             = useState([]);
+  const [input, setInput]                   = useState("");
+  const [loading, setLoading]               = useState(false);
+  const [pendingAction, setPendingAction]   = useState(null); // ação pendente universal
   const [confirmLoading, setConfirmLoading] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(true);
-  const [wizard, setWizard]             = useState(null);
+  const [wizard, setWizard]                 = useState(null);
 
   const endRef   = useRef(null);
   const inputRef = useRef(null);
@@ -179,27 +304,51 @@ function ChatTab({ user }) {
   useEffect(() => {
     setMessages([{
       role: 'assistant',
-      content: `Olá! Sou o **Finn** ✨\n\nSeu consultor financeiro pessoal. Posso responder perguntas e **registrar transações** por você.\n\nComo posso te ajudar hoje?`
+      content: `Olá! Sou o **Finn** ✨\n\nSeu assistente financeiro pessoal. Posso responder perguntas, **registrar transações**, **criar metas e contas**, **realizar pagamentos previstos** e muito mais!\n\nComo posso te ajudar hoje?`
     }]);
   }, [user?.id]);
 
-  useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, pendingTx]);
+  useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, pendingAction]);
 
-  // ── Wizard ───────────────────────────────────────────────
+  // ── Detecta ações na resposta da IA ──────────────────────
+  const detectAction = (reply) => {
+    const tx = parsePendingTx(reply);
+    if (tx) return { ...tx, _type: 'tx' };
+
+    const realize = parseRealizeTx(reply);
+    if (realize) return { ...realize, _type: 'realize' };
+
+    const deleteTx = parseDeleteTx(reply);
+    if (deleteTx) return { ...deleteTx, _type: 'delete_tx' };
+
+    const createGoal = parseCreateGoal(reply);
+    if (createGoal) return { ...createGoal, _type: 'create_goal' };
+
+    const deleteGoal = parseDeleteGoal(reply);
+    if (deleteGoal) return { ...deleteGoal, _type: 'delete_goal' };
+
+    const createAccount = parseCreateAccount(reply);
+    if (createAccount) return { ...createAccount, _type: 'create_account' };
+
+    const deleteAccount = parseDeleteAccount(reply);
+    if (deleteAccount) return { ...deleteAccount, _type: 'delete_account' };
+
+    const sendInvite = parseSendInvite(reply);
+    if (sendInvite) return { ...sendInvite, _type: 'send_invite' };
+
+    return null;
+  };
+
+  // ── Wizard de lançamento rápido ──────────────────────────
   const startWizard = async (type) => {
     setShowSuggestions(false);
-    setPendingTx(null);
+    setPendingAction(null);
     const { data: accs } = await supabase.from('accounts').select('id, name, type').eq('user_id', user.id);
     const accounts = accs || [];
     const label = type === 'expense' ? 'despesa' : type === 'income' ? 'entrada' : 'transferência';
     const emoji = type === 'expense' ? '💸' : type === 'income' ? '💰' : '🔄';
     setWizard({ type, step: 'amount', data: { _accounts: accounts } });
-    setMessages(prev => [...prev, {
-      role: 'assistant',
-      content: `${emoji} Vamos registrar uma **${label}**!\n\nQual o **valor**? (ex: 50 ou 32,90)`
-    }]);
+    setMessages(prev => [...prev, { role: 'assistant', content: `${emoji} Vamos registrar uma **${label}**!\n\nQual o **valor**?` }]);
   };
 
   const handleWizardInput = async (value) => {
@@ -213,39 +362,27 @@ function ChatTab({ user }) {
       }
       w.data.amount = amount;
       if (w.type === 'transfer') {
-        w.step = 'from_account';
-        setWizard(w);
+        w.step = 'from_account'; setWizard(w);
         const accList = w.data._accounts.map(a => `• **${a.name}**`).join('\n');
-        setMessages(prev => [...prev, { role: 'assistant', content: `De qual conta sai o dinheiro?\n\n${accList}` }]);
+        setMessages(prev => [...prev, { role: 'assistant', content: `De qual conta?\n\n${accList}` }]);
       } else {
-        w.step = 'description';
-        setWizard(w);
+        w.step = 'description'; setWizard(w);
         setMessages(prev => [...prev, { role: 'assistant', content: `O que foi? (ex: mercado, uber, salário)` }]);
       }
       return;
     }
 
     if (w.step === 'description') {
-      w.data.description = value;
-      w.step = 'category';
-      setWizard(w);
+      w.data.description = value; w.step = 'category'; setWizard(w);
       const catList = CATEGORIES.map(c => `• ${c.label}`).join('\n');
       setMessages(prev => [...prev, { role: 'assistant', content: `Qual categoria?\n\n${catList}` }]);
       return;
     }
 
     if (w.step === 'category') {
-      const found = CATEGORIES.find(c =>
-        c.value.includes(value.toLowerCase()) ||
-        c.label.toLowerCase().includes(value.toLowerCase())
-      );
-      if (!found) {
-        setMessages(prev => [...prev, { role: 'assistant', content: `❓ Digite: alimentação, transporte, moradia, saúde, educação, lazer, compras ou outros` }]);
-        return;
-      }
-      w.data.category = found.value;
-      w.step = 'account';
-      setWizard(w);
+      const found = CATEGORIES.find(c => c.value.includes(value.toLowerCase()) || c.label.toLowerCase().includes(value.toLowerCase()));
+      if (!found) { setMessages(prev => [...prev, { role: 'assistant', content: `❓ Digite: alimentação, transporte, moradia, saúde, educação, lazer, compras ou outros` }]); return; }
+      w.data.category = found.value; w.step = 'account'; setWizard(w);
       const accList = w.data._accounts.map(a => `• **${a.name}**`).join('\n');
       setMessages(prev => [...prev, { role: 'assistant', content: `Qual conta?\n\n${accList}` }]);
       return;
@@ -253,30 +390,19 @@ function ChatTab({ user }) {
 
     if (w.step === 'account') {
       const found = w.data._accounts.find(a => a.name.toLowerCase().includes(value.toLowerCase()));
-      if (!found) {
-        const accList = w.data._accounts.map(a => `• **${a.name}**`).join('\n');
-        setMessages(prev => [...prev, { role: 'assistant', content: `❓ Não encontrei. Escolha:\n\n${accList}` }]);
-        return;
-      }
-      w.data.account_id   = found.id;
-      w.data.account_name = found.name;
+      if (!found) { const accList = w.data._accounts.map(a => `• **${a.name}**`).join('\n'); setMessages(prev => [...prev, { role: 'assistant', content: `❓ Escolha:\n\n${accList}` }]); return; }
+      w.data.account_id = found.id; w.data.account_name = found.name;
       setWizard(null);
-      setPendingTx({ type: w.type, amount: w.data.amount, description: w.data.description, category: w.data.category, account_name: w.data.account_name, account_id: w.data.account_id, date: today, is_realized: true });
+      setPendingAction({ _type: 'tx', type: w.type, amount: w.data.amount, description: w.data.description, category: w.data.category, account_name: w.data.account_name, account_id: w.data.account_id, date: today, is_realized: true });
       setMessages(prev => [...prev, { role: 'assistant', content: `Confira os dados abaixo 👇` }]);
       return;
     }
 
     if (w.step === 'from_account') {
       const found = w.data._accounts.find(a => a.name.toLowerCase().includes(value.toLowerCase()));
-      if (!found) {
-        const accList = w.data._accounts.map(a => `• **${a.name}**`).join('\n');
-        setMessages(prev => [...prev, { role: 'assistant', content: `❓ Não encontrei. Escolha:\n\n${accList}` }]);
-        return;
-      }
-      w.data.from_account_id   = found.id;
-      w.data.from_account_name = found.name;
-      w.step = 'to_account';
-      setWizard(w);
+      if (!found) { const accList = w.data._accounts.map(a => `• **${a.name}**`).join('\n'); setMessages(prev => [...prev, { role: 'assistant', content: `❓ Escolha:\n\n${accList}` }]); return; }
+      w.data.from_account_id = found.id; w.data.from_account_name = found.name;
+      w.step = 'to_account'; setWizard(w);
       const remaining = w.data._accounts.filter(a => a.id !== found.id).map(a => `• **${a.name}**`).join('\n');
       setMessages(prev => [...prev, { role: 'assistant', content: `Para qual conta?\n\n${remaining}` }]);
       return;
@@ -284,21 +410,16 @@ function ChatTab({ user }) {
 
     if (w.step === 'to_account') {
       const found = w.data._accounts.find(a => a.name.toLowerCase().includes(value.toLowerCase()) && a.id !== w.data.from_account_id);
-      if (!found) {
-        const remaining = w.data._accounts.filter(a => a.id !== w.data.from_account_id).map(a => `• **${a.name}**`).join('\n');
-        setMessages(prev => [...prev, { role: 'assistant', content: `❓ Escolha:\n\n${remaining}` }]);
-        return;
-      }
-      w.data.to_account_id   = found.id;
-      w.data.to_account_name = found.name;
+      if (!found) { const remaining = w.data._accounts.filter(a => a.id !== w.data.from_account_id).map(a => `• **${a.name}**`).join('\n'); setMessages(prev => [...prev, { role: 'assistant', content: `❓ Escolha:\n\n${remaining}` }]); return; }
+      w.data.to_account_id = found.id; w.data.to_account_name = found.name;
       setWizard(null);
-      setPendingTx({ intent: 'transfer', amount: w.data.amount, from_account: w.data.from_account_name, to_account: w.data.to_account_name, from_account_id: w.data.from_account_id, to_account_id: w.data.to_account_id, date: today, description: 'Transferência' });
+      setPendingAction({ _type: 'tx', intent: 'transfer', amount: w.data.amount, from_account: w.data.from_account_name, to_account: w.data.to_account_name, from_account_id: w.data.from_account_id, to_account_id: w.data.to_account_id, date: today });
       setMessages(prev => [...prev, { role: 'assistant', content: `Confira os dados abaixo 👇` }]);
       return;
     }
   };
 
-  // ── Send ─────────────────────────────────────────────────
+  // ── Envio de mensagem ────────────────────────────────────
   const sendMessage = async (text) => {
     const message = (text || input).trim();
     if (!message || loading) return;
@@ -313,72 +434,152 @@ function ChatTab({ user }) {
         body: { userId: user.id, message, history, month: currentMonth }
       });
       if (err || result?.error) throw new Error(result?.error || 'Erro');
-      const reply  = result.reply;
-      const txData = parsePendingTx(reply);
-      if (txData) setPendingTx(txData); else setPendingTx(null);
+      const reply = result.reply;
+      const action = detectAction(reply);
+      if (action) setPendingAction(action); else setPendingAction(null);
       setMessages(prev => [...prev, { role: 'assistant', content: reply }]);
     } catch {
       setMessages(prev => [...prev, { role: 'assistant', content: '😕 Ocorreu um erro. Tente novamente!' }]);
     } finally { setLoading(false); }
   };
 
-  // ── Confirm ───────────────────────────────────────────────
-  const confirmTransaction = async () => {
-    if (!pendingTx || confirmLoading) return;
+  // ── Confirmar ação ────────────────────────────────────────
+  const confirmAction = async () => {
+    if (!pendingAction || confirmLoading) return;
     setConfirmLoading(true);
+    const action = pendingAction;
+
     try {
-      if (pendingTx.intent === 'transfer') {
-        const { error } = await supabase.from('transactions').insert({
-          user_id: user.id, type: 'transfer', amount: pendingTx.amount,
-          description: 'Transferência', account_id: pendingTx.from_account_id,
-          transfer_account_id: pendingTx.to_account_id, date: pendingTx.date, is_realized: true
-        });
-        if (error) throw error;
-        setPendingTx(null);
-        setMessages(prev => [...prev, { role: 'assistant', content: `✅ **Transferência lançada!**\n\n🔄 **${fmt(pendingTx.amount)}**\n🏦 ${pendingTx.from_account} → ${pendingTx.to_account}` }]);
-      } else {
-        let accountId = pendingTx.account_id || null;
-        if (!accountId && pendingTx.account_name) {
-          const { data: accs } = await supabase.from('accounts').select('id').eq('user_id', user.id).ilike('name', `%${pendingTx.account_name}%`).limit(1);
+      // TX normal
+      if (action._type === 'tx' && !action.intent) {
+        let accountId = action.account_id || null;
+        if (!accountId && action.account_name) {
+          const { data: accs } = await supabase.from('accounts').select('id').eq('user_id', user.id).ilike('name', `%${action.account_name}%`).limit(1);
           accountId = accs?.[0]?.id || null;
         }
         const { error } = await supabase.from('transactions').insert({
-          user_id: user.id, type: pendingTx.type, amount: pendingTx.amount,
-          description: pendingTx.description, category: pendingTx.category,
-          account_id: accountId, date: pendingTx.date || today, is_realized: pendingTx.is_realized ?? true
+          user_id: user.id, type: action.type, amount: action.amount,
+          description: action.description, category: action.category,
+          account_id: accountId, date: action.date || today, is_realized: action.is_realized ?? true
         });
         if (error) throw error;
-        setPendingTx(null);
-        setMessages(prev => [...prev, { role: 'assistant', content: `✅ **Lançado!**\n\n${pendingTx.type === 'expense' ? '💸' : '💰'} **${fmt(pendingTx.amount)}** — ${pendingTx.description}\n📂 ${pendingTx.category}\n🏦 ${pendingTx.account_name || ''}` }]);
+        setPendingAction(null);
+        setMessages(prev => [...prev, { role: 'assistant', content: `✅ **Lançado!**\n\n${action.type === 'expense' ? '💸' : '💰'} **${fmt(action.amount)}** — ${action.description}\n📂 ${action.category}\n🏦 ${action.account_name || ''}` }]);
       }
-    } catch {
-      setMessages(prev => [...prev, { role: 'assistant', content: '❌ Erro ao salvar. Tente novamente.' }]);
-      setPendingTx(null);
+
+      // Transferência
+      else if (action._type === 'tx' && action.intent === 'transfer') {
+        const { error } = await supabase.from('transactions').insert({
+          user_id: user.id, type: 'transfer', amount: action.amount,
+          description: 'Transferência', account_id: action.from_account_id,
+          transfer_account_id: action.to_account_id, date: action.date, is_realized: true
+        });
+        if (error) throw error;
+        setPendingAction(null);
+        setMessages(prev => [...prev, { role: 'assistant', content: `✅ **Transferência lançada!**\n\n🔄 **${fmt(action.amount)}**\n🏦 ${action.from_account} → ${action.to_account}` }]);
+      }
+
+      // Realizar transação prevista
+      else if (action._type === 'realize') {
+        const { error } = await supabase.from('transactions').update({ is_realized: true, date: action.date || today }).eq('id', action.id).eq('user_id', user.id);
+        if (error) throw error;
+        setPendingAction(null);
+        setMessages(prev => [...prev, { role: 'assistant', content: `✅ **Pagamento realizado!**\n\n💸 **${action.description}** marcado como pago!\n📅 Data: ${action.date || today}` }]);
+      }
+
+      // Excluir transação
+      else if (action._type === 'delete_tx') {
+        const { error } = await supabase.from('transactions').delete().eq('id', action.id).eq('user_id', user.id);
+        if (error) throw error;
+        setPendingAction(null);
+        setMessages(prev => [...prev, { role: 'assistant', content: `🗑️ **Transação excluída!**\n\n"${action.description}" foi removida com sucesso.` }]);
+      }
+
+      // Criar meta
+      else if (action._type === 'create_goal') {
+        const { error } = await supabase.from('goals').insert({
+          user_id: user.id, name: action.name, type: action.type,
+          category: action.category, target_amount: action.target_amount,
+          start_date: action.start_date, end_date: action.end_date
+        });
+        if (error) throw error;
+        setPendingAction(null);
+        setMessages(prev => [...prev, { role: 'assistant', content: `✅ **Meta criada!**\n\n🎯 **${action.name}** — ${fmt(action.target_amount)}\n📅 Até ${action.end_date}` }]);
+      }
+
+      // Excluir meta
+      else if (action._type === 'delete_goal') {
+        const { error } = await supabase.from('goals').delete().eq('id', action.id).eq('user_id', user.id);
+        if (error) throw error;
+        setPendingAction(null);
+        setMessages(prev => [...prev, { role: 'assistant', content: `🗑️ **Meta excluída!**\n\n"${action.name}" foi removida com sucesso.` }]);
+      }
+
+      // Criar conta
+      else if (action._type === 'create_account') {
+        const { error } = await supabase.from('accounts').insert({
+          user_id: user.id, name: action.name, type: action.type || 'bank',
+          initial_balance: action.initial_balance || 0, color: 'bg-blue-500'
+        });
+        if (error) throw error;
+        setPendingAction(null);
+        setMessages(prev => [...prev, { role: 'assistant', content: `✅ **Conta criada!**\n\n🏦 **${action.name}** adicionada com saldo inicial de ${fmt(action.initial_balance || 0)}` }]);
+      }
+
+      // Excluir conta
+      else if (action._type === 'delete_account') {
+        const { error } = await supabase.from('accounts').delete().eq('id', action.id).eq('user_id', user.id);
+        if (error) throw error;
+        setPendingAction(null);
+        setMessages(prev => [...prev, { role: 'assistant', content: `🗑️ **Conta excluída!**\n\n"${action.name}" foi removida com sucesso.` }]);
+      }
+
+      // Enviar convite por email
+      else if (action._type === 'send_invite') {
+        const { data: profile } = await supabase.from('profiles').select('referral_code').eq('id', user.id).single();
+        const referralLink = `https://planeje.vercel.app/subscribe?ref=${profile?.referral_code || ''}`;
+        const { error } = await supabase.functions.invoke('send-email', {
+          body: {
+            to: action.email,
+            senderEmail: 'revlino53@gmail.com',
+            senderName: 'Planeje App',
+            subject: `${action.name ? action.name + ', você' : 'Você'} foi convidado para o Planeje! 💜`,
+            text: `Você foi convidado para usar o Planeje, seu assistente financeiro pessoal. Acesse: ${referralLink}`,
+            html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px"><div style="background:linear-gradient(135deg,#6366f1,#8b5cf6);padding:40px 30px;border-radius:16px 16px 0 0;text-align:center"><div style="font-size:48px;margin-bottom:12px">💜</div><h1 style="color:white;margin:0;font-size:26px">Planeje</h1><p style="color:rgba(255,255,255,0.8);margin:8px 0 0;font-size:14px">Seu consultor financeiro pessoal</p></div><div style="background:#f9fafb;padding:36px 30px;border:1px solid #e5e7eb;border-radius:0 0 16px 16px"><p style="font-size:16px;color:#374151">Olá${action.name ? ', ' + action.name : ''}! 👋</p><p style="color:#374151;line-height:1.7">Você recebeu um convite especial para experimentar o <strong>Planeje</strong>, o assistente financeiro inteligente que te ajuda a controlar gastos, criar metas e tomar decisões financeiras melhores!</p><div style="text-align:center;margin:30px 0"><a href="${referralLink}" style="background:linear-gradient(135deg,#6366f1,#8b5cf6);color:white;padding:16px 32px;border-radius:12px;text-decoration:none;font-weight:bold;font-size:16px;display:inline-block">🚀 Começar gratuitamente</a></div><p style="color:#6b7280;font-size:13px;text-align:center">30 dias grátis • Sem precisar de cartão</p><hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0"><p style="color:#9ca3af;font-size:12px;text-align:center">Planeje App • Seu futuro financeiro começa hoje</p></div></div>`
+          }
+        });
+        if (error) throw error;
+        setPendingAction(null);
+        setMessages(prev => [...prev, { role: 'assistant', content: `✅ **Convite enviado!**\n\n📧 Email enviado para **${action.email}** com o link de acesso ao Planeje!` }]);
+      }
+
+    } catch (e) {
+      setMessages(prev => [...prev, { role: 'assistant', content: '❌ Erro ao executar. Tente novamente.' }]);
+      setPendingAction(null);
     } finally { setConfirmLoading(false); }
   };
 
-  const cancelTransaction = () => {
-    setPendingTx(null);
+  const cancelAction = () => {
+    setPendingAction(null);
     setWizard(null);
     setMessages(prev => [...prev, { role: 'assistant', content: '❌ Cancelado!' }]);
   };
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
-      {/* Mensagens */}
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
         {messages.map((msg, i) => (
           <motion.div key={i} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
             className={`flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
             {msg.role === 'assistant' && (
-              <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center flex-shrink-0 mt-1 shadow-md shadow-violet-200 dark:shadow-violet-900">
+              <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center flex-shrink-0 mt-1 shadow-md">
                 <Sparkles className="w-4 h-4 text-white" />
               </div>
             )}
             <div className={`max-w-[82%] flex flex-col gap-1 ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
               <div className={`rounded-2xl px-4 py-3 ${
                 msg.role === 'user'
-                  ? 'bg-gradient-to-br from-violet-600 to-indigo-600 text-white rounded-tr-sm shadow-lg shadow-violet-200 dark:shadow-violet-900/50'
+                  ? 'bg-gradient-to-br from-violet-600 to-indigo-600 text-white rounded-tr-sm shadow-lg'
                   : 'bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 rounded-tl-sm shadow-sm border border-gray-100 dark:border-gray-700'
               }`}>
                 <ReactMarkdown className="text-sm leading-relaxed prose prose-sm dark:prose-invert max-w-none prose-p:my-1">
@@ -390,8 +591,13 @@ function ChatTab({ user }) {
         ))}
 
         <AnimatePresence>
-          {pendingTx && (
-            <ConfirmCard pendingTx={pendingTx} onConfirm={confirmTransaction} onCancel={cancelTransaction} confirmLoading={confirmLoading} />
+          {pendingAction && (
+            <ActionCard
+              action={pendingAction}
+              onConfirm={confirmAction}
+              onCancel={cancelAction}
+              confirmLoading={confirmLoading}
+            />
           )}
         </AnimatePresence>
 
@@ -428,7 +634,7 @@ function ChatTab({ user }) {
                 </button>
               ))}
             </div>
-            <p className="text-xs text-gray-400 mb-2 mt-3 font-medium">Lançamentos rápidos</p>
+            <p className="text-xs text-gray-400 mb-2 mt-3 font-medium">Ações rápidas</p>
             <div className="flex gap-2">
               {[
                 { icon: "💸", label: "Despesa",       type: "expense"  },
@@ -451,7 +657,7 @@ function ChatTab({ user }) {
         <div className="flex gap-2 items-end">
           <input ref={inputRef} value={input} onChange={e => setInput(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
-            placeholder={wizard ? "Digite sua resposta..." : "Pergunte ou registre um gasto..."}
+            placeholder={wizard ? "Digite sua resposta..." : "Pergunte, registre, crie metas..."}
             className="flex-1 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-2xl px-4 py-3 text-sm text-gray-800 dark:text-gray-200 placeholder-gray-400 outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100 dark:focus:ring-violet-900/30 transition-all" />
           <motion.button whileTap={{ scale: 0.9 }} onClick={() => sendMessage()} disabled={!input.trim() || loading}
             className="w-12 h-12 bg-gradient-to-br from-violet-600 to-indigo-600 disabled:opacity-40 rounded-2xl flex items-center justify-center shadow-md">

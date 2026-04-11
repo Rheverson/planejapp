@@ -139,7 +139,6 @@ serve(async (req) => {
             } else {
               console.log("Referral criado:", referrer.id, "->", userId)
 
-              // ── Notifica o indicador que alguém usou seu código ──
               try {
                 await supabaseAdmin.functions.invoke('send-notification', {
                   body: {
@@ -168,8 +167,15 @@ serve(async (req) => {
         locale: "pt-BR",
         line_items: [{ price: Deno.env.get("STRIPE_PRICE_ID")!, quantity: 1 }],
         mode: "subscription",
+        // ✅ CORREÇÃO: não cobra nada durante o trial
+        payment_method_collection: "if_required",
         subscription_data: {
           trial_period_days: 30,
+          trial_settings: {
+            end_behavior: {
+              missing_payment_method: "cancel"
+            }
+          }
         },
         success_url: `${Deno.env.get("APP_URL")}/subscription-success`,
         cancel_url: `${Deno.env.get("APP_URL")}/subscribe`,
