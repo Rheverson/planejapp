@@ -93,6 +93,7 @@ function cleanContent(content) {
     ?.replace(/__DELETE_ACCOUNT__.*?__END_DELETE_ACCOUNT__/s, '')
     ?.replace(/__SEND_INVITE__.*?__END_INVITE__/s, '')
     ?.replace(/__PARTIAL_REALIZE__.*?__END_PARTIAL__/s, '')
+    ?.replace(/NO_ACTION.*?END_NO_ACTION/s, '')  // ← adicione esta linha
     ?.trim() || '';
 }
 

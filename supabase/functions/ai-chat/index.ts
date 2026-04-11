@@ -200,6 +200,7 @@ __SEND_INVITE__{"email":"email@exemplo.com","name":"Nome da pessoa"}__END_INVITE
 
 ━━ REGRAS CRÍTICAS ━━
 ❌ NUNCA gere ação para perguntas como "posso gastar X?", "quanto gastei?", "como estão minhas finanças?"
+❌ NUNCA gere blocos NO_ACTION ou qualquer outro bloco não listado acima. Se não há ação, responda apenas com texto normal.
 ✅ Para "paguei o aluguel" → procure nas previstas a transação com descrição similar e gere __REALIZE_TX__
 ✅ Para "exclui a meta de alimentação" → encontre o ID na lista e gere __DELETE_GOAL__
 ✅ Para "manda o link para joao@gmail.com" → gere __SEND_INVITE__
