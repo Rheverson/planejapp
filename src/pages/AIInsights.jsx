@@ -358,7 +358,7 @@ function ChatTab({ user }) {
   const [confirmLoading, setConfirmLoading] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(true);
   const [wizard, setWizard]                 = useState(null);
-
+  const loadingRef = useRef(false); // ← adicione esta linha junto com os outros refs
   const endRef   = useRef(null);
   const inputRef = useRef(null);
   const today    = new Date().toISOString().split('T')[0];
@@ -488,12 +488,18 @@ function ChatTab({ user }) {
   // ── Envio de mensagem ────────────────────────────────────
   const sendMessage = async (text) => {
     const message = (text || input).trim();
-    if (!message || loading) return;
+    if (!message || loadingRef.current) return;  // ← usa ref em vez de state
     setInput("");
-    setMessages(prev => [...prev, { role: 'user', content: message }]);
-    if (wizard) { await handleWizardInput(message); return; }
-    setShowSuggestions(false);
     setLoading(true);
+    loadingRef.current = true;  // ← adicione esta linha
+    setMessages(prev => [...prev, { role: 'user', content: message }]);
+    if (wizard) { 
+      loadingRef.current = false;
+      setLoading(false);
+      await handleWizardInput(message); 
+      return; 
+    }
+    setShowSuggestions(false);
     try {
       const history = messages.slice(1).map(m => ({ role: m.role, content: cleanContent(m.content) }));
       const { data: result, error: err } = await supabase.functions.invoke('ai-chat', {
@@ -507,9 +513,11 @@ function ChatTab({ user }) {
     } catch (e) {
       console.error('Erro ai-chat:', e);
       setMessages(prev => [...prev, { role: 'assistant', content: '😕 Não entendi bem. Pode reformular?' }]);
+    } finally { 
+      setLoading(false); 
+      loadingRef.current = false;  // ← adicione esta linha
     }
   };
-
   // ── Confirmar ação ────────────────────────────────────────
   const confirmAction = async () => {
     if (!pendingAction || confirmLoading) return;
@@ -685,7 +693,7 @@ function ChatTab({ user }) {
   const { listening, start, stop } = useSpeechRecognition({
     onResult: (transcript) => {
       setInput(transcript);
-      setTimeout(() => sendMessage(transcript), 100); // envia automaticamente!
+      sendMessage(transcript); // ← remove o setTimeout
     }
   });
 
