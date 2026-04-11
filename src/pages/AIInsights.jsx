@@ -327,6 +327,9 @@ function useSpeechRecognition({ onResult }) {
       const transcript = e.results[0][0].transcript;
       onResult(transcript);
     };
+    recognition.onspeechend = () => {
+      recognition.stop();
+    };
 
     recognitionRef.current = recognition;
     recognition.start();
@@ -673,7 +676,10 @@ function ChatTab({ user }) {
   };
 
   const { listening, start, stop } = useSpeechRecognition({
-    onResult: (transcript) => setInput(transcript)
+    onResult: (transcript) => {
+      setInput(transcript);
+      setTimeout(() => sendMessage(transcript), 100); // envia automaticamente!
+    }
   });
 
   const cancelAction = () => {
