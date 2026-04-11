@@ -73,6 +73,7 @@ function parseBlock(content, tag, endTag) {
 }
 
 function parsePendingTx(content)    { return parseBlock(content, '__PENDING_TX__', '__END_TX__') }
+function parsePartialRealize(content) { return parseBlock(content, '__PARTIAL_REALIZE__', '__END_PARTIAL__') }
 function parseRealizeTx(content)    { return parseBlock(content, '__REALIZE_TX__', '__END_REALIZE__') }
 function parseDeleteTx(content)     { return parseBlock(content, '__DELETE_TX__', '__END_DELETE__') }
 function parseCreateGoal(content)   { return parseBlock(content, '__CREATE_GOAL__', '__END_GOAL__') }
@@ -91,6 +92,7 @@ function cleanContent(content) {
     ?.replace(/__CREATE_ACCOUNT__.*?__END_ACCOUNT__/s, '')
     ?.replace(/__DELETE_ACCOUNT__.*?__END_DELETE_ACCOUNT__/s, '')
     ?.replace(/__SEND_INVITE__.*?__END_INVITE__/s, '')
+    ?.replace(/__PARTIAL_REALIZE__.*?__END_PARTIAL__/s, '')
     ?.trim() || '';
 }
 
@@ -107,6 +109,13 @@ function ActionCard({ action, onConfirm, onCancel, confirmLoading }) {
       title: action.intent === 'transfer' ? 'Confirmar transferência' : 'Confirmar lançamento',
       headerColor: 'from-violet-50 to-indigo-50 dark:from-violet-900/30 dark:to-indigo-900/30',
       borderColor: 'border-violet-200 dark:border-violet-800',
+    },
+    partial_realize: {
+      icon: CheckCheck,
+      color: 'text-blue-600',
+      title: 'Pagamento parcial de prevista',
+      headerColor: 'from-blue-50 to-indigo-50 dark:from-blue-900/30 dark:to-indigo-900/30',
+      borderColor: 'border-blue-200 dark:border-blue-800',
     },
     realize: {
       icon: CheckCheck,
@@ -202,6 +211,16 @@ function ActionCard({ action, onConfirm, onCancel, confirmLoading }) {
               <Row label="Valor" value={<span className="text-lg font-bold text-emerald-600">{fmt(action.amount)}</span>} />
               <Row label="Data realização" value={action.date} />
               <p className="text-xs text-gray-400">A transação prevista será marcada como realizada.</p>
+            </>
+          )}
+          {/* Pagamento parcial */}
+          {action._type === 'partial_realize' && (
+            <>
+              <Row label="Descrição" value={action.description} />
+              <Row label="Valor pago agora" value={<span className="text-lg font-bold text-emerald-600">{fmt(action.paid_amount)}</span>} />
+              <Row label="Restante na prevista" value={<span className="text-lg font-bold text-amber-600">{fmt(action.remaining_amount)}</span>} />
+              <Row label="Data" value={action.date} />
+              <p className="text-xs text-blue-600 font-medium">✅ Será criado um lançamento de {fmt(action.paid_amount)} e a prevista será reduzida para {fmt(action.remaining_amount)}</p>
             </>
           )}
           {/* Excluir TX */}
@@ -314,6 +333,9 @@ function ChatTab({ user }) {
   const detectAction = (reply) => {
     const tx = parsePendingTx(reply);
     if (tx) return { ...tx, _type: 'tx' };
+
+    const partialRealize = parsePartialRealize(reply);
+    if (partialRealize) return { ...partialRealize, _type: 'partial_realize' };
 
     const realize = parseRealizeTx(reply);
     if (realize) return { ...realize, _type: 'realize' };
@@ -479,6 +501,40 @@ function ChatTab({ user }) {
         setMessages(prev => [...prev, { role: 'assistant', content: `✅ **Transferência lançada!**\n\n🔄 **${fmt(action.amount)}**\n🏦 ${action.from_account} → ${action.to_account}` }]);
       }
 
+      // Pagamento parcial de prevista
+      else if (action._type === 'partial_realize') {
+        // 1. Reduz o valor da prevista
+        const { error: updateError } = await supabase
+          .from('transactions')
+          .update({ amount: action.remaining_amount })
+          .eq('id', action.id)
+          .eq('user_id', user.id);
+        if (updateError) throw updateError;
+
+        // 2. Cria nova transação realizada com o valor pago
+        let accountId = null;
+        if (action.account_name) {
+          const { data: accs } = await supabase.from('accounts').select('id').eq('user_id', user.id).ilike('name', `%${action.account_name}%`).limit(1);
+          accountId = accs?.[0]?.id || null;
+        }
+        const { error: insertError } = await supabase.from('transactions').insert({
+          user_id: user.id,
+          type: 'expense',
+          amount: action.paid_amount,
+          description: action.description,
+          category: action.category,
+          account_id: accountId,
+          date: action.date || today,
+          is_realized: true
+        });
+        if (insertError) throw insertError;
+
+        setPendingAction(null);
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          content: `✅ **Pagamento parcial registrado!**\n\n💸 **${fmt(action.paid_amount)}** pago — ${action.description}\n📋 Prevista reduzida para **${fmt(action.remaining_amount)}**`
+        }]);
+      }
       // Realizar transação prevista
       else if (action._type === 'realize') {
         const { error } = await supabase.from('transactions').update({ is_realized: true, date: action.date || today }).eq('id', action.id).eq('user_id', user.id);

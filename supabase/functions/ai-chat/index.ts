@@ -163,33 +163,38 @@ Você pode executar estas ações. Para cada uma, gere o bloco correspondente NO
 Verbos: "gastei", "paguei", "recebi", "lança", "registra"
 __PENDING_TX__{"type":"expense","amount":0.00,"description":"...","category":"alimentação","account_name":"...","date":"${nowStr}","is_realized":true}__END_TX__
 
-━━ 2. REALIZAR TRANSAÇÃO PREVISTA ━━
-Verbos: "paguei o/a [nome]", "realizei", "efetuei pagamento de"
-Quando identificar que o usuário pagou algo que estava previsto, use o ID da transação prevista:
+━━ 2. REALIZAR TRANSAÇÃO PREVISTA (total) ━━
+Quando o usuário pagar o valor TOTAL de uma prevista:
 __REALIZE_TX__{"id":"uuid-da-transacao-prevista","date":"${nowStr}"}__END_REALIZE__
 
-━━ 3. EXCLUIR TRANSAÇÃO ━━
+━━ 3. REALIZAR PARCIALMENTE UMA PREVISTA ━━
+Quando o usuário pagar PARTE de uma prevista (ex: "gastei 100 dos 500 de gasolina"):
+- Crie uma realizada com o valor pago
+- Reduza o valor da prevista pelo que foi pago
+__PARTIAL_REALIZE__{"id":"uuid-da-transacao-prevista","paid_amount":100.00,"remaining_amount":400.00,"description":"...","category":"...","account_name":"...","date":"${nowStr}"}__END_PARTIAL__
+
+━━ 4. EXCLUIR TRANSAÇÃO ━━
 Verbos: "exclui", "apaga", "remove", "deleta" + nome/descrição
 __DELETE_TX__{"id":"uuid-da-transacao"}__END_DELETE__
 
-━━ 4. CRIAR META ━━
+━━ 5. CRIAR META ━━
 Verbos: "cria meta", "nova meta", "quero economizar", "define meta"
 __CREATE_GOAL__{"name":"...","type":"expense","category":"alimentação","target_amount":0.00,"start_date":"${nowStr}","end_date":"YYYY-MM-DD"}__END_GOAL__
 
-━━ 5. EXCLUIR META ━━
+━━ 6. EXCLUIR META ━━
 Verbos: "exclui meta", "remove meta", "apaga meta"
 __DELETE_GOAL__{"id":"uuid-da-meta"}__END_DELETE_GOAL__
 
-━━ 6. CRIAR CONTA ━━
+━━ 7. CRIAR CONTA ━━
 Verbos: "cria conta", "nova conta", "adiciona conta"
 __CREATE_ACCOUNT__{"name":"...","type":"bank","initial_balance":0.00}__END_ACCOUNT__
 Tipos válidos: bank | digital | wallet | investment | other
 
-━━ 7. EXCLUIR CONTA ━━
+━━ 8. EXCLUIR CONTA ━━
 Verbos: "exclui conta", "remove conta", "apaga conta"
 __DELETE_ACCOUNT__{"id":"uuid-da-conta"}__END_DELETE_ACCOUNT__
 
-━━ 8. ENVIAR CONVITE POR EMAIL ━━
+━━ 9. ENVIAR CONVITE POR EMAIL ━━
 Verbos: "convida", "envia convite", "manda link para", "compartilha com"
 __SEND_INVITE__{"email":"email@exemplo.com","name":"Nome da pessoa"}__END_INVITE__
 
