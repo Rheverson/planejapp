@@ -337,14 +337,6 @@ function useSpeechRecognition({ onResult }) {
     setListening(false);
   };
 
-  const { listening, start, stop } = useSpeechRecognition({
-    onResult: (transcript) => {
-      setInput(transcript);
-      // opcional: envia automaticamente após reconhecer
-      // sendMessage(transcript);
-    }
-  });
-
   return { listening, start, stop };
 }
   
@@ -671,6 +663,18 @@ function ChatTab({ user }) {
           content: `✅ **Convite enviado!**\n\n📧 Email enviado para **${action.email}** com o link de acesso ao Planeje!`
         }]);
       }
+
+    } catch (e) {
+      setMessages(prev => [...prev, { role: 'assistant', content: '❌ Erro ao executar. Tente novamente.' }]);
+      setPendingAction(null);
+    } finally {
+      setConfirmLoading(false);
+    }
+  };
+
+  const { listening, start, stop } = useSpeechRecognition({
+    onResult: (transcript) => setInput(transcript)
+  });
 
   const cancelAction = () => {
     setPendingAction(null);
