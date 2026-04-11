@@ -10,7 +10,7 @@ import {
   TrendingUp, TrendingDown, Wallet, MessageCircle,
   BarChart2, RefreshCw, Clock, ChevronDown, ChevronUp,
   CheckCircle2, AlertTriangle, Info, PiggyBank, Calendar,
-  Target, Building2, Mail, Trash2, CheckCheck
+  Target, Building2, Mail, Trash2, CheckCheck, Mic, MicOff
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -304,7 +304,50 @@ function Row({ label, value }) {
     </div>
   );
 }
+// ── Hook de reconhecimento de voz ─────────────────────────
+function useSpeechRecognition({ onResult }) {
+  const [listening, setListening] = useState(false);
+  const recognitionRef = useRef(null);
 
+  const start = () => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert('Reconhecimento de voz não suportado neste dispositivo.');
+      return;
+    }
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'pt-BR';
+    recognition.continuous = false;
+    recognition.interimResults = false;
+
+    recognition.onstart  = () => setListening(true);
+    recognition.onend    = () => setListening(false);
+    recognition.onerror  = () => setListening(false);
+    recognition.onresult = (e) => {
+      const transcript = e.results[0][0].transcript;
+      onResult(transcript);
+    };
+
+    recognitionRef.current = recognition;
+    recognition.start();
+  };
+
+  const stop = () => {
+    recognitionRef.current?.stop();
+    setListening(false);
+  };
+
+  const { listening, start, stop } = useSpeechRecognition({
+    onResult: (transcript) => {
+      setInput(transcript);
+      // opcional: envia automaticamente após reconhecer
+      // sendMessage(transcript);
+    }
+  });
+
+  return { listening, start, stop };
+}
+  
 // ── Aba Chat ───────────────────────────────────────────────
 function ChatTab({ user }) {
   const [messages, setMessages]             = useState([]);
@@ -727,13 +770,48 @@ function ChatTab({ user }) {
         <div className="flex gap-2 items-end">
           <input ref={inputRef} value={input} onChange={e => setInput(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
-            placeholder={wizard ? "Digite sua resposta..." : "Pergunte, registre, crie metas..."}
+            placeholder={wizard ? "Digite sua resposta..." : listening ? "🎤 Ouvindo..." : "Pergunte, registre, crie metas..."}
             className="flex-1 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-2xl px-4 py-3 text-sm text-gray-800 dark:text-gray-200 placeholder-gray-400 outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100 dark:focus:ring-violet-900/30 transition-all" />
+
+          {/* Botão microfone */}
+          <motion.button
+            whileTap={{ scale: 0.9 }}
+            onPointerDown={start}
+            onPointerUp={stop}
+            onPointerLeave={stop}
+            className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-md transition-all ${
+              listening
+                ? 'bg-red-500 animate-pulse'
+                : 'bg-gray-100 dark:bg-gray-700'
+            }`}>
+            {listening
+              ? <MicOff className="w-5 h-5 text-white" />
+              : <Mic className="w-5 h-5 text-gray-500 dark:text-gray-300" />}
+          </motion.button>
+
+          {/* Botão enviar */}
           <motion.button whileTap={{ scale: 0.9 }} onClick={() => sendMessage()} disabled={!input.trim() || loading}
             className="w-12 h-12 bg-gradient-to-br from-violet-600 to-indigo-600 disabled:opacity-40 rounded-2xl flex items-center justify-center shadow-md">
             <Send className="w-4 h-4 text-white" />
           </motion.button>
         </div>
+
+        {/* Indicador de escuta */}
+        {listening && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+            className="flex items-center justify-center gap-2 mt-2">
+            <div className="flex gap-1">
+              {[0,1,2,3].map(i => (
+                <motion.div key={i}
+                  animate={{ scaleY: [1, 2, 1] }}
+                  transition={{ duration: 0.5, repeat: Infinity, delay: i * 0.1 }}
+                  className="w-1 h-3 bg-red-500 rounded-full origin-bottom"
+                />
+              ))}
+            </div>
+            <span className="text-xs text-red-500 font-medium">Ouvindo... solte para enviar</span>
+          </motion.div>
+        )}
       </div>
     </div>
   );
