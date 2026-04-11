@@ -590,30 +590,44 @@ function ChatTab({ user }) {
         setMessages(prev => [...prev, { role: 'assistant', content: `🗑️ **Conta excluída!**\n\n"${action.name}" foi removida com sucesso.` }]);
       }
 
-      // Enviar convite por email
+      // Enviar convite por email — chama direto via fetch com URL da função
       else if (action._type === 'send_invite') {
-        const { data: profile } = await supabase.from('profiles').select('referral_code').eq('id', user.id).single();
-        const referralLink = `https://planeje.vercel.app/subscribe?ref=${profile?.referral_code || ''}`;
-        const { error } = await supabase.functions.invoke('send-email', {
-          body: {
-            to: action.email,
-            senderEmail: 'revlino53@gmail.com',
-            senderName: 'Planeje App',
-            subject: `${action.name ? action.name + ', você' : 'Você'} foi convidado para o Planeje! 💜`,
-            text: `Você foi convidado para usar o Planeje, seu assistente financeiro pessoal. Acesse: ${referralLink}`,
-            html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px"><div style="background:linear-gradient(135deg,#6366f1,#8b5cf6);padding:40px 30px;border-radius:16px 16px 0 0;text-align:center"><div style="font-size:48px;margin-bottom:12px">💜</div><h1 style="color:white;margin:0;font-size:26px">Planeje</h1><p style="color:rgba(255,255,255,0.8);margin:8px 0 0;font-size:14px">Seu consultor financeiro pessoal</p></div><div style="background:#f9fafb;padding:36px 30px;border:1px solid #e5e7eb;border-radius:0 0 16px 16px"><p style="font-size:16px;color:#374151">Olá${action.name ? ', ' + action.name : ''}! 👋</p><p style="color:#374151;line-height:1.7">Você recebeu um convite especial para experimentar o <strong>Planeje</strong>, o assistente financeiro inteligente que te ajuda a controlar gastos, criar metas e tomar decisões financeiras melhores!</p><div style="text-align:center;margin:30px 0"><a href="${referralLink}" style="background:linear-gradient(135deg,#6366f1,#8b5cf6);color:white;padding:16px 32px;border-radius:12px;text-decoration:none;font-weight:bold;font-size:16px;display:inline-block">🚀 Começar gratuitamente</a></div><p style="color:#6b7280;font-size:13px;text-align:center">30 dias grátis • Sem precisar de cartão</p><hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0"><p style="color:#9ca3af;font-size:12px;text-align:center">Planeje App • Seu futuro financeiro começa hoje</p></div></div>`
-          }
-        });
-        if (error) throw error;
-        setPendingAction(null);
-        setMessages(prev => [...prev, { role: 'assistant', content: `✅ **Convite enviado!**\n\n📧 Email enviado para **${action.email}** com o link de acesso ao Planeje!` }]);
-      }
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('referral_code')
+          .eq('id', user.id)
+          .single();
 
-    } catch (e) {
-      setMessages(prev => [...prev, { role: 'assistant', content: '❌ Erro ao executar. Tente novamente.' }]);
-      setPendingAction(null);
-    } finally { setConfirmLoading(false); }
-  };
+        const referralLink = `https://planeje.vercel.app/subscribe?ref=${profile?.referral_code || ''}`;
+
+        // Chama via fetch direto para garantir que o servidor use os secrets
+        const res = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-email`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
+            },
+            body: JSON.stringify({
+              to: action.email,
+              senderEmail: 'noreply@planejapp.com.br',
+              senderName: 'Planeje App',
+              subject: `${action.name ? action.name + ', você' : 'Você'} foi convidado para o Planeje! 💜`,
+              text: `Você foi convidado para o Planeje! Acesse: ${referralLink}`,
+              html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px"><div style="background:linear-gradient(135deg,#6366f1,#8b5cf6);padding:40px 30px;border-radius:16px 16px 0 0;text-align:center"><div style="font-size:48px;margin-bottom:12px">💜</div><h1 style="color:white;margin:0;font-size:26px">Planeje</h1><p style="color:rgba(255,255,255,0.8);margin:8px 0 0;font-size:14px">Seu consultor financeiro pessoal</p></div><div style="background:#f9fafb;padding:36px 30px;border:1px solid #e5e7eb;border-radius:0 0 16px 16px"><p style="font-size:16px;color:#374151">Olá${action.name ? ', ' + action.name : ''}! 👋</p><p style="color:#374151;line-height:1.7">Você recebeu um convite especial para experimentar o <strong>Planeje</strong>, o assistente financeiro inteligente que te ajuda a controlar gastos, criar metas e tomar melhores decisões financeiras!</p><div style="text-align:center;margin:30px 0"><a href="${referralLink}" style="background:linear-gradient(135deg,#6366f1,#8b5cf6);color:white;padding:16px 32px;border-radius:12px;text-decoration:none;font-weight:bold;font-size:16px;display:inline-block">🚀 Começar gratuitamente</a></div><p style="color:#6b7280;font-size:13px;text-align:center">30 dias grátis • Sem precisar de cartão de crédito</p><hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0"><p style="color:#9ca3af;font-size:12px;text-align:center">Planeje App • Seu futuro financeiro começa hoje</p></div></div>`
+            })
+          }
+        );
+
+        if (!res.ok) throw new Error('Erro ao enviar email');
+
+        setPendingAction(null);
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          content: `✅ **Convite enviado!**\n\n📧 Email enviado para **${action.email}** com o link de acesso ao Planeje!`
+        }]);
+      }
 
   const cancelAction = () => {
     setPendingAction(null);
