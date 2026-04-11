@@ -28,15 +28,15 @@ const fmt = (v) =>
 // ── Mini barra de progresso ──────────────────────────────────
 function ProgressBar({ value, max, color }) {
   const pct = max > 0 ? Math.min((value / max) * 100, 100) : 0;
-  const bgMap = { green: "#dcfce7", red: "#fee2e2", blue: "#dbeafe", violet: "#ede9fe" };
-  const fgMap = { green: "#16a34a", red: "#dc2626", blue: "#1d4ed8", violet: "#7c3aed" };
+  const bgClass = { green: "bg-green-100 dark:bg-green-900/30", red: "bg-red-100 dark:bg-red-900/30", blue: "bg-blue-100 dark:bg-blue-900/30", violet: "bg-violet-100 dark:bg-violet-900/30" };
+  const fgClass = { green: "bg-green-500", red: "bg-red-500", blue: "bg-blue-600", violet: "bg-violet-500" };
   return (
-    <div style={{ height: 3, background: bgMap[color] || "#f1f5f9", borderRadius: 2, marginTop: 8 }}>
+    <div className={`h-0.5 rounded-full mt-2 ${bgClass[color] || "bg-gray-100 dark:bg-gray-700"}`}>
       <motion.div
         initial={{ width: 0 }}
         animate={{ width: `${pct}%` }}
         transition={{ duration: 0.8, ease: "easeOut" }}
-        style={{ height: 3, background: fgMap[color] || "#64748b", borderRadius: 2 }}
+        className={`h-0.5 rounded-full ${fgClass[color] || "bg-gray-400"}`}
       />
     </div>
   );
@@ -44,55 +44,46 @@ function ProgressBar({ value, max, color }) {
 
 // ── Card KPI compacto ─────────────────────────────────────────
 function KPICardNew({ title, value, color, subtitle, bar, barMax, navigateTo, hidden }) {
-  const textColors = {
-    green: "#16a34a", red: "#dc2626", blue: "#1d4ed8", violet: "#7c3aed"
+  const textClass = {
+    green: "text-green-600 dark:text-green-400",
+    red: "text-red-600 dark:text-red-400",
+    blue: "text-blue-700 dark:text-blue-400",
+    violet: "text-violet-600 dark:text-violet-400"
   };
   const content = (
-    <div style={{
-      background: "white",
-      borderRadius: 14,
-      padding: "12px 14px",
-      border: "0.5px solid #e2e8f0",
-    }} className="dark:bg-gray-800 dark:border-gray-700">
-      <p style={{ fontSize: 10, fontWeight: 500, color: "#94a3b8", margin: "0 0 4px", letterSpacing: "0.3px" }}>
+    <div className="bg-white dark:bg-gray-800 rounded-2xl px-3.5 py-3 border border-gray-100 dark:border-gray-700">
+      <p className="text-[10px] font-medium text-gray-400 dark:text-gray-500 mb-1 tracking-wide">
         {title.toUpperCase()}
       </p>
-      <p style={{ fontSize: 18, fontWeight: 500, color: textColors[color] || "#1e293b", margin: 0 }}>
+      <p className={`text-lg font-medium ${textClass[color] || "text-gray-900 dark:text-white"}`}>
         {hidden ? "R$ ••••" : fmt(value)}
       </p>
       {subtitle && (
-        <p style={{ fontSize: 10, color: "#94a3b8", margin: "2px 0 0" }}>{subtitle}</p>
+        <p className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">{subtitle}</p>
       )}
       {bar && <ProgressBar value={value} max={barMax} color={color} />}
     </div>
   );
-  if (navigateTo) return <Link to={navigateTo} style={{ textDecoration: "none" }}>{content}</Link>;
+  if (navigateTo) return <Link to={navigateTo} className="no-underline">{content}</Link>;
   return content;
 }
 
 // ── Card de conta compacto ───────────────────────────────────
 function AccountCardNew({ account, balance, hidden }) {
   const iconColors = {
-    bank: { bg: "#dbeafe", stroke: "#1d4ed8" },
-    digital: { bg: "#ede9fe", stroke: "#7c3aed" },
-    wallet: { bg: "#dcfce7", stroke: "#16a34a" },
-    investment: { bg: "#fef3c7", stroke: "#d97706" },
+    bank:       { bg: "bg-blue-100 dark:bg-blue-900/30",   icon: "text-blue-600 dark:text-blue-400"   },
+    digital:    { bg: "bg-violet-100 dark:bg-violet-900/30", icon: "text-violet-600 dark:text-violet-400" },
+    wallet:     { bg: "bg-green-100 dark:bg-green-900/30", icon: "text-green-600 dark:text-green-400" },
+    investment: { bg: "bg-amber-100 dark:bg-amber-900/30", icon: "text-amber-600 dark:text-amber-400" },
   };
-  const ic = iconColors[account.type] || { bg: "#f1f5f9", stroke: "#64748b" };
+  const ic = iconColors[account.type] || { bg: "bg-gray-100 dark:bg-gray-700", icon: "text-gray-500" };
   return (
-    <div style={{
-      minWidth: 130, background: "#f8fafc", borderRadius: 10,
-      padding: "10px 12px", border: "0.5px solid #e2e8f0", flexShrink: 0
-    }} className="dark:bg-gray-700 dark:border-gray-600">
-      <div style={{
-        width: 28, height: 28, background: ic.bg, borderRadius: 7,
-        display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 6
-      }}>
-        <Wallet style={{ width: 13, height: 13, color: ic.stroke }} />
+    <div className="min-w-[130px] flex-shrink-0 bg-gray-50 dark:bg-gray-700/60 rounded-xl px-3 py-2.5 border border-gray-100 dark:border-gray-600">
+      <div className={`w-7 h-7 rounded-lg flex items-center justify-center mb-1.5 ${ic.bg}`}>
+        <Wallet className={`w-3.5 h-3.5 ${ic.icon}`} />
       </div>
-      <p style={{ fontSize: 10, color: "#94a3b8", margin: "0 0 2px" }}>{account.name}</p>
-      <p style={{ fontSize: 13, fontWeight: 500, color: balance < 0 ? "#dc2626" : "#1e293b", margin: 0 }}
-         className="dark:text-white">
+      <p className="text-[10px] text-gray-400 dark:text-gray-500 mb-0.5">{account.name}</p>
+      <p className={`text-sm font-medium ${balance < 0 ? "text-red-600 dark:text-red-400" : "text-gray-900 dark:text-white"}`}>
         {hidden ? "R$ ••••" : fmt(balance)}
       </p>
     </div>
