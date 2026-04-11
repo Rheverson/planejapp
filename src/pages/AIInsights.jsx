@@ -67,7 +67,12 @@ const years = Array.from({ length: 3 }, (_, i) => currentYear - i);
 function parseBlock(content, tag, endTag) {
   try {
     const match = content?.match(new RegExp(`${tag}(.*?)${endTag}`, 's'));
-    if (match) return JSON.parse(match[1]);
+    if (!match) return null;
+    // Limpa o JSON antes de parsear
+    let json = match[1]
+      .replace(/(\d)\.(\d{3})/g, '$1$2') // remove ponto de milhar: 50.000 → 50000
+      .trim();
+    return JSON.parse(json);
   } catch {}
   return null;
 }
@@ -499,9 +504,10 @@ function ChatTab({ user }) {
       const action = detectAction(reply);
       if (action) setPendingAction(action); else setPendingAction(null);
       setMessages(prev => [...prev, { role: 'assistant', content: reply }]);
-    } catch {
-      setMessages(prev => [...prev, { role: 'assistant', content: '😕 Ocorreu um erro. Tente novamente!' }]);
-    } finally { setLoading(false); }
+    } catch (e) {
+      console.error('Erro ai-chat:', e);
+      setMessages(prev => [...prev, { role: 'assistant', content: '😕 Não entendi bem. Pode reformular?' }]);
+    }
   };
 
   // ── Confirmar ação ────────────────────────────────────────
