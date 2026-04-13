@@ -502,46 +502,27 @@ function ChatTab({ user }) {
         setMessages(prev => [...prev, { role: "assistant", content: `✅ **Transferência lançada!**\n\n🔄 **${fmt(action.amount)}** — ${action.from_account} → ${action.to_account}` }]);
       }
 
-      // ── Recorrente ─────────────────────────────────────────
+      // ── Recorrente — via edge function (evita duplicatas) ─────
       else if (action._type === "recurring") {
-        setPendingAction(null); // ← limpa imediatamente para evitar duplo clique
-        let accountId = null;
-        if (action.account_name) {
-          const { data: accs } = await supabase.from("accounts").select("id").eq("user_id", user.id).ilike("name", `%${action.account_name}%`).limit(1);
-          accountId = accs?.[0]?.id || null;
-        }
-        const inserts = [];
-        const start = new Date(action.start_date + "T12:00:00");
-        for (let i = 0; i < action.months; i++) {
-          const d = new Date(start.getFullYear(), start.getMonth() + i, action.day);
-          const dateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-          inserts.push({
-            user_id: user.id, type: action.type, amount: action.amount,
-            description: action.description, category: action.category,
-            account_id: accountId, date: dateStr, is_realized: false,
-            is_recurring: true, recurring_frequency: action.frequency || "monthly",
-            recurring_day: action.day, auto_realize: action.auto_realize ?? false,
-          });
-        }
-        // Filtra datas que já existem para evitar duplicatas
-        const { data: existing } = await supabase
-          .from("transactions")
-          .select("date")
-          .eq("user_id", user.id)
-          .eq("description", action.description)
-          .eq("is_recurring", true)
-          .in("date", inserts.map(r => r.date));
-
-        const existingDates = new Set((existing || []).map(r => r.date));
-        const newInserts = inserts.filter(r => !existingDates.has(r.date));
-
-        if (newInserts.length > 0) {
-          const { error } = await supabase.from("transactions").insert(newInserts);
-          if (error) throw error;
-        }
         setPendingAction(null);
+        const { data: result, error } = await supabase.functions.invoke("create-recurring", {
+          body: {
+            userId: user.id,
+            type: action.type,
+            amount: action.amount,
+            description: action.description,
+            category: action.category,
+            accountName: action.account_name,
+            day: action.day,
+            months: action.months,
+            frequency: action.frequency || "monthly",
+            startDate: action.start_date || getBrasiliaDate(),
+            autoRealize: action.auto_realize ?? false,
+          }
+        });
+        if (error || result?.error) throw new Error(result?.error || "Erro ao criar recorrentes");
         const autoMsg = action.auto_realize ? " com **registro automático** ✅" : "";
-        setMessages(prev => [...prev, { role: "assistant", content: `✅ **${action.months} lançamentos recorrentes criados!**\n\n🔄 **${fmt(action.amount)}** — ${action.description}\n📅 Todo dia ${action.day} por ${action.months} meses${autoMsg}` }]);
+        setMessages(prev => [...prev, { role: "assistant", content: `✅ **${result.inserted} lançamentos recorrentes criados!**\n\n🔄 **${fmt(action.amount)}** — ${action.description}\n📅 Todo dia ${action.day} por ${action.months} meses${autoMsg}` }]);
       }
 
       // ── Parcial ────────────────────────────────────────────
