@@ -17,18 +17,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 
 const NAV_HEIGHT = 68;
 
-// ✅ Data no fuso de Brasília usando Intl (correto independente do horário do browser)
 function getBrasiliaDate() {
   return new Intl.DateTimeFormat("pt-BR", {
     timeZone: "America/Sao_Paulo",
     year: "numeric", month: "2-digit", day: "2-digit"
   }).format(new Date()).split("/").reverse().join("-");
-  // Retorna no formato YYYY-MM-DD
 }
-
-function getBrasiliaMonth() {
-  return getBrasiliaDate().slice(0, 7);
-}
+function getBrasiliaMonth() { return getBrasiliaDate().slice(0, 7); }
 
 const QUICK_QUESTIONS = [
   { icon: "💰", text: "Posso gastar R$500 essa semana?" },
@@ -51,11 +46,9 @@ const CATEGORIES = [
 ];
 
 const scoreColors = {
-  red:    "from-red-500 to-rose-600",
-  orange: "from-orange-500 to-amber-600",
-  yellow: "from-yellow-500 to-amber-500",
-  blue:   "from-blue-500 to-indigo-600",
-  green:  "from-emerald-500 to-teal-600",
+  red: "from-red-500 to-rose-600", orange: "from-orange-500 to-amber-600",
+  yellow: "from-yellow-500 to-amber-500", blue: "from-blue-500 to-indigo-600",
+  green: "from-emerald-500 to-teal-600",
 };
 
 const insightIcons = {
@@ -76,7 +69,6 @@ const months = [
 const currentYear = new Date().getFullYear();
 const years = Array.from({ length: 3 }, (_, i) => currentYear - i);
 
-// ── Parsers ────────────────────────────────────────────────
 function parseBlock(content, tag, endTag) {
   try {
     const match = content?.match(new RegExp(`${tag}(.*?)${endTag}`, "s"));
@@ -88,6 +80,17 @@ function parseBlock(content, tag, endTag) {
 }
 
 function parsePendingTx(c)      { return parseBlock(c, "__PENDING_TX__",      "__END_TX__")            }
+function parseRecurringTx(c) {
+  // Aceita com ou sem underscores
+  const m1 = c?.match(/__RECURRING_TX__([\s\S]*?)__END_RECURRING__/);
+  const m2 = c?.match(/RECURRING_TX([\s\S]*?)END_RECURRING/);
+  const m = m1 || m2;
+  if (!m) return null;
+  try {
+    let json = m[1].replace(/(\d)\.(\d{3})/g, "$1$2").trim();
+    return JSON.parse(json);
+  } catch { return null; }
+}
 function parsePartialRealize(c) { return parseBlock(c, "__PARTIAL_REALIZE__", "__END_PARTIAL__")       }
 function parseRealizeTx(c)      { return parseBlock(c, "__REALIZE_TX__",      "__END_REALIZE__")       }
 function parseDeleteTx(c)       { return parseBlock(c, "__DELETE_TX__",       "__END_DELETE__")        }
@@ -100,6 +103,8 @@ function parseSendInvite(c)     { return parseBlock(c, "__SEND_INVITE__",     "_
 function cleanContent(content) {
   return content
     ?.replace(/__PENDING_TX__.*?__END_TX__/s, "")
+    ?.replace(/__RECURRING_TX__.*?__END_RECURRING__/s, "")
+    ?.replace(/RECURRING_TX\b.*?END_RECURRING/s, "") ?.replace(/RECURRING_TX.*?END_RECURRING/s, "")
     ?.replace(/__REALIZE_TX__.*?__END_REALIZE__/s, "")
     ?.replace(/__DELETE_TX__.*?__END_DELETE__/s, "")
     ?.replace(/__CREATE_GOAL__.*?__END_GOAL__/s, "")
@@ -112,27 +117,16 @@ function cleanContent(content) {
     ?.trim() || "";
 }
 
-// ✅ Filtra histórico — remove mensagens de confirmação para o Groq não aprender o padrão errado
 function buildHistory(messages) {
   const CONFIRMATION_PATTERNS = [
-    /^✅ \*\*Lançado/,
-    /^✅ \*\*Transferência/,
-    /^✅ \*\*Pago/,
-    /^✅ \*\*Meta criada/,
-    /^✅ \*\*Conta criada/,
-    /^✅ \*\*Convite/,
-    /^✅ \*\*Pagamento parcial/,
-    /^🗑️/,
-    /^❌ Cancelado/,
-    /^❌ Erro/,
-    /^Confira os dados abaixo/,
+    /^✅ \*\*Lançado/, /^✅ \*\*Transferência/, /^✅ \*\*Pago/,
+    /^✅ \*\*Meta criada/, /^✅ \*\*Conta criada/, /^✅ \*\*Convite/,
+    /^✅ \*\*Pagamento parcial/, /^✅ \*\*\d+ lançamentos/,
+    /^🗑️/, /^❌ Cancelado/, /^❌ Erro/, /^Confira os dados abaixo/,
   ];
-
-  return messages
-    .slice(1) // remove mensagem inicial do Finn
+  return messages.slice(1)
     .filter(m => {
       const clean = cleanContent(m.content);
-      // Remove mensagens de confirmação do assistant — evita que o Groq aprenda o padrão
       if (m.role === "assistant" && CONFIRMATION_PATTERNS.some(p => p.test(clean))) return false;
       return true;
     })
@@ -141,7 +135,6 @@ function buildHistory(messages) {
 
 const fmt = (v) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v || 0);
 
-// ── Row helper ─────────────────────────────────────────────
 function Row({ label, value }) {
   return (
     <div className="flex justify-between items-center">
@@ -151,30 +144,74 @@ function Row({ label, value }) {
   );
 }
 
+// ── Toggle de auto_realize ─────────────────────────────────
+function AutoRealizeToggle({ value, onChange }) {
+  return (
+    <div className="mt-2 p-3 bg-violet-50 dark:bg-violet-900/20 rounded-xl border border-violet-100 dark:border-violet-800">
+      <p className="text-xs font-medium text-violet-700 dark:text-violet-300 mb-1">
+        🤖 Registrar automaticamente no dia?
+      </p>
+      <p className="text-[10px] text-gray-400 dark:text-gray-500 mb-2.5">
+        Se ativado, o Planeje registra sozinho quando chegar a data.
+      </p>
+      <div className="flex gap-2">
+        <button
+          onClick={() => onChange(true)}
+          className={`flex-1 h-8 rounded-xl text-xs font-medium transition-all ${
+            value === true
+              ? "bg-violet-600 text-white shadow-sm"
+              : "bg-white dark:bg-gray-700 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-600"
+          }`}
+        >
+          ✅ Sim, automático
+        </button>
+        <button
+          onClick={() => onChange(false)}
+          className={`flex-1 h-8 rounded-xl text-xs font-medium transition-all ${
+            value === false
+              ? "bg-gray-600 text-white shadow-sm"
+              : "bg-white dark:bg-gray-700 text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-600"
+          }`}
+        >
+          📋 Não, só previsto
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── Card de confirmação universal ──────────────────────────
-function ActionCard({ action, onConfirm, onCancel, confirmLoading }) {
+function ActionCard({ action, onConfirm, onCancel, confirmLoading, onSetAutoRealize }) {
   if (!action) return null;
+
+  const isPending   = action._type === "tx" && action.is_realized === false;
+  const isRecurring = action._type === "recurring";
+  const showAutoRealize = isPending || isRecurring;
 
   const configs = {
     tx: {
       icon: action.type === "expense" ? TrendingDown : TrendingUp,
       color: action.intent === "transfer" ? "text-blue-600" : action.type === "expense" ? "text-red-600" : "text-emerald-600",
-      title: action.intent === "transfer" ? "Confirmar transferência" : "Confirmar lançamento",
+      title: action.intent === "transfer" ? "Confirmar transferência" : action.is_realized === false ? "Confirmar prevista" : "Confirmar lançamento",
       headerColor: "from-violet-50 to-indigo-50 dark:from-violet-900/30 dark:to-indigo-900/30",
       borderColor: "border-violet-200 dark:border-violet-800",
     },
-    partial_realize: { icon: CheckCheck,  color: "text-blue-600",    title: "Pagamento parcial",  headerColor: "from-blue-50 to-indigo-50 dark:from-blue-900/30 dark:to-indigo-900/30",       borderColor: "border-blue-200 dark:border-blue-800"    },
-    realize:         { icon: CheckCheck,  color: "text-emerald-600", title: "Realizar prevista",  headerColor: "from-emerald-50 to-teal-50 dark:from-emerald-900/30 dark:to-teal-900/30",   borderColor: "border-emerald-200 dark:border-emerald-800" },
-    delete_tx:       { icon: Trash2,      color: "text-red-600",     title: "Excluir transação",  headerColor: "from-red-50 to-rose-50 dark:from-red-900/30 dark:to-rose-900/30",           borderColor: "border-red-200 dark:border-red-800"      },
-    create_goal:     { icon: Target,      color: "text-violet-600",  title: "Criar meta",         headerColor: "from-violet-50 to-indigo-50 dark:from-violet-900/30 dark:to-indigo-900/30", borderColor: "border-violet-200 dark:border-violet-800" },
-    delete_goal:     { icon: Trash2,      color: "text-red-600",     title: "Excluir meta",       headerColor: "from-red-50 to-rose-50 dark:from-red-900/30 dark:to-rose-900/30",           borderColor: "border-red-200 dark:border-red-800"      },
-    create_account:  { icon: Building2,   color: "text-blue-600",    title: "Criar conta",        headerColor: "from-blue-50 to-indigo-50 dark:from-blue-900/30 dark:to-indigo-900/30",     borderColor: "border-blue-200 dark:border-blue-800"    },
-    delete_account:  { icon: Trash2,      color: "text-red-600",     title: "Excluir conta",      headerColor: "from-red-50 to-rose-50 dark:from-red-900/30 dark:to-rose-900/30",           borderColor: "border-red-200 dark:border-red-800"      },
-    send_invite:     { icon: Mail,        color: "text-blue-600",    title: "Enviar convite",     headerColor: "from-blue-50 to-indigo-50 dark:from-blue-900/30 dark:to-indigo-900/30",     borderColor: "border-blue-200 dark:border-blue-800"    },
+    recurring:       { icon: RefreshCw,  color: "text-violet-600", title: "Lançamento recorrente", headerColor: "from-violet-50 to-indigo-50 dark:from-violet-900/30 dark:to-indigo-900/30", borderColor: "border-violet-200 dark:border-violet-800" },
+    partial_realize: { icon: CheckCheck,  color: "text-blue-600",    title: "Pagamento parcial",    headerColor: "from-blue-50 to-indigo-50 dark:from-blue-900/30 dark:to-indigo-900/30",     borderColor: "border-blue-200 dark:border-blue-800"    },
+    realize:         { icon: CheckCheck,  color: "text-emerald-600", title: "Realizar prevista",    headerColor: "from-emerald-50 to-teal-50 dark:from-emerald-900/30 dark:to-teal-900/30",  borderColor: "border-emerald-200 dark:border-emerald-800" },
+    delete_tx:       { icon: Trash2,      color: "text-red-600",     title: "Excluir transação",    headerColor: "from-red-50 to-rose-50 dark:from-red-900/30 dark:to-rose-900/30",          borderColor: "border-red-200 dark:border-red-800"      },
+    create_goal:     { icon: Target,      color: "text-violet-600",  title: "Criar meta",           headerColor: "from-violet-50 to-indigo-50 dark:from-violet-900/30 dark:to-indigo-900/30",borderColor: "border-violet-200 dark:border-violet-800" },
+    delete_goal:     { icon: Trash2,      color: "text-red-600",     title: "Excluir meta",         headerColor: "from-red-50 to-rose-50 dark:from-red-900/30 dark:to-rose-900/30",          borderColor: "border-red-200 dark:border-red-800"      },
+    create_account:  { icon: Building2,   color: "text-blue-600",    title: "Criar conta",          headerColor: "from-blue-50 to-indigo-50 dark:from-blue-900/30 dark:to-indigo-900/30",    borderColor: "border-blue-200 dark:border-blue-800"    },
+    delete_account:  { icon: Trash2,      color: "text-red-600",     title: "Excluir conta",        headerColor: "from-red-50 to-rose-50 dark:from-red-900/30 dark:to-rose-900/30",          borderColor: "border-red-200 dark:border-red-800"      },
+    send_invite:     { icon: Mail,        color: "text-blue-600",    title: "Enviar convite",       headerColor: "from-blue-50 to-indigo-50 dark:from-blue-900/30 dark:to-indigo-900/30",    borderColor: "border-blue-200 dark:border-blue-800"    },
   };
 
   const cfg  = configs[action._type] || configs.tx;
   const Icon = cfg.icon;
+
+  // Bloqueia confirmação de prevista/recorrente sem escolher auto_realize
+  const needsAutoRealize = showAutoRealize && action.auto_realize === undefined;
 
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
@@ -184,6 +221,8 @@ function ActionCard({ action, onConfirm, onCancel, confirmLoading }) {
           <p className={`text-sm font-medium ${cfg.color}`}>{cfg.title}</p>
         </div>
         <div className="px-4 py-3 space-y-2.5">
+
+          {/* TX normal ou prevista */}
           {action._type === "tx" && !action.intent && (<>
             <Row label="Valor" value={<span className={`text-lg font-bold ${cfg.color}`}>{fmt(action.amount)}</span>} />
             <Row label="Tipo" value={<span className={`text-sm font-medium ${cfg.color}`}>{action.type === "expense" ? "💸 Saída" : "💰 Entrada"}</span>} />
@@ -196,64 +235,99 @@ function ActionCard({ action, onConfirm, onCancel, confirmLoading }) {
                 {action.is_realized ? "✅ Realizado" : "📋 Previsto"}
               </span>
             } />
+            {/* Auto realize apenas para previstas */}
+            {isPending && <AutoRealizeToggle value={action.auto_realize} onChange={onSetAutoRealize} />}
           </>)}
+
+          {/* Transferência */}
           {action._type === "tx" && action.intent === "transfer" && (<>
             <Row label="Valor" value={<span className={`text-lg font-bold ${cfg.color}`}>{fmt(action.amount)}</span>} />
             <Row label="De" value={action.from_account} />
             <Row label="Para" value={action.to_account} />
             <Row label="Data" value={action.date} />
           </>)}
+
+          {/* Recorrente */}
+          {action._type === "recurring" && (<>
+            <Row label="Descrição" value={action.description} />
+            <Row label="Tipo" value={<span className={`text-sm font-medium ${cfg.color}`}>{action.type === "expense" ? "💸 Saída" : "💰 Entrada"}</span>} />
+            <Row label="Valor" value={<span className={`text-lg font-bold ${cfg.color}`}>{fmt(action.amount)}</span>} />
+            <Row label="Categoria" value={<span className="text-xs bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded-full capitalize">{action.category}</span>} />
+            {action.account_name && <Row label="Conta" value={action.account_name} />}
+            <Row label="Todo dia" value={<span className="text-sm font-medium text-violet-600">dia {action.day} de cada mês</span>} />
+            <Row label="Duração" value={`${action.months} meses`} />
+            <div className="bg-violet-50 dark:bg-violet-900/20 rounded-xl px-3 py-2 text-xs text-violet-600 dark:text-violet-400 font-medium">
+              📅 {action.months} previstas serão criadas a partir de {action.start_date}
+            </div>
+            <AutoRealizeToggle value={action.auto_realize} onChange={onSetAutoRealize} />
+          </>)}
+
+          {/* Realizar prevista */}
           {action._type === "realize" && (<>
             <Row label="Descrição" value={action.description} />
             <Row label="Valor" value={<span className="text-base font-bold text-emerald-600">{fmt(action.amount)}</span>} />
             <Row label="Data" value={action.date} />
           </>)}
+
+          {/* Parcial */}
           {action._type === "partial_realize" && (<>
             <Row label="Descrição" value={action.description} />
             <Row label="Valor pago" value={<span className="text-base font-bold text-emerald-600">{fmt(action.paid_amount)}</span>} />
             <Row label="Restante" value={<span className="text-base font-bold text-amber-600">{fmt(action.remaining_amount)}</span>} />
             <Row label="Data" value={action.date} />
           </>)}
+
           {action._type === "delete_tx" && (<>
             <Row label="Descrição" value={action.description} />
             <Row label="Valor" value={fmt(action.amount)} />
             <p className="text-xs text-red-500 font-medium">⚠️ Esta ação não pode ser desfeita!</p>
           </>)}
+
           {action._type === "create_goal" && (<>
             <Row label="Nome" value={action.name} />
             <Row label="Tipo" value={action.type === "expense" ? "📉 Limite de gasto" : action.type === "income" ? "📈 Meta de renda" : "💹 Investimento"} />
             <Row label="Valor" value={<span className="text-base font-bold text-violet-600">{fmt(action.target_amount)}</span>} />
             <Row label="Período" value={`${action.start_date} até ${action.end_date}`} />
           </>)}
+
           {action._type === "delete_goal" && (<>
             <Row label="Meta" value={action.name} />
             <p className="text-xs text-red-500 font-medium">⚠️ Esta ação não pode ser desfeita!</p>
           </>)}
+
           {action._type === "create_account" && (<>
             <Row label="Nome" value={action.name} />
             <Row label="Tipo" value={{ bank: "🏦 Bancária", digital: "📱 Digital", wallet: "👛 Carteira", investment: "📈 Investimento", other: "📦 Outro" }[action.type] || action.type} />
             <Row label="Saldo inicial" value={fmt(action.initial_balance)} />
           </>)}
+
           {action._type === "delete_account" && (<>
             <Row label="Conta" value={action.name} />
             <p className="text-xs text-red-500 font-medium">⚠️ A conta será removida mas as transações serão mantidas.</p>
           </>)}
+
           {action._type === "send_invite" && (<>
             <Row label="Para" value={action.email} />
             {action.name && <Row label="Nome" value={action.name} />}
           </>)}
+
+          {/* Aviso quando precisa escolher auto_realize */}
+          {needsAutoRealize && (
+            <p className="text-[10px] text-amber-600 dark:text-amber-400 text-center">
+              👆 Escolha uma opção acima para confirmar
+            </p>
+          )}
         </div>
+
         <div className="flex gap-2 px-4 pb-4">
           <button onClick={onCancel} className="flex-1 h-10 rounded-xl border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 text-sm font-medium flex items-center justify-center gap-1.5">
             <X className="w-3.5 h-3.5" /> Cancelar
           </button>
-          <button onClick={onConfirm} disabled={confirmLoading}
-            className={`flex-1 h-10 rounded-xl text-white text-sm font-medium flex items-center justify-center gap-1.5 disabled:opacity-60 ${
-              ["delete_tx","delete_goal","delete_account"].includes(action._type)
-                ? "bg-red-500 hover:bg-red-600"
-                : action._type === "realize"
-                ? "bg-emerald-500 hover:bg-emerald-600"
-                : "bg-gradient-to-r from-violet-600 to-indigo-600"
+          <button onClick={onConfirm} disabled={confirmLoading || needsAutoRealize}
+            className={`flex-1 h-10 rounded-xl text-white text-sm font-medium flex items-center justify-center gap-1.5 disabled:opacity-50 ${
+              ["delete_tx","delete_goal","delete_account"].includes(action._type) ? "bg-red-500 hover:bg-red-600"
+              : action._type === "realize" ? "bg-emerald-500 hover:bg-emerald-600"
+              : "bg-gradient-to-r from-violet-600 to-indigo-600"
             }`}>
             {confirmLoading
               ? <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: "linear" }} className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full" />
@@ -265,7 +339,6 @@ function ActionCard({ action, onConfirm, onCancel, confirmLoading }) {
   );
 }
 
-// ── Hook de voz ────────────────────────────────────────────
 function useSpeechRecognition({ onResult }) {
   const [listening, setListening] = useState(false);
   const recognitionRef = useRef(null);
@@ -274,52 +347,52 @@ function useSpeechRecognition({ onResult }) {
     if (!SR) { alert("Reconhecimento de voz não suportado."); return; }
     const r = new SR();
     r.lang = "pt-BR"; r.continuous = false; r.interimResults = false;
-    r.onstart  = () => setListening(true);
-    r.onend    = () => setListening(false);
-    r.onerror  = () => setListening(false);
+    r.onstart = () => setListening(true); r.onend = () => setListening(false); r.onerror = () => setListening(false);
     r.onresult = (e) => onResult(e.results[0][0].transcript);
     r.onspeechend = () => r.stop();
-    recognitionRef.current = r;
-    r.start();
+    recognitionRef.current = r; r.start();
   };
   const stop = () => { recognitionRef.current?.stop(); setListening(false); };
   return { listening, start, stop };
 }
 
-// ── Aba Chat ───────────────────────────────────────────────
 function ChatTab({ user }) {
-  const [messages, setMessages]           = useState([]);
-  const [input, setInput]                 = useState("");
-  const [loading, setLoading]             = useState(false);
-  const [pendingAction, setPendingAction] = useState(null);
+  const [messages, setMessages]             = useState([]);
+  const [input, setInput]                   = useState("");
+  const [loading, setLoading]               = useState(false);
+  const [pendingAction, setPendingAction]   = useState(null);
   const [confirmLoading, setConfirmLoading] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(true);
-  const [wizard, setWizard]               = useState(null);
+  const [wizard, setWizard]                 = useState(null);
   const loadingRef = useRef(false);
   const endRef     = useRef(null);
   const inputRef   = useRef(null);
-
-  // ✅ Sempre calcula a data atual no fuso de Brasília
   const today        = getBrasiliaDate();
   const currentMonth = getBrasiliaMonth();
 
   useEffect(() => {
-    setMessages([{ role: "assistant", content: `Olá! Sou o **Finn** ✨\n\nSeu assistente financeiro pessoal. Posso responder perguntas, **registrar transações**, **criar metas e contas**, **realizar pagamentos previstos** e muito mais!\n\nComo posso te ajudar hoje?` }]);
+    setMessages([{ role: "assistant", content: `Olá! Sou o **Finn** ✨\n\nSeu assistente financeiro pessoal. Posso responder perguntas, **registrar transações**, **criar metas e contas**, **lançamentos recorrentes** e muito mais!\n\nComo posso te ajudar hoje?` }]);
   }, [user?.id]);
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, pendingAction]);
 
   const detectAction = (reply) => {
-    const tx = parsePendingTx(reply); if (tx) return { ...tx, _type: "tx" };
+    const rc = parseRecurringTx(reply); if (rc) return { ...rc, _type: "recurring" };
+    const tx = parsePendingTx(reply);   if (tx) return { ...tx, _type: "tx" };
     const pr = parsePartialRealize(reply); if (pr) return { ...pr, _type: "partial_realize" };
-    const re = parseRealizeTx(reply); if (re) return { ...re, _type: "realize" };
-    const dt = parseDeleteTx(reply); if (dt) return { ...dt, _type: "delete_tx" };
-    const cg = parseCreateGoal(reply); if (cg) return { ...cg, _type: "create_goal" };
-    const dg = parseDeleteGoal(reply); if (dg) return { ...dg, _type: "delete_goal" };
+    const re = parseRealizeTx(reply);   if (re) return { ...re, _type: "realize" };
+    const dt = parseDeleteTx(reply);    if (dt) return { ...dt, _type: "delete_tx" };
+    const cg = parseCreateGoal(reply);  if (cg) return { ...cg, _type: "create_goal" };
+    const dg = parseDeleteGoal(reply);  if (dg) return { ...dg, _type: "delete_goal" };
     const ca = parseCreateAccount(reply); if (ca) return { ...ca, _type: "create_account" };
     const da = parseDeleteAccount(reply); if (da) return { ...da, _type: "delete_account" };
-    const si = parseSendInvite(reply); if (si) return { ...si, _type: "send_invite" };
+    const si = parseSendInvite(reply);  if (si) return { ...si, _type: "send_invite" };
     return null;
+  };
+
+  // Atualiza auto_realize no pendingAction
+  const handleSetAutoRealize = (value) => {
+    setPendingAction(prev => prev ? { ...prev, auto_realize: value } : prev);
   };
 
   const startWizard = async (type) => {
@@ -337,53 +410,37 @@ function ChatTab({ user }) {
       const amount = parseFloat(value.replace(",", ".").replace(/[^0-9.]/g, ""));
       if (!amount || amount <= 0) { setMessages(prev => [...prev, { role: "assistant", content: "❓ Valor inválido. Ex: **50** ou **32,90**" }]); return; }
       w.data.amount = amount;
-      if (w.type === "transfer") {
-        w.step = "from_account"; setWizard(w);
-        setMessages(prev => [...prev, { role: "assistant", content: `De qual conta?\n\n${w.data._accounts.map(a => `• **${a.name}**`).join("\n")}` }]);
-      } else {
-        w.step = "description"; setWizard(w);
-        setMessages(prev => [...prev, { role: "assistant", content: "O que foi? (ex: mercado, uber, salário)" }]);
-      }
+      if (w.type === "transfer") { w.step = "from_account"; setWizard(w); setMessages(prev => [...prev, { role: "assistant", content: `De qual conta?\n\n${w.data._accounts.map(a => `• **${a.name}**`).join("\n")}` }]); }
+      else { w.step = "description"; setWizard(w); setMessages(prev => [...prev, { role: "assistant", content: "O que foi? (ex: mercado, uber, salário)" }]); }
       return;
     }
-    if (w.step === "description") {
-      w.data.description = value; w.step = "category"; setWizard(w);
-      setMessages(prev => [...prev, { role: "assistant", content: `Qual categoria?\n\n${CATEGORIES.map(c => `• ${c.label}`).join("\n")}` }]);
-      return;
-    }
+    if (w.step === "description") { w.data.description = value; w.step = "category"; setWizard(w); setMessages(prev => [...prev, { role: "assistant", content: `Qual categoria?\n\n${CATEGORIES.map(c => `• ${c.label}`).join("\n")}` }]); return; }
     if (w.step === "category") {
       const found = CATEGORIES.find(c => c.value.includes(value.toLowerCase()) || c.label.toLowerCase().includes(value.toLowerCase()));
       if (!found) { setMessages(prev => [...prev, { role: "assistant", content: "❓ Digite: alimentação, transporte, moradia, saúde, educação, lazer, compras ou outros" }]); return; }
       w.data.category = found.value; w.step = "account"; setWizard(w);
-      setMessages(prev => [...prev, { role: "assistant", content: `Qual conta?\n\n${w.data._accounts.map(a => `• **${a.name}**`).join("\n")}` }]);
-      return;
+      setMessages(prev => [...prev, { role: "assistant", content: `Qual conta?\n\n${w.data._accounts.map(a => `• **${a.name}**`).join("\n")}` }]); return;
     }
     if (w.step === "account") {
       const found = w.data._accounts.find(a => a.name.toLowerCase().includes(value.toLowerCase()));
       if (!found) { setMessages(prev => [...prev, { role: "assistant", content: `❓ Escolha:\n\n${w.data._accounts.map(a => `• **${a.name}**`).join("\n")}` }]); return; }
-      w.data.account_id = found.id; w.data.account_name = found.name;
-      setWizard(null);
+      w.data.account_id = found.id; w.data.account_name = found.name; setWizard(null);
       setPendingAction({ _type: "tx", type: w.type, amount: w.data.amount, description: w.data.description, category: w.data.category, account_name: w.data.account_name, account_id: w.data.account_id, date: today, is_realized: true });
-      setMessages(prev => [...prev, { role: "assistant", content: "Confira os dados abaixo 👇" }]);
-      return;
+      setMessages(prev => [...prev, { role: "assistant", content: "Confira os dados abaixo 👇" }]); return;
     }
     if (w.step === "from_account") {
       const found = w.data._accounts.find(a => a.name.toLowerCase().includes(value.toLowerCase()));
       if (!found) { setMessages(prev => [...prev, { role: "assistant", content: `❓ Escolha:\n\n${w.data._accounts.map(a => `• **${a.name}**`).join("\n")}` }]); return; }
-      w.data.from_account_id = found.id; w.data.from_account_name = found.name;
-      w.step = "to_account"; setWizard(w);
+      w.data.from_account_id = found.id; w.data.from_account_name = found.name; w.step = "to_account"; setWizard(w);
       const remaining = w.data._accounts.filter(a => a.id !== found.id).map(a => `• **${a.name}**`).join("\n");
-      setMessages(prev => [...prev, { role: "assistant", content: `Para qual conta?\n\n${remaining}` }]);
-      return;
+      setMessages(prev => [...prev, { role: "assistant", content: `Para qual conta?\n\n${remaining}` }]); return;
     }
     if (w.step === "to_account") {
       const found = w.data._accounts.find(a => a.name.toLowerCase().includes(value.toLowerCase()) && a.id !== w.data.from_account_id);
       if (!found) { const rem = w.data._accounts.filter(a => a.id !== w.data.from_account_id).map(a => `• **${a.name}**`).join("\n"); setMessages(prev => [...prev, { role: "assistant", content: `❓ Escolha:\n\n${rem}` }]); return; }
-      w.data.to_account_id = found.id; w.data.to_account_name = found.name;
-      setWizard(null);
+      w.data.to_account_id = found.id; w.data.to_account_name = found.name; setWizard(null);
       setPendingAction({ _type: "tx", intent: "transfer", amount: w.data.amount, from_account: w.data.from_account_name, to_account: w.data.to_account_name, from_account_id: w.data.from_account_id, to_account_id: w.data.to_account_id, date: today });
-      setMessages(prev => [...prev, { role: "assistant", content: "Confira os dados abaixo 👇" }]);
-      return;
+      setMessages(prev => [...prev, { role: "assistant", content: "Confira os dados abaixo 👇" }]); return;
     }
   };
 
@@ -395,11 +452,8 @@ function ChatTab({ user }) {
     if (wizard) { loadingRef.current = false; setLoading(false); await handleWizardInput(message); return; }
     setShowSuggestions(false);
     try {
-      // ✅ Usa buildHistory para filtrar mensagens de confirmação do histórico
       const history = buildHistory(messages);
-      const { data: result, error: err } = await supabase.functions.invoke("ai-chat", {
-        body: { userId: user.id, message, history, month: currentMonth }
-      });
+      const { data: result, error: err } = await supabase.functions.invoke("ai-chat", { body: { userId: user.id, message, history, month: currentMonth } });
       if (err || result?.error) throw new Error(result?.error || "Erro");
       const reply  = result.reply;
       const action = detectAction(reply);
@@ -414,10 +468,10 @@ function ChatTab({ user }) {
     if (!pendingAction || confirmLoading) return;
     setConfirmLoading(true);
     const action = pendingAction;
-    // ✅ SEMPRE usa a data de Brasília do front — ignora a data que vem do Groq (que está em UTC)
-    // Para previstas (is_realized: false), mantém a data que o usuário especificou
     const confirmDate = (action.is_realized === false && action.date) ? action.date : getBrasiliaDate();
+
     try {
+      // ── TX normal ──────────────────────────────────────────
       if (action._type === "tx" && !action.intent) {
         let accountId = action.account_id || null;
         if (!accountId && action.account_name) {
@@ -427,78 +481,98 @@ function ChatTab({ user }) {
         const { error } = await supabase.from("transactions").insert({
           user_id: user.id, type: action.type, amount: action.amount,
           description: action.description, category: action.category,
-          account_id: accountId, date: confirmDate, is_realized: action.is_realized ?? true
+          account_id: accountId, date: confirmDate,
+          is_realized: action.is_realized ?? true,
+          auto_realize: action.is_realized === false ? (action.auto_realize ?? false) : null,
         });
         if (error) throw error;
         setPendingAction(null);
-        setMessages(prev => [...prev, { role: "assistant", content: `✅ **Lançado!**\n\n${action.type === "expense" ? "💸" : "💰"} **${fmt(action.amount)}** — ${action.description}\n📅 ${confirmDate}` }]);
-      } else if (action._type === "tx" && action.intent === "transfer") {
-        const { error } = await supabase.from("transactions").insert({
-          user_id: user.id, type: "transfer", amount: action.amount,
-          description: "Transferência", account_id: action.from_account_id,
-          transfer_account_id: action.to_account_id, date: confirmDate, is_realized: true
-        });
+        const autoMsg = action.is_realized === false && action.auto_realize ? " · registro automático ativado ✅" : "";
+        setMessages(prev => [...prev, { role: "assistant", content: `✅ **Lançado!**\n\n${action.type === "expense" ? "💸" : "💰"} **${fmt(action.amount)}** — ${action.description}\n📅 ${confirmDate}${autoMsg}` }]);
+      }
+
+      // ── Transferência ──────────────────────────────────────
+      else if (action._type === "tx" && action.intent === "transfer") {
+        const { error } = await supabase.from("transactions").insert({ user_id: user.id, type: "transfer", amount: action.amount, description: "Transferência", account_id: action.from_account_id, transfer_account_id: action.to_account_id, date: confirmDate, is_realized: true });
         if (error) throw error;
         setPendingAction(null);
         setMessages(prev => [...prev, { role: "assistant", content: `✅ **Transferência lançada!**\n\n🔄 **${fmt(action.amount)}** — ${action.from_account} → ${action.to_account}` }]);
-      } else if (action._type === "partial_realize") {
-        await supabase.from("transactions").update({ amount: action.remaining_amount }).eq("id", action.id).eq("user_id", user.id);
+      }
+
+      // ── Recorrente ─────────────────────────────────────────
+      else if (action._type === "recurring") {
         let accountId = null;
         if (action.account_name) {
           const { data: accs } = await supabase.from("accounts").select("id").eq("user_id", user.id).ilike("name", `%${action.account_name}%`).limit(1);
           accountId = accs?.[0]?.id || null;
         }
-        await supabase.from("transactions").insert({
-          user_id: user.id, type: "expense", amount: action.paid_amount,
-          description: action.description, category: action.category,
-          account_id: accountId, date: confirmDate, is_realized: true
-        });
+        const inserts = [];
+        const start = new Date(action.start_date + "T12:00:00");
+        for (let i = 0; i < action.months; i++) {
+          const d = new Date(start.getFullYear(), start.getMonth() + i, action.day);
+          const dateStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+          inserts.push({
+            user_id: user.id, type: action.type, amount: action.amount,
+            description: action.description, category: action.category,
+            account_id: accountId, date: dateStr, is_realized: false,
+            is_recurring: true, recurring_frequency: action.frequency || "monthly",
+            recurring_day: action.day, auto_realize: action.auto_realize ?? false,
+          });
+        }
+        const { error } = await supabase.from("transactions").insert(inserts);
+        if (error) throw error;
+        setPendingAction(null);
+        const autoMsg = action.auto_realize ? " com **registro automático** ✅" : "";
+        setMessages(prev => [...prev, { role: "assistant", content: `✅ **${action.months} lançamentos recorrentes criados!**\n\n🔄 **${fmt(action.amount)}** — ${action.description}\n📅 Todo dia ${action.day} por ${action.months} meses${autoMsg}` }]);
+      }
+
+      // ── Parcial ────────────────────────────────────────────
+      else if (action._type === "partial_realize") {
+        await supabase.from("transactions").update({ amount: action.remaining_amount }).eq("id", action.id).eq("user_id", user.id);
+        let accountId = null;
+        if (action.account_name) { const { data: accs } = await supabase.from("accounts").select("id").eq("user_id", user.id).ilike("name", `%${action.account_name}%`).limit(1); accountId = accs?.[0]?.id || null; }
+        await supabase.from("transactions").insert({ user_id: user.id, type: "expense", amount: action.paid_amount, description: action.description, category: action.category, account_id: accountId, date: confirmDate, is_realized: true });
         setPendingAction(null);
         setMessages(prev => [...prev, { role: "assistant", content: `✅ **Pagamento parcial registrado!**\n\n💸 **${fmt(action.paid_amount)}** pago — restante: **${fmt(action.remaining_amount)}**` }]);
-      } else if (action._type === "realize") {
+      }
+
+      // ── Realizar prevista ──────────────────────────────────
+      else if (action._type === "realize") {
         const { error } = await supabase.from("transactions").update({ is_realized: true, date: confirmDate }).eq("id", action.id).eq("user_id", user.id);
         if (error) throw error;
         setPendingAction(null);
         setMessages(prev => [...prev, { role: "assistant", content: `✅ **Pago!** ${action.description} marcado como realizado.` }]);
-      } else if (action._type === "delete_tx") {
+      }
+
+      else if (action._type === "delete_tx") {
         await supabase.from("transactions").delete().eq("id", action.id).eq("user_id", user.id);
         setPendingAction(null);
         setMessages(prev => [...prev, { role: "assistant", content: `🗑️ Transação excluída.` }]);
-      } else if (action._type === "create_goal") {
-        await supabase.from("goals").insert({
-          user_id: user.id, name: action.name, type: action.type,
-          category: action.category, target_amount: action.target_amount,
-          start_date: action.start_date, end_date: action.end_date
-        });
+      }
+      else if (action._type === "create_goal") {
+        await supabase.from("goals").insert({ user_id: user.id, name: action.name, type: action.type, category: action.category, target_amount: action.target_amount, start_date: action.start_date, end_date: action.end_date });
         setPendingAction(null);
         setMessages(prev => [...prev, { role: "assistant", content: `✅ **Meta criada!** 🎯 ${action.name} — ${fmt(action.target_amount)}` }]);
-      } else if (action._type === "delete_goal") {
+      }
+      else if (action._type === "delete_goal") {
         await supabase.from("goals").delete().eq("id", action.id).eq("user_id", user.id);
         setPendingAction(null);
         setMessages(prev => [...prev, { role: "assistant", content: `🗑️ Meta excluída.` }]);
-      } else if (action._type === "create_account") {
-        await supabase.from("accounts").insert({
-          user_id: user.id, name: action.name, type: action.type || "bank",
-          initial_balance: action.initial_balance || 0, color: "bg-blue-500"
-        });
+      }
+      else if (action._type === "create_account") {
+        await supabase.from("accounts").insert({ user_id: user.id, name: action.name, type: action.type || "bank", initial_balance: action.initial_balance || 0, color: "bg-blue-500" });
         setPendingAction(null);
         setMessages(prev => [...prev, { role: "assistant", content: `✅ **Conta criada!** 🏦 ${action.name}` }]);
-      } else if (action._type === "delete_account") {
+      }
+      else if (action._type === "delete_account") {
         await supabase.from("accounts").delete().eq("id", action.id).eq("user_id", user.id);
         setPendingAction(null);
         setMessages(prev => [...prev, { role: "assistant", content: `🗑️ Conta excluída.` }]);
-      } else if (action._type === "send_invite") {
+      }
+      else if (action._type === "send_invite") {
         const { data: profile } = await supabase.from("profiles").select("referral_code").eq("id", user.id).single();
         const referralLink = `https://planeje.vercel.app/subscribe?ref=${profile?.referral_code || ""}`;
-        const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-email`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
-          body: JSON.stringify({
-            to: action.email, senderEmail: "noreply@planejapp.com.br", senderName: "Planeje",
-            subject: `Você foi convidado para o Planeje! 💜`,
-            html: `<p>Olá${action.name ? ", " + action.name : ""}! Acesse: <a href="${referralLink}">${referralLink}</a></p>`
-          })
-        });
+        const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-email`, { method: "POST", headers: { "Content-Type": "application/json", "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` }, body: JSON.stringify({ to: action.email, senderEmail: "noreply@planejapp.com.br", senderName: "Planeje", subject: `Você foi convidado para o Planeje! 💜`, html: `<p>Olá${action.name ? ", " + action.name : ""}! Acesse: <a href="${referralLink}">${referralLink}</a></p>` }) });
         if (!res.ok) throw new Error("Erro ao enviar email");
         setPendingAction(null);
         setMessages(prev => [...prev, { role: "assistant", content: `✅ **Convite enviado!** 📧 ${action.email}` }]);
@@ -509,54 +583,30 @@ function ChatTab({ user }) {
     } finally { setConfirmLoading(false); }
   };
 
-  const { listening, start, stop } = useSpeechRecognition({
-    onResult: (transcript) => { setInput(transcript); sendMessage(transcript); }
-  });
-
-  const cancelAction = () => {
-    setPendingAction(null); setWizard(null);
-    setMessages(prev => [...prev, { role: "assistant", content: "❌ Cancelado!" }]);
-  };
+  const { listening, start, stop } = useSpeechRecognition({ onResult: (transcript) => { setInput(transcript); sendMessage(transcript); } });
+  const cancelAction = () => { setPendingAction(null); setWizard(null); setMessages(prev => [...prev, { role: "assistant", content: "❌ Cancelado!" }]); };
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
         {messages.map((msg, i) => (
-          <motion.div key={i} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-            className={`flex gap-2.5 ${msg.role === "user" ? "flex-row-reverse" : "flex-row"}`}>
-            {msg.role === "assistant" && (
-              <div className="w-7 h-7 rounded-xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center flex-shrink-0 mt-1">
-                <Sparkles className="w-3.5 h-3.5 text-white" />
-              </div>
-            )}
+          <motion.div key={i} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className={`flex gap-2.5 ${msg.role === "user" ? "flex-row-reverse" : "flex-row"}`}>
+            {msg.role === "assistant" && (<div className="w-7 h-7 rounded-xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center flex-shrink-0 mt-1"><Sparkles className="w-3.5 h-3.5 text-white" /></div>)}
             <div className={`max-w-[82%] ${msg.role === "user" ? "items-end" : "items-start"} flex flex-col`}>
-              <div className={`rounded-2xl px-3.5 py-2.5 ${
-                msg.role === "user"
-                  ? "bg-gradient-to-br from-violet-600 to-indigo-600 text-white rounded-tr-sm"
-                  : "bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 rounded-tl-sm border border-gray-100 dark:border-gray-700"
-              }`}>
-                <ReactMarkdown className="text-sm leading-relaxed prose prose-sm dark:prose-invert max-w-none prose-p:my-1">
-                  {cleanContent(msg.content)}
-                </ReactMarkdown>
+              <div className={`rounded-2xl px-3.5 py-2.5 ${msg.role === "user" ? "bg-gradient-to-br from-violet-600 to-indigo-600 text-white rounded-tr-sm" : "bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 rounded-tl-sm border border-gray-100 dark:border-gray-700"}`}>
+                <ReactMarkdown className="text-sm leading-relaxed prose prose-sm dark:prose-invert max-w-none prose-p:my-1">{cleanContent(msg.content)}</ReactMarkdown>
               </div>
             </div>
           </motion.div>
         ))}
         <AnimatePresence>
-          {pendingAction && <ActionCard action={pendingAction} onConfirm={confirmAction} onCancel={cancelAction} confirmLoading={confirmLoading} />}
+          {pendingAction && <ActionCard action={pendingAction} onConfirm={confirmAction} onCancel={cancelAction} confirmLoading={confirmLoading} onSetAutoRealize={handleSetAutoRealize} />}
         </AnimatePresence>
         {loading && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex gap-2.5">
-            <div className="w-7 h-7 rounded-xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center flex-shrink-0">
-              <Sparkles className="w-3.5 h-3.5 text-white" />
-            </div>
+            <div className="w-7 h-7 rounded-xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center flex-shrink-0"><Sparkles className="w-3.5 h-3.5 text-white" /></div>
             <div className="bg-white dark:bg-gray-800 rounded-2xl rounded-tl-sm px-4 py-3 border border-gray-100 dark:border-gray-700">
-              <div className="flex gap-1 items-center h-4">
-                {[0,1,2].map(i => (
-                  <motion.div key={i} animate={{ y: [0,-4,0], opacity: [0.4,1,0.4] }} transition={{ duration: 0.6, repeat: Infinity, delay: i*0.15 }}
-                    className="w-1.5 h-1.5 bg-violet-400 rounded-full" />
-                ))}
-              </div>
+              <div className="flex gap-1 items-center h-4">{[0,1,2].map(i => (<motion.div key={i} animate={{ y: [0,-4,0], opacity: [0.4,1,0.4] }} transition={{ duration: 0.6, repeat: Infinity, delay: i*0.15 }} className="w-1.5 h-1.5 bg-violet-400 rounded-full" />))}</div>
             </div>
           </motion.div>
         )}
@@ -566,79 +616,41 @@ function ChatTab({ user }) {
         {showSuggestions && messages.length <= 1 && !wizard && (
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="px-4 pb-2 flex-shrink-0">
             <p className="text-xs text-gray-400 mb-1.5 font-medium">Perguntas frequentes</p>
-            <div className="flex gap-1.5 overflow-x-auto pb-1">
-              {QUICK_QUESTIONS.map((q, i) => (
-                <button key={i} onClick={() => sendMessage(q.text)}
-                  className="flex-shrink-0 flex items-center gap-1 text-xs bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 rounded-full px-2.5 py-1.5 hover:border-violet-300 transition-all">
-                  <span>{q.icon}</span> {q.text}
-                </button>
-              ))}
-            </div>
+            <div className="flex gap-1.5 overflow-x-auto pb-1">{QUICK_QUESTIONS.map((q, i) => (<button key={i} onClick={() => sendMessage(q.text)} className="flex-shrink-0 flex items-center gap-1 text-xs bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700 rounded-full px-2.5 py-1.5 hover:border-violet-300 transition-all"><span>{q.icon}</span> {q.text}</button>))}</div>
             <p className="text-xs text-gray-400 mt-2.5 mb-1.5 font-medium">Ações rápidas</p>
-            <div className="flex gap-2">
-              {[{ icon: "💸", label: "Despesa", type: "expense" }, { icon: "💰", label: "Entrada", type: "income" }, { icon: "🔄", label: "Transferência", type: "transfer" }].map((s, i) => (
-                <motion.button key={i} whileTap={{ scale: 0.96 }} onClick={() => startWizard(s.type)}
-                  className="flex-1 flex items-center justify-center gap-1 text-xs bg-violet-50 dark:bg-violet-900/20 text-violet-700 dark:text-violet-300 border border-violet-200 dark:border-violet-800 rounded-xl py-2 hover:bg-violet-100 transition-all font-medium">
-                  <span>{s.icon}</span> {s.label}
-                </motion.button>
-              ))}
-            </div>
+            <div className="flex gap-2">{[{ icon: "💸", label: "Despesa", type: "expense" }, { icon: "💰", label: "Entrada", type: "income" }, { icon: "🔄", label: "Transferência", type: "transfer" }].map((s, i) => (<motion.button key={i} whileTap={{ scale: 0.96 }} onClick={() => startWizard(s.type)} className="flex-1 flex items-center justify-center gap-1 text-xs bg-violet-50 dark:bg-violet-900/20 text-violet-700 dark:text-violet-300 border border-violet-200 dark:border-violet-800 rounded-xl py-2 hover:bg-violet-100 transition-all font-medium"><span>{s.icon}</span> {s.label}</motion.button>))}</div>
           </motion.div>
         )}
       </AnimatePresence>
       <div className="px-4 pt-2.5 pb-3 bg-white dark:bg-gray-800 border-t border-gray-100 dark:border-gray-700 flex-shrink-0">
         <div className="flex gap-2 items-center">
-          <input ref={inputRef} value={input} onChange={e => setInput(e.target.value)}
-            onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
-            placeholder={wizard ? "Digite sua resposta..." : listening ? "🎤 Ouvindo..." : "Pergunte ou registre..."}
-            className="flex-1 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-2xl px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 placeholder-gray-400 outline-none focus:border-violet-400 transition-all" />
-          <motion.button whileTap={{ scale: 0.9 }} onPointerDown={start} onPointerUp={stop} onPointerLeave={stop}
-            className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${listening ? "bg-red-500 animate-pulse" : "bg-gray-100 dark:bg-gray-700"}`}>
-            {listening ? <MicOff className="w-4 h-4 text-white" /> : <Mic className="w-4 h-4 text-gray-500 dark:text-gray-300" />}
-          </motion.button>
-          <motion.button whileTap={{ scale: 0.9 }} onClick={() => sendMessage()} disabled={!input.trim() || loading}
-            className="w-10 h-10 bg-gradient-to-br from-violet-600 to-indigo-600 disabled:opacity-40 rounded-xl flex items-center justify-center">
-            <Send className="w-4 h-4 text-white" />
-          </motion.button>
+          <input ref={inputRef} value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }} placeholder={wizard ? "Digite sua resposta..." : listening ? "🎤 Ouvindo..." : "Pergunte ou registre..."} className="flex-1 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-2xl px-4 py-2.5 text-sm text-gray-800 dark:text-gray-200 placeholder-gray-400 outline-none focus:border-violet-400 transition-all" />
+          <motion.button whileTap={{ scale: 0.9 }} onPointerDown={start} onPointerUp={stop} onPointerLeave={stop} className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${listening ? "bg-red-500 animate-pulse" : "bg-gray-100 dark:bg-gray-700"}`}>{listening ? <MicOff className="w-4 h-4 text-white" /> : <Mic className="w-4 h-4 text-gray-500 dark:text-gray-300" />}</motion.button>
+          <motion.button whileTap={{ scale: 0.9 }} onClick={() => sendMessage()} disabled={!input.trim() || loading} className="w-10 h-10 bg-gradient-to-br from-violet-600 to-indigo-600 disabled:opacity-40 rounded-xl flex items-center justify-center"><Send className="w-4 h-4 text-white" /></motion.button>
         </div>
-        {listening && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center justify-center gap-2 mt-2">
-            <div className="flex gap-1">
-              {[0,1,2,3].map(i => (
-                <motion.div key={i} animate={{ scaleY: [1,2,1] }} transition={{ duration: 0.5, repeat: Infinity, delay: i*0.1 }}
-                  className="w-1 h-3 bg-red-500 rounded-full origin-bottom" />
-              ))}
-            </div>
-            <span className="text-xs text-red-500 font-medium">Ouvindo...</span>
-          </motion.div>
-        )}
+        {listening && (<motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center justify-center gap-2 mt-2"><div className="flex gap-1">{[0,1,2,3].map(i => (<motion.div key={i} animate={{ scaleY: [1,2,1] }} transition={{ duration: 0.5, repeat: Infinity, delay: i*0.1 }} className="w-1 h-3 bg-red-500 rounded-full origin-bottom" />))}</div><span className="text-xs text-red-500 font-medium">Ouvindo...</span></motion.div>)}
       </div>
     </div>
   );
 }
 
-// ── Aba Análise (sem alterações) ───────────────────────────
 function AnalysisTab({ user }) {
-  const [loading, setLoading]         = useState(false);
+  const [loading, setLoading] = useState(false);
   const [loadingSaved, setLoadingSaved] = useState(true);
-  const [data, setData]               = useState(null);
-  const [error, setError]             = useState(null);
+  const [data, setData] = useState(null);
+  const [error, setError] = useState(null);
   const [limiteAtingido, setLimiteAtingido] = useState(false);
   const [expandedInsight, setExpandedInsight] = useState(null);
-  const [usage, setUsage]             = useState(null);
+  const [usage, setUsage] = useState(null);
   const [showPeriodSelector, setShowPeriodSelector] = useState(false);
   const currentMonth = String(new Date().getMonth() + 1).padStart(2, "0");
   const [selectedMonth, setSelectedMonth] = useState(currentMonth);
-  const [selectedYear, setSelectedYear]   = useState(String(currentYear));
-  const month      = `${selectedYear}-${selectedMonth}`;
+  const [selectedYear, setSelectedYear] = useState(String(currentYear));
+  const month = `${selectedYear}-${selectedMonth}`;
   const monthLabel = format(new Date(`${selectedYear}-${selectedMonth}-02`), "MMMM yyyy", { locale: ptBR });
 
   useEffect(() => { loadSavedInsights(); }, [user?.id]);
-  const loadSavedInsights = async () => {
-    setLoadingSaved(true);
-    try { const { data: profile } = await supabase.from("profiles").select("ai_insights, ai_insights_date").eq("id", user.id).single(); if (profile?.ai_insights) setData(profile.ai_insights); } catch {}
-    finally { setLoadingSaved(false); }
-  };
+  const loadSavedInsights = async () => { setLoadingSaved(true); try { const { data: profile } = await supabase.from("profiles").select("ai_insights, ai_insights_date").eq("id", user.id).single(); if (profile?.ai_insights) setData(profile.ai_insights); } catch {} finally { setLoadingSaved(false); } };
   const saveInsights   = async (d) => supabase.from("profiles").update({ ai_insights: d, ai_insights_date: new Date().toISOString() }).eq("id", user.id);
   const deleteInsights = async () => { await supabase.from("profiles").update({ ai_insights: null, ai_insights_date: null }).eq("id", user.id); setData(null); setUsage(null); };
   const fetchInsights  = async () => {
@@ -679,9 +691,8 @@ function AnalysisTab({ user }) {
   );
 }
 
-// ── Componente principal ───────────────────────────────────
 export default function AIInsights() {
-  const { user }      = useAuth();
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState("chat");
   return (
     <div className="flex flex-col bg-gray-50 dark:bg-gray-900" style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: `${NAV_HEIGHT}px` }}>
