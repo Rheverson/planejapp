@@ -18,6 +18,12 @@ const categoryIcons = {
 
 const fmt = (v) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
 
+// ✅ Corrige o bug de timezone: "2026-04-12" interpretado como UTC meia-noite
+// vira 11/04 às 21h em Brasília. Adicionar T12:00:00 evita isso.
+function parseDate(dateStr) {
+  return new Date(dateStr + "T12:00:00");
+}
+
 export default function TransactionItem({ transaction, accounts = [], delay = 0, onRegistrar, onDuplicar, onEdit, onDelete }) {
   const [showDuplicar, setShowDuplicar] = useState(false);
 
@@ -29,7 +35,6 @@ export default function TransactionItem({ transaction, accounts = [], delay = 0,
     ? ArrowLeftRight
     : categoryIcons[transaction.category?.toLowerCase()] || DollarSign;
 
-  // Nome da conta afetada
   const account = accounts.find(a => a.id === transaction.account_id);
   const transferAccount = accounts.find(a => a.id === transaction.transfer_account_id);
   const accountLabel = isTransfer && account && transferAccount
@@ -70,14 +75,11 @@ export default function TransactionItem({ transaction, accounts = [], delay = 0,
         transition={{ duration: 0.3, delay }}
         className={`rounded-xl bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 hover:shadow-sm transition-all duration-200 overflow-hidden ${!isRealized ? 'opacity-80' : ''}`}
       >
-        {/* Linha principal */}
         <div className="flex items-center gap-3 p-3">
-          {/* Ícone */}
           <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${iconBg}`}>
             <Icon className={`w-4 h-4 ${iconColor}`} />
           </div>
 
-          {/* Descrição + data + conta */}
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-1.5">
               <p className="font-medium text-gray-900 dark:text-white text-sm truncate">
@@ -89,19 +91,18 @@ export default function TransactionItem({ transaction, accounts = [], delay = 0,
               }
             </div>
             <p className="text-xs text-gray-400 truncate">
-              {format(new Date(transaction.date), "dd 'de' MMM", { locale: ptBR })}
+              {/* ✅ usa parseDate para evitar bug de timezone UTC→Brasília */}
+              {format(parseDate(transaction.date), "dd 'de' MMM", { locale: ptBR })}
               {!isTransfer && transaction.category && ` · ${transaction.category}`}
               {accountLabel && ` · ${accountLabel}`}
             </p>
           </div>
 
-          {/* Valor */}
           <span className={`font-semibold text-sm flex-shrink-0 ${amountColor}`}>
             {amountPrefix} {fmt(transaction.amount)}
           </span>
         </div>
 
-        {/* Linha de ações — separada embaixo */}
         {hasActions && (
           <div className="flex items-center justify-end gap-1 px-3 pb-2 border-t border-gray-50 dark:border-gray-700 pt-1.5">
             {!isRealized && onRegistrar && (
