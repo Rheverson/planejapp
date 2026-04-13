@@ -364,7 +364,8 @@ function ChatTab({ user }) {
   const [confirmLoading, setConfirmLoading] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(true);
   const [wizard, setWizard]                 = useState(null);
-  const loadingRef = useRef(false);
+  const loadingRef    = useRef(false);
+  const confirmingRef = useRef(false); // ← evita dupla confirmação
   const endRef     = useRef(null);
   const inputRef   = useRef(null);
   const today        = getBrasiliaDate();
@@ -465,7 +466,8 @@ function ChatTab({ user }) {
   };
 
   const confirmAction = async () => {
-    if (!pendingAction || confirmLoading) return;
+    if (!pendingAction || confirmLoading || confirmingRef.current) return;
+    confirmingRef.current = true; // ← bloqueia imediatamente
     setConfirmLoading(true);
     const action = pendingAction;
     const confirmDate = (action.is_realized === false && action.date) ? action.date : getBrasiliaDate();
@@ -582,7 +584,10 @@ function ChatTab({ user }) {
     } catch {
       setMessages(prev => [...prev, { role: "assistant", content: "❌ Erro ao executar. Tente novamente." }]);
       setPendingAction(null);
-    } finally { setConfirmLoading(false); }
+    } finally { 
+      setConfirmLoading(false);
+      confirmingRef.current = false; // ← libera
+    }
   };
 
   const { listening, start, stop } = useSpeechRecognition({ onResult: (transcript) => { setInput(transcript); sendMessage(transcript); } });
