@@ -523,8 +523,22 @@ function ChatTab({ user }) {
             recurring_day: action.day, auto_realize: action.auto_realize ?? false,
           });
         }
-        const { error } = await supabase.from("transactions").insert(inserts);
-        if (error) throw error;
+        // Filtra datas que já existem para evitar duplicatas
+        const { data: existing } = await supabase
+          .from("transactions")
+          .select("date")
+          .eq("user_id", user.id)
+          .eq("description", action.description)
+          .eq("is_recurring", true)
+          .in("date", inserts.map(r => r.date));
+
+        const existingDates = new Set((existing || []).map(r => r.date));
+        const newInserts = inserts.filter(r => !existingDates.has(r.date));
+
+        if (newInserts.length > 0) {
+          const { error } = await supabase.from("transactions").insert(newInserts);
+          if (error) throw error;
+        }
         setPendingAction(null);
         const autoMsg = action.auto_realize ? " com **registro automático** ✅" : "";
         setMessages(prev => [...prev, { role: "assistant", content: `✅ **${action.months} lançamentos recorrentes criados!**\n\n🔄 **${fmt(action.amount)}** — ${action.description}\n📅 Todo dia ${action.day} por ${action.months} meses${autoMsg}` }]);
