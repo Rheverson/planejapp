@@ -473,6 +473,7 @@ function ChatTab({ user }) {
     try {
       // ── TX normal ──────────────────────────────────────────
       if (action._type === "tx" && !action.intent) {
+        setPendingAction(null); // ← limpa imediatamente para evitar duplo clique
         let accountId = action.account_id || null;
         if (!accountId && action.account_name) {
           const { data: accs } = await supabase.from("accounts").select("id").eq("user_id", user.id).ilike("name", `%${action.account_name}%`).limit(1);
@@ -501,6 +502,7 @@ function ChatTab({ user }) {
 
       // ── Recorrente ─────────────────────────────────────────
       else if (action._type === "recurring") {
+        setPendingAction(null); // ← limpa imediatamente para evitar duplo clique
         let accountId = null;
         if (action.account_name) {
           const { data: accs } = await supabase.from("accounts").select("id").eq("user_id", user.id).ilike("name", `%${action.account_name}%`).limit(1);
