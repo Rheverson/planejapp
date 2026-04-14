@@ -9,6 +9,7 @@ const Reports      = lazy(() => import('./pages/Reports'));
 const Transactions = lazy(() => import('./pages/Transactions'));
 const Referrals    = lazy(() => import('./pages/Referrals'));
 const AIInsights   = lazy(() => import('./pages/AIInsights'));
+const PlanPage     = lazy(() => import('./pages/PlanPage'));
 
 export const PAGES = {
     "Accounts":     Accounts,
@@ -19,6 +20,7 @@ export const PAGES = {
     "Transactions": Transactions,
     "Referrals":    Referrals,
     "AIInsights":   AIInsights,
+    "PlanPage":     PlanPage,
 }
 
 export const pagesConfig = {
