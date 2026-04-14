@@ -164,18 +164,18 @@ export default function PlanPage() {
 
   const cancelMutation = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase
-        .from("subscriptions")
-        .update({ status: "cancelled" })
-        .eq("user_id", user.id);
-      if (error) throw error;
+      const { data, error } = await supabase.functions.invoke("cancel-subscription", {
+        body: { userId: user.id }
+      });
+      if (error || data?.error) throw new Error(data?.error || error?.message || "Erro");
+      return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["subscription"] });
       setShowCancel(false);
-      toast.success("Assinatura cancelada. Você tem acesso até " + endDate);
+      toast.success("Assinatura cancelada. Acesso mantido até " + endDate + " 🗓️");
     },
-    onError: () => toast.error("Erro ao cancelar. Tente novamente."),
+    onError: (err) => toast.error("Erro ao cancelar: " + err.message),
   });
 
   if (isLoading) {
