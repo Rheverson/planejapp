@@ -14,7 +14,7 @@ const TERMS = `Ao fornecer seu número de telefone, você concorda com:
 
 Não compartilharemos seu número com terceiros para fins de marketing. Você pode remover seu telefone a qualquer momento nas configurações da conta.`;
 
-export default function PhoneVerificationModal({ onClose, onSuccess, required = false }) {
+export default function PhoneVerificationModal({ onClose, onSuccess }) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [step, setStep] = useState("terms"); // terms | phone | otp | success
@@ -100,7 +100,7 @@ export default function PhoneVerificationModal({ onClose, onSuccess, required = 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[999] flex items-end sm:items-center justify-center"
-      onClick={required ? undefined : onClose}>
+      onClick={onClose}>
       <motion.div initial={{ y: "100%", opacity: 0 }} animate={{ y: 0, opacity: 1 }}
         exit={{ y: "100%", opacity: 0 }} transition={{ type: "spring", damping: 30, stiffness: 300 }}
         onClick={e => e.stopPropagation()}
@@ -108,11 +108,9 @@ export default function PhoneVerificationModal({ onClose, onSuccess, required = 
 
         {/* Header */}
         <div className="bg-gradient-to-br from-violet-600 to-indigo-600 px-6 pt-8 pb-6 text-white relative">
-          {!required && onClose && (
-            <button onClick={onClose} className="absolute top-4 right-4 p-2 bg-white/20 rounded-full">
-              <X className="w-4 h-4 text-white" />
-            </button>
-          )}
+          <button onClick={onClose} className="absolute top-4 right-4 p-2 bg-white/20 rounded-full">
+            <X className="w-4 h-4 text-white" />
+          </button>
           <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center mb-3">
             {step === "success"
               ? <CheckCircle2 className="w-7 h-7 text-white" />
@@ -150,12 +148,10 @@ export default function PhoneVerificationModal({ onClose, onSuccess, required = 
                   <span className="text-violet-600 underline">Política de Privacidade</span>
                 </p>
                 <div className="flex gap-3">
-                  {!required && (
-                    <button onClick={onClose}
-                      className="flex-1 h-12 rounded-2xl border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 text-sm font-medium">
-                      Agora não
-                    </button>
-                  )}
+                  <button onClick={onClose}
+                    className="flex-1 h-12 rounded-2xl border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 text-sm font-medium">
+                    Agora não
+                  </button>
                   <button onClick={() => setStep("phone")}
                     className="flex-1 h-12 rounded-2xl bg-gradient-to-r from-violet-600 to-indigo-600 text-white text-sm font-medium flex items-center justify-center gap-2">
                     Aceitar e continuar <ChevronRight className="w-4 h-4" />
