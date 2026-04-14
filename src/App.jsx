@@ -81,7 +81,7 @@ function useProfile(userId) {
   });
 }
 
-// ✅ Verifica se tem acesso — inclui cancelled com período ainda válido
+// ✅ Verifica acesso — cancelled com período válido ainda tem acesso
 function hasActiveAccess(subscription) {
   if (!subscription) return false;
   const { status, current_period_end } = subscription;
