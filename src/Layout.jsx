@@ -3,7 +3,13 @@ import { Link, useNavigate } from "react-router-dom";
 import { createPageUrl } from "./utils";
 import { motion } from "framer-motion";
 import { Home, ArrowLeftRight, Wallet, Target, Sparkles, User } from "lucide-react";
+import { usePhoneVerification } from "@/hooks/usePhoneVerification";
+import PhoneVerificationModal from "@/components/profile/PhoneVerificationModal";
+import { AnimatePresence } from "framer-motion";
 
+
+const { showPhoneModal, setShowPhoneModal } = usePhoneVerification();
+  
 const navItems = [
   { name: "Home",       icon: Home,          page: "Home"         },
   { name: "Transações", icon: ArrowLeftRight, page: "Transactions" },
@@ -180,6 +186,15 @@ export default function Layout({ children, currentPageName }) {
           })}
         </div>
       </motion.nav>
+      <AnimatePresence>
+        {showPhoneModal && (
+          <PhoneVerificationModal
+            required={true}
+            onClose={() => setShowPhoneModal(false)}
+            onSuccess={() => setShowPhoneModal(false)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
