@@ -7,7 +7,7 @@ import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import {
   LogOut, ChevronRight, Moon, Bell, Shield,
-  HelpCircle, Star, FileText, Wallet, Users, Clock, Gift, Tag
+  HelpCircle, Star, FileText, Wallet, Users, Clock, Gift, Tag, Crown, Zap
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -24,6 +24,8 @@ import ProfileSwitcher from "@/components/profile/ProfileSwitcher";
 import CategoryManager from "@/components/profile/CategoryManager";
 import ReferralInviteModal from "@/components/referral/ReferralInviteModal";
 import { toast } from "sonner";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
 
 export default function Profile() {
   const { user, signOut } = useAuth();
@@ -44,15 +46,15 @@ export default function Profile() {
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   useEffect(() => {
-    const savedDarkMode = localStorage.getItem('darkMode') === 'true';
+    const savedDarkMode = localStorage.getItem("darkMode") === "true";
     setDarkMode(savedDarkMode);
-    if (savedDarkMode) document.documentElement.classList.add('dark');
+    if (savedDarkMode) document.documentElement.classList.add("dark");
   }, []);
 
   const { data: accounts = [] } = useQuery({
-    queryKey: ['accounts', user?.id],
+    queryKey: ["accounts", user?.id],
     queryFn: async () => {
-      const { data, error } = await supabase.from('accounts').select('*').eq('user_id', user.id);
+      const { data, error } = await supabase.from("accounts").select("*").eq("user_id", user.id);
       if (error) throw error;
       return data ?? [];
     },
@@ -60,9 +62,9 @@ export default function Profile() {
   });
 
   const { data: transactions = [] } = useQuery({
-    queryKey: ['transactions', user?.id],
+    queryKey: ["transactions", user?.id],
     queryFn: async () => {
-      const { data, error } = await supabase.from('transactions').select('*').eq('user_id', user.id);
+      const { data, error } = await supabase.from("transactions").select("*").eq("user_id", user.id);
       if (error) throw error;
       return data ?? [];
     },
@@ -70,9 +72,9 @@ export default function Profile() {
   });
 
   const { data: sharedAccess = [] } = useQuery({
-    queryKey: ['sharedAccess', user?.id],
+    queryKey: ["sharedAccess", user?.id],
     queryFn: async () => {
-      const { data, error } = await supabase.from('shared_access').select('*').eq('owner_id', user.id);
+      const { data, error } = await supabase.from("shared_access").select("*").eq("owner_id", user.id);
       if (error) throw error;
       return data ?? [];
     },
@@ -80,14 +82,14 @@ export default function Profile() {
   });
 
   const { data: pendingInvitesCount = 0 } = useQuery({
-    queryKey: ['pendingInvitesCount', user?.email],
+    queryKey: ["pendingInvitesCount", user?.email],
     queryFn: async () => {
       if (!user?.email) return 0;
       const { count, error } = await supabase
-        .from('shared_access')
-        .select('*', { count: 'exact', head: true })
-        .eq('shared_with_email', user.email)
-        .eq('status', 'pending');
+        .from("shared_access")
+        .select("*", { count: "exact", head: true })
+        .eq("shared_with_email", user.email)
+        .eq("status", "pending");
       if (error) return 0;
       return count || 0;
     },
@@ -95,50 +97,38 @@ export default function Profile() {
   });
 
   const { data: referrals = [] } = useQuery({
-    queryKey: ['referrals', user?.id],
+    queryKey: ["referrals", user?.id],
     queryFn: async () => {
-      const { data } = await supabase.from('referrals').select('*').eq('referrer_id', user.id);
+      const { data } = await supabase.from("referrals").select("*").eq("referrer_id", user.id);
       return data || [];
     },
     enabled: !!user?.id,
   });
 
-  const activeReferrals = referrals.filter(r => r.status === 'active').length;
-  const discountPercent = activeReferrals >= 4 ? 100 : activeReferrals >= 3 ? 75 : activeReferrals >= 2 ? 50 : activeReferrals >= 1 ? 25 : 0;
-
-  const createShareMutation = useMutation({
-    mutationFn: async (formData) => {
-      const payload = {
-        owner_id: user.id,
-        shared_with_email: formData.shared_with_email.toLowerCase().trim(),
-        relationship_type: formData.relationship_type,
-        status: 'pending',
-        permissions: formData.permissions,
-      };
-      const { data, error } = await supabase.from('shared_access').insert([payload]).select();
-      if (error) throw error;
+  // Busca assinatura
+  const { data: subscription } = useQuery({
+    queryKey: ["subscription", user?.id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("subscriptions")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .single();
       return data;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['sharedAccess'] });
-      queryClient.invalidateQueries({ queryKey: ['pendingInvitesCount'] });
-      setShowShareModal(false);
-      toast.success('Convite enviado com sucesso!');
-    },
-    onError: (error) => toast.error(`Erro: ${error.message}`)
+    enabled: !!user?.id,
   });
 
-  const deleteShareMutation = useMutation({
-    mutationFn: async (id) => {
-      const { error } = await supabase.from('shared_access').delete().eq('id', id).eq('owner_id', user.id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['sharedAccess'] });
-      toast.success('Compartilhamento removido!');
-    },
-    onError: (error) => toast.error('Erro ao remover compartilhamento')
-  });
+  const isActive = subscription?.status === "active" || subscription?.status === "trialing";
+  const isCancelled = subscription?.status === "cancelled";
+  const endDate = subscription?.current_period_end
+    ? format(new Date(subscription.current_period_end), "dd/MM/yyyy", { locale: ptBR })
+    : null;
+
+  const activeReferrals = referrals.filter(r => r.status === "active").length;
+  const discountPercent = activeReferrals >= 4 ? 100 : activeReferrals >= 3 ? 75 : activeReferrals >= 2 ? 50 : activeReferrals >= 1 ? 25 : 0;
 
   const handleLogout = async () => {
     setIsLoggingOut(true);
@@ -157,12 +147,12 @@ export default function Profile() {
         owner_id: user.id,
         shared_with_email: data.shared_with_email,
         relationship_type: data.relationship_type,
-        status: 'pending',
+        status: "pending",
         permissions: data.permissions,
       };
-      const { data: result, error } = await supabase.from('shared_access').insert([payload]).select();
+      const { error } = await supabase.from("shared_access").insert([payload]).select();
       if (error) { toast.error(`Erro: ${error.message}`); return; }
-      toast.success('Convite enviado!');
+      toast.success("Convite enviado!");
       setShowShareModal(false);
     } catch (err) {
       toast.error(`Erro inesperado: ${err.message}`);
@@ -171,9 +161,8 @@ export default function Profile() {
 
   const stats = {
     totalAccounts: accounts.length,
-    totalTransactions: transactions.length,
-    incomeTransactions: transactions.filter(t => t.type === 'income').length,
-    expenseTransactions: transactions.filter(t => t.type === 'expense').length
+    incomeTransactions: transactions.filter(t => t.type === "income").length,
+    expenseTransactions: transactions.filter(t => t.type === "expense").length,
   };
 
   const menuItems = [
@@ -185,86 +174,68 @@ export default function Profile() {
           label: "Indique e Ganhe",
           action: "referrals",
           badge: discountPercent > 0 ? `${discountPercent}% off` : null,
-          badgeColor: "bg-orange-100 text-orange-600"
-        }
-      ]
+          badgeColor: "bg-orange-100 text-orange-600",
+        },
+      ],
     },
     {
       title: "Compartilhamento",
       items: [
-        {
-          icon: Users,
-          label: "Compartilhar Finanças",
-          action: "share",
-          badge: sharedAccess.filter(s => s.status === 'accepted').length || null
-        },
-        {
-          icon: Clock,
-          label: "Convites Pendentes",
-          action: "pending_invites",
-          badge: pendingInvitesCount > 0 ? pendingInvitesCount : null
-        }
-      ]
+        { icon: Users, label: "Compartilhar Finanças", action: "share", badge: sharedAccess.filter(s => s.status === "accepted").length || null },
+        { icon: Clock, label: "Convites Pendentes", action: "pending_invites", badge: pendingInvitesCount > 0 ? pendingInvitesCount : null },
+      ],
     },
     {
       title: "Preferências",
       items: [
         { icon: Bell, label: "Notificações", action: "toggle", state: notifications },
-        { icon: Moon, label: "Modo Escuro", action: "toggle", state: darkMode }
-      ]
+        { icon: Moon, label: "Modo Escuro", action: "toggle", state: darkMode },
+      ],
     },
     {
       title: "Suporte",
       items: [
         { icon: HelpCircle, label: "Central de Ajuda", action: "help" },
         { icon: FileText, label: "Termos de Uso", action: "terms" },
-        { icon: Shield, label: "Política de Privacidade", action: "privacy" }
-      ]
+        { icon: Shield, label: "Política de Privacidade", action: "privacy" },
+      ],
     },
     {
       title: "Sobre",
       items: [
-        { icon: Star, label: "Avaliar o App", action: "rate" }
-      ]
+        { icon: Star, label: "Avaliar o App", action: "rate" },
+      ],
     },
     {
       title: "Configurações",
       items: [
-        { icon: Tag, label: "Gerenciar Categorias", action: "categories" }
-      ]
+        { icon: Tag, label: "Gerenciar Categorias", action: "categories" },
+      ],
     },
   ];
 
   const handleMenuAction = (item) => {
     try {
-      if (item.action === "referrals") {
-        setShowReferralModal(true);
-      } else if (item.action === "share") {
-        setShowSharedList(true);
-      } else if (item.action === "pending_invites") {
-        setShowPendingInvites(true);
-      } else if (item.action === "toggle") {
+      if (item.action === "referrals") setShowReferralModal(true);
+      else if (item.action === "share") setShowSharedList(true);
+      else if (item.action === "pending_invites") setShowPendingInvites(true);
+      else if (item.action === "plan") navigate(createPageUrl("PlanPage"));
+      else if (item.action === "toggle") {
         if (item.label === "Notificações") {
           setNotifications(!notifications);
-          toast.success(`Notificações ${!notifications ? 'ativadas' : 'desativadas'}`);
+          toast.success(`Notificações ${!notifications ? "ativadas" : "desativadas"}`);
         } else if (item.label === "Modo Escuro") {
           const newDarkMode = !darkMode;
           setDarkMode(newDarkMode);
-          localStorage.setItem('darkMode', newDarkMode.toString());
-          document.documentElement.classList.toggle('dark', newDarkMode);
-          toast.success(`Modo ${newDarkMode ? 'escuro' : 'claro'} ativado`);
+          localStorage.setItem("darkMode", newDarkMode.toString());
+          document.documentElement.classList.toggle("dark", newDarkMode);
+          toast.success(`Modo ${newDarkMode ? "escuro" : "claro"} ativado`);
         }
-      } else if (item.action === "help") {
-        setShowHelpModal(true);
-      } else if (item.action === "terms") {
-        setShowTermsModal(true);
-      } else if (item.action === "privacy") {
-        setShowPrivacyModal(true);
-      } else if (item.action === "categories") {
-        setShowCategories(true);
-      } else if (item.action === "rate") {
-        setShowRateModal(true);
-      }
+      } else if (item.action === "help") setShowHelpModal(true);
+      else if (item.action === "terms") setShowTermsModal(true);
+      else if (item.action === "privacy") setShowPrivacyModal(true);
+      else if (item.action === "categories") setShowCategories(true);
+      else if (item.action === "rate") setShowRateModal(true);
     } catch (error) {
       toast.error("Erro ao executar ação");
     }
@@ -273,13 +244,13 @@ export default function Profile() {
   if (!user) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
       </div>
     );
   }
 
-  const userName = user.user_metadata?.full_name || user.email.split('@')[0];
-  const initials = userName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+  const userName = user.user_metadata?.full_name || user.email.split("@")[0];
+  const initials = userName.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 pb-24 transition-colors duration-200">
@@ -300,7 +271,55 @@ export default function Profile() {
           </div>
         </motion.div>
 
-        {/* Banner de indicação no perfil */}
+        {/* Card de assinatura */}
+        <div className="px-5 pb-4">
+          <button
+            onClick={() => navigate(createPageUrl("PlanPage"))}
+            className={`w-full rounded-2xl p-4 flex items-center gap-3 text-left transition-opacity hover:opacity-90 ${
+              isActive && !isCancelled
+                ? "bg-gradient-to-r from-violet-600 to-indigo-600"
+                : isCancelled
+                ? "bg-gradient-to-r from-amber-500 to-orange-500"
+                : "bg-gradient-to-r from-gray-500 to-gray-600"
+            }`}
+          >
+            <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center flex-shrink-0">
+              <Crown className="w-5 h-5 text-white" />
+            </div>
+            <div className="flex-1 min-w-0">
+              {isActive && !isCancelled && (
+                <>
+                  <p className="text-white font-semibold text-sm flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />
+                    Plano Pro ativo
+                  </p>
+                  <p className="text-white/70 text-xs">
+                    {subscription?.status === "trialing"
+                      ? `Trial até ${endDate}`
+                      : `Próxima cobrança: ${endDate}`}
+                  </p>
+                </>
+              )}
+              {isCancelled && (
+                <>
+                  <p className="text-white font-semibold text-sm">Assinatura cancelada</p>
+                  <p className="text-white/70 text-xs">Acesso Pro até {endDate}</p>
+                </>
+              )}
+              {!subscription && (
+                <>
+                  <p className="text-white font-semibold text-sm flex items-center gap-1.5">
+                    <Zap className="w-3.5 h-3.5 text-yellow-300" /> Fazer upgrade para Pro
+                  </p>
+                  <p className="text-white/70 text-xs">R$12,90/mês · Primeiro mês grátis</p>
+                </>
+              )}
+            </div>
+            <ChevronRight className="w-4 h-4 text-white/70 flex-shrink-0" />
+          </button>
+        </div>
+
+        {/* Banner de indicação */}
         {discountPercent === 0 && (
           <div className="px-5 pb-5">
             <button onClick={() => setShowReferralModal(true)}
@@ -326,7 +345,7 @@ export default function Profile() {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-white font-semibold text-sm">Você tem {discountPercent}% de desconto!</p>
-                <p className="text-white/70 text-xs">{activeReferrals} indicado{activeReferrals > 1 ? 's' : ''} ativo{activeReferrals > 1 ? 's' : ''} · Indique mais para aumentar</p>
+                <p className="text-white/70 text-xs">{activeReferrals} indicado{activeReferrals > 1 ? "s" : ""} ativo{activeReferrals > 1 ? "s" : ""}</p>
               </div>
               <ChevronRight className="w-4 h-4 text-white/70 flex-shrink-0" />
             </button>
@@ -349,19 +368,27 @@ export default function Profile() {
             <div className="bg-white dark:bg-gray-800 rounded-2xl overflow-hidden shadow-sm border border-gray-100 dark:border-gray-700">
               {section.items.map((item, i) => (
                 <button key={item.label} onClick={() => handleMenuAction(item)} disabled={isLoggingOut}
-                  className={`w-full flex items-center justify-between p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors disabled:opacity-50 ${i !== section.items.length - 1 ? 'border-b border-gray-100 dark:border-gray-700' : ''}`}>
+                  className={`w-full flex items-center justify-between p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors disabled:opacity-50 ${i !== section.items.length - 1 ? "border-b border-gray-100 dark:border-gray-700" : ""}`}>
                   <div className="flex items-center gap-3">
-                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${item.action === 'referrals' ? 'bg-orange-100 dark:bg-orange-900/30' : 'bg-gray-100 dark:bg-gray-700'}`}>
-                      <item.icon className={`w-5 h-5 ${item.action === 'referrals' ? 'text-orange-600 dark:text-orange-400' : 'text-gray-600 dark:text-gray-300'}`} />
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                      item.action === "referrals" ? "bg-orange-100 dark:bg-orange-900/30" :
+                      item.action === "plan" ? "bg-violet-100 dark:bg-violet-900/30" :
+                      "bg-gray-100 dark:bg-gray-700"
+                    }`}>
+                      <item.icon className={`w-5 h-5 ${
+                        item.action === "referrals" ? "text-orange-600 dark:text-orange-400" :
+                        item.action === "plan" ? "text-violet-600 dark:text-violet-400" :
+                        "text-gray-600 dark:text-gray-300"
+                      }`} />
                     </div>
                     <span className="font-medium text-gray-900 dark:text-white">{item.label}</span>
                     {item.badge && (
-                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${item.badgeColor || (item.action === 'pending_invites' ? 'bg-orange-100 text-orange-600' : 'bg-blue-100 text-blue-600')}`}>
+                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${item.badgeColor || (item.action === "pending_invites" ? "bg-orange-100 text-orange-600" : "bg-blue-100 text-blue-600")}`}>
                         {item.badge}
                       </span>
                     )}
                   </div>
-                  {item.action === 'toggle' ? (
+                  {item.action === "toggle" ? (
                     <Switch checked={item.state} onCheckedChange={() => handleMenuAction(item)} disabled={isLoggingOut} />
                   ) : (
                     <ChevronRight className="w-5 h-5 text-gray-400" />
@@ -387,21 +414,21 @@ export default function Profile() {
         {showSharedList && (
           <SharedAccessList onClose={() => {
             setShowSharedList(false);
-            queryClient.invalidateQueries({ queryKey: ['sharedAccess'] });
-            queryClient.invalidateQueries({ queryKey: ['pendingInvitesCount'] });
+            queryClient.invalidateQueries({ queryKey: ["sharedAccess"] });
+            queryClient.invalidateQueries({ queryKey: ["pendingInvitesCount"] });
           }} />
         )}
         {showCategories && <CategoryManager onClose={() => setShowCategories(false)} />}
         {showPendingInvites && (
           <PendingInvites onClose={() => {
             setShowPendingInvites(false);
-            queryClient.invalidateQueries({ queryKey: ['pendingInvitesCount'] });
+            queryClient.invalidateQueries({ queryKey: ["pendingInvitesCount"] });
           }} />
         )}
         {showHelpModal && <HelpModal onClose={() => setShowHelpModal(false)} />}
         {showTermsModal && <TermsModal onClose={() => setShowTermsModal(false)} />}
         {showPrivacyModal && <PrivacyModal onClose={() => setShowPrivacyModal(false)} />}
-        {showRateModal && <RateAppModal onSubmit={() => toast.success('Obrigado!')} onClose={() => setShowRateModal(false)} />}
+        {showRateModal && <RateAppModal onSubmit={() => toast.success("Obrigado!")} onClose={() => setShowRateModal(false)} />}
       </AnimatePresence>
     </div>
   );
@@ -411,12 +438,12 @@ function StatCard({ delay, icon: Icon, value, label, color, isPositive, isNegati
   const colors = {
     blue: "bg-gray-50 text-blue-600 dark:bg-blue-950 dark:text-blue-300",
     emerald: "bg-emerald-50 text-emerald-600 dark:bg-emerald-950 dark:text-emerald-300",
-    red: "bg-red-50 text-red-600 dark:bg-red-950 dark:text-red-300"
+    red: "bg-red-50 text-red-600 dark:bg-red-950 dark:text-red-300",
   };
   return (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay }}
       className={`${colors[color]} rounded-xl p-4 text-center`}>
-      {Icon ? <Icon className="w-5 h-5 mx-auto mb-2" /> : <div className="w-5 h-5 mx-auto mb-2 font-bold">{isPositive ? '+' : '-'}</div>}
+      {Icon ? <Icon className="w-5 h-5 mx-auto mb-2" /> : <div className="w-5 h-5 mx-auto mb-2 font-bold">{isPositive ? "+" : "-"}</div>}
       <p className="text-2xl font-bold text-gray-900 dark:text-white">{value}</p>
       <p className="text-xs text-gray-500 dark:text-gray-400">{label}</p>
     </motion.div>
