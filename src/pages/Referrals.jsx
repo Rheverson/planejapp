@@ -58,7 +58,7 @@ export default function Referrals() {
   const finalValue = (12.90 * (1 - discountPercent / 100)).toFixed(2);
 
   const referralCode = profile?.referral_code || '';
-  const referralLink = `https://planeje.vercel.app?ref=${referralCode}`;
+  const referralLink = `https://www.planeje.vercel.app?ref=${referralCode}`;
 
   const copyCode = () => { navigator.clipboard.writeText(referralCode); toast.success('Código copiado!'); };
   const copyLink = () => { navigator.clipboard.writeText(referralLink); toast.success('Link copiado!'); };

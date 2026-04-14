@@ -119,7 +119,7 @@ serve(async (req) => {
       : 'Nenhuma meta cadastrada'
 
     const accountNames = accounts.map((a: any) => `${a.name} (ID:${a.id})`).join(', ')
-    const referralLink = `https://planejapp.com.br/subscribe?ref=${profile?.referral_code || ''}`
+    const referralLink = `https://www.planejapp.com.br/subscribe?ref=${profile?.referral_code || ''}`
 
     const systemPrompt = `Você é Finn, assistente financeiro pessoal brasileiro com superpoderes. Responda de forma DIRETA e CURTA.
 

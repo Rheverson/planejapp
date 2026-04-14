@@ -35,7 +35,7 @@ export default function ReferralInviteModal({ onClose }) {
   const nextCount = activeCount >= 4 ? 4 : activeCount + 1;
 
   const referralCode = profile?.referral_code || '';
-  const referralLink = `https://planejapp.com.br?ref=${referralCode}`;
+  const referralLink = `https://www.planejapp.com.br?ref=${referralCode}`;
 
   const copyCode = () => {
     navigator.clipboard.writeText(referralCode);

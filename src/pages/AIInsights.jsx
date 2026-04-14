@@ -570,7 +570,7 @@ function ChatTab({ user }) {
       }
       else if (action._type === "send_invite") {
         const { data: profile } = await supabase.from("profiles").select("referral_code").eq("id", user.id).single();
-        const referralLink = `https://planejapp.com.br/subscribe?ref=${profile?.referral_code || ""}`;
+        const referralLink = `https://www.planejapp.com.br/subscribe?ref=${profile?.referral_code || ""}`;
         const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-email`, { method: "POST", headers: { "Content-Type": "application/json", "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` }, body: JSON.stringify({ to: action.email, senderEmail: "noreply@planejapp.com.br", senderName: "Planeje", subject: `Você foi convidado para o Planeje! 💜`, html: `<p>Olá${action.name ? ", " + action.name : ""}! Acesse: <a href="${referralLink}">${referralLink}</a></p>` }) });
         if (!res.ok) throw new Error("Erro ao enviar email");
         setPendingAction(null);
