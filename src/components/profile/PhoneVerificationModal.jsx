@@ -15,6 +15,8 @@ const TERMS = `Ao fornecer seu número de telefone, você concorda com:
 Não compartilharemos seu número com terceiros para fins de marketing. Você pode remover seu telefone a qualquer momento nas configurações da conta.`;
 
 export default function PhoneVerificationModal({ onClose, onSuccess }) {
+  // TODO: reativar quando SMS estiver funcionando
+  return null;
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [step, setStep] = useState("terms"); // terms | phone | otp | success
