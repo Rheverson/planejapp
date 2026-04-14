@@ -81,6 +81,17 @@ function useProfile(userId) {
   });
 }
 
+// ✅ Verifica se tem acesso — inclui cancelled com período ainda válido
+function hasActiveAccess(subscription) {
+  if (!subscription) return false;
+  const { status, current_period_end } = subscription;
+  if (status === 'active' || status === 'trialing') return true;
+  if (status === 'cancelled' && current_period_end) {
+    return new Date(current_period_end) > new Date();
+  }
+  return false;
+}
+
 const AuthenticatedApp = () => {
   const { loading, user } = useAuth();
   const { data: subscription, isLoading: subLoading } = useSubscription(user?.id);
@@ -93,7 +104,7 @@ const AuthenticatedApp = () => {
 
   useEffect(() => {
     if (!user || profileLoading) return;
-    const isSubscribed = subscription && ['active', 'trialing'].includes(subscription.status);
+    const isSubscribed = hasActiveAccess(subscription);
     if (!isSubscribed) return;
     const localCompleted = localStorage.getItem('onboarding_completed') === 'true';
     const dbCompleted = profile?.onboarding_completed === true;
@@ -121,7 +132,7 @@ const AuthenticatedApp = () => {
     );
   }
 
-  const isSubscribed = subscription && ['active', 'trialing'].includes(subscription.status);
+  const isSubscribed = hasActiveAccess(subscription);
 
   if (!isSubscribed) {
     return (
