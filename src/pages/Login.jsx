@@ -3,10 +3,128 @@ import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { ArrowLeft, ChevronRight, Eye, EyeOff, Loader2 } from "lucide-react";
+import { ArrowLeft, ChevronRight, Eye, EyeOff, Loader2, X } from "lucide-react";
 import { FcGoogle } from "react-icons/fc";
 import { Capacitor } from "@capacitor/core";
 import { App } from "@capacitor/app";
+
+const TERMS_CONTENT = [
+  {
+    title: "1. Aceitação dos termos",
+    text: "Ao acessar ou usar o PlanejeApp, você concorda com estes Termos de Uso. Se não concordar, não utilize o serviço."
+  },
+  {
+    title: "2. Descrição do serviço",
+    text: "O PlanejeApp é uma plataforma de controle financeiro pessoal que oferece ferramentas de organização de receitas, despesas, metas e análises por inteligência artificial."
+  },
+  {
+    title: "3. Cadastro e conta",
+    text: "Você é responsável por manter a confidencialidade de suas credenciais de acesso e por todas as atividades realizadas em sua conta. Notifique-nos imediatamente sobre qualquer uso não autorizado."
+  },
+  {
+    title: "4. Privacidade e dados",
+    text: "Seus dados financeiros são criptografados e nunca compartilhados com terceiros sem seu consentimento. Utilizamos seus dados somente para fornecer e melhorar o serviço."
+  },
+  {
+    title: "5. Pagamento e cancelamento",
+    text: "O plano possui período de teste gratuito de 30 dias, com cobrança de R$ 12,90/mês após esse período. Você pode cancelar a qualquer momento, sem multas ou taxas adicionais."
+  },
+  {
+    title: "6. Limitação de responsabilidade",
+    text: "O PlanejeApp não se responsabiliza por decisões financeiras tomadas com base nas análises fornecidas. O serviço tem caráter informativo e não substitui consultoria financeira profissional."
+  },
+  {
+    title: "7. Alterações nos termos",
+    text: "Podemos atualizar estes termos periodicamente. Você será notificado sobre alterações significativas via e-mail ou notificação no aplicativo."
+  },
+  {
+    title: "8. Contato",
+    text: "Dúvidas sobre estes termos? Entre em contato pelo suporte disponível dentro do aplicativo ou pelo e-mail contato@planejapp.com.br."
+  }
+];
+
+function TermsModal({ onClose }) {
+  return (
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 1000,
+      background: "rgba(0,0,0,0.7)", backdropFilter: "blur(4px)",
+      display: "flex", alignItems: "flex-end", justifyContent: "center",
+      padding: "0"
+    }}
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ y: 100, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        exit={{ y: 100, opacity: 0 }}
+        transition={{ duration: 0.3, ease: "easeOut" }}
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: "#0c0e13",
+          border: "0.5px solid rgba(255,255,255,0.08)",
+          borderRadius: "20px 20px 0 0",
+          width: "100%", maxWidth: 480,
+          maxHeight: "80vh",
+          display: "flex", flexDirection: "column"
+        }}
+      >
+        {/* Header */}
+        <div style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          padding: "20px 24px 16px",
+          borderBottom: "0.5px solid rgba(255,255,255,0.06)"
+        }}>
+          <div>
+            <h2 style={{
+              fontFamily: "'Cabinet Grotesk', sans-serif",
+              fontWeight: 800, fontSize: "1.1rem",
+              color: "#e8edf5", letterSpacing: "-0.02em", margin: 0
+            }}>Termos de uso</h2>
+            <p style={{ fontSize: "0.75rem", color: "#6b7a96", margin: "2px 0 0" }}>PlanejeApp — última atualização: Abril 2025</p>
+          </div>
+          <button onClick={onClose} style={{
+            background: "rgba(255,255,255,0.06)", border: "none",
+            borderRadius: 8, width: 32, height: 32,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            cursor: "pointer", color: "#6b7a96"
+          }}>
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* Content */}
+        <div style={{ overflowY: "auto", padding: "20px 24px 32px", flex: 1 }}>
+          {TERMS_CONTENT.map((section, i) => (
+            <div key={i} style={{ marginBottom: 20 }}>
+              <h3 style={{
+                fontFamily: "'Cabinet Grotesk', sans-serif",
+                fontWeight: 700, fontSize: "0.9rem",
+                color: "#e8edf5", marginBottom: 6, letterSpacing: "-0.01em"
+              }}>{section.title}</h3>
+              <p style={{
+                fontSize: "0.82rem", color: "#6b7a96",
+                lineHeight: 1.7, margin: 0
+              }}>{section.text}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Footer */}
+        <div style={{ padding: "16px 24px", borderTop: "0.5px solid rgba(255,255,255,0.06)" }}>
+          <button onClick={onClose} style={{
+            width: "100%", background: "#1d4ed8",
+            border: "none", borderRadius: 12, padding: "12px",
+            color: "#fff", fontSize: "0.95rem", fontWeight: 700,
+            fontFamily: "'Cabinet Grotesk', sans-serif",
+            cursor: "pointer", letterSpacing: "-0.01em"
+          }}>
+            Entendi e aceito
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
 
 export default function Login() {
   const [loading, setLoading] = useState(false);
@@ -15,6 +133,7 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loginError, setLoginError] = useState("");
+  const [showTerms, setShowTerms] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -79,6 +198,11 @@ export default function Login() {
   const stepIndex = { email: 0, password: 1, signup: 1 };
 
   return (
+    <>
+    <AnimatePresence>
+      {showTerms && <TermsModal onClose={() => setShowTerms(false)} />}
+    </AnimatePresence>
+
     <div className="min-h-screen flex flex-col justify-center items-center p-4 relative overflow-hidden"
       style={{ background: "linear-gradient(170deg, #0d1829 0%, #060709 50%)" }}>
 
@@ -351,9 +475,15 @@ export default function Login() {
         {/* Footer */}
         <p style={{ textAlign: "center", fontSize: "0.78rem", color: "#3a4259", marginTop: 16 }}>
           Ao continuar, você concorda com nossos{" "}
-          <span style={{ color: "#60a5fa", cursor: "pointer" }}>Termos de uso</span>
+          <span
+            onClick={() => setShowTerms(true)}
+            style={{ color: "#60a5fa", cursor: "pointer", textDecoration: "underline" }}
+          >
+            Termos de uso
+          </span>
         </p>
       </motion.div>
     </div>
+    </>
   );
 }
