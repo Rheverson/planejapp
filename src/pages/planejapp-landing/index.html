@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PlanejeApp — Controle total da sua vida financeira</title>
+<meta name="description" content="O PlanejeApp usa inteligência artificial para te ajudar a organizar, economizar e crescer financeiramente. Comece grátis por 30 dias.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cabinet+Grotesk:wght@400;500;700;800;900&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --bg:#060709; --bg2:#0c0e13; --bg3:#12151c; --bg4:#181c25;
+  --lp-blue:#1d4ed8; --lp-blue-b:#2563eb; --lp-indigo:#3730a3;
+  --lp-gl:rgba(29,78,216,0.25);
+  --green:#2ecc8a; --red:#e85d5d;
+  --text:#e8edf5; --muted:#6b7a96;
+  --border:rgba(255,255,255,0.07); --bblue:rgba(37,99,235,0.4);
+  --app-bg:#f9fafb; --app-white:#ffffff;
+  --app-gray400:#9ca3af; --app-gray800:#1f2937;
+  --app-border:#e5e7eb;
+}
+html{scroll-behavior:smooth;}
+body{background:var(--bg);color:var(--text);font-family:'Outfit',sans-serif;font-size:16px;line-height:1.65;overflow-x:hidden;}
+h1,h2,h3,h4{font-family:'Cabinet Grotesk',sans-serif;line-height:1.12;letter-spacing:-0.03em;}
+
+/* NAV */
+nav{position:fixed;top:0;left:0;right:0;z-index:200;display:flex;align-items:center;justify-content:space-between;padding:0 5vw;height:64px;background:rgba(6,7,9,0.85);backdrop-filter:blur(20px);border-bottom:1px solid var(--border);}
+.logo{font-family:'Cabinet Grotesk',sans-serif;font-weight:900;font-size:1.4rem;color:var(--text);letter-spacing:-0.04em;display:flex;align-items:center;gap:7px;}
+.logo-dot{width:8px;height:8px;border-radius:50%;background:var(--lp-blue-b);margin-top:2px;}
+.nav-right{display:flex;align-items:center;gap:8px;}
+.btn-login{background:transparent;border:1px solid rgba(37,99,235,0.4);color:#60a5fa;padding:.45rem 1.1rem;border-radius:8px;font-family:'Outfit',sans-serif;font-size:.875rem;font-weight:500;cursor:pointer;transition:all .2s;}
+.btn-login:hover{background:rgba(37,99,235,0.1);border-color:#60a5fa;}
+.btn-nav{background:var(--lp-blue);border:none;color:#fff;padding:.45rem 1.2rem;border-radius:8px;font-family:'Outfit',sans-serif;font-size:.875rem;font-weight:600;cursor:pointer;transition:all .2s;}
+.btn-nav:hover{background:var(--lp-blue-b);box-shadow:0 0 20px var(--lp-gl);}
+
+/* HERO */
+.hero{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:8rem 5vw 5rem;position:relative;overflow:hidden;}
+.orb{position:absolute;border-radius:50%;filter:blur(90px);pointer-events:none;}
+.orb1{width:700px;height:450px;background:rgba(29,78,216,0.14);top:-120px;left:50%;transform:translateX(-50%);}
+.orb2{width:320px;height:320px;background:rgba(55,48,163,0.1);bottom:8%;right:3%;}
+.orb3{width:220px;height:220px;background:rgba(34,197,94,0.06);bottom:18%;left:3%;}
+.chip{display:inline-flex;align-items:center;gap:7px;background:rgba(37,99,235,0.12);border:1px solid var(--bblue);color:#60a5fa;padding:5px 14px;border-radius:999px;font-size:.78rem;font-weight:600;letter-spacing:.04em;margin-bottom:2.2rem;position:relative;z-index:1;animation:fadeUp .6s ease both;text-transform:uppercase;}
+.chip-pulse{width:6px;height:6px;border-radius:50%;background:#60a5fa;animation:pulse 2s infinite;}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.4;transform:scale(.7);}}
+h1{font-size:clamp(2.4rem,6vw,4.8rem);font-weight:900;max-width:860px;margin-bottom:1.4rem;position:relative;z-index:1;animation:fadeUp .65s .08s ease both;}
+h1 .accent{color:#60a5fa;}
+.hero-sub{font-size:clamp(1rem,1.8vw,1.2rem);color:var(--muted);max-width:520px;margin:0 auto 2.6rem;font-weight:400;position:relative;z-index:1;animation:fadeUp .65s .16s ease both;}
+.hero-ctas{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;margin-bottom:4.5rem;position:relative;z-index:1;animation:fadeUp .65s .24s ease both;}
+.btn-cta{background:var(--lp-blue);color:#fff;padding:.9rem 2.2rem;border-radius:10px;font-family:'Outfit',sans-serif;font-size:1rem;font-weight:600;border:none;cursor:pointer;transition:all .25s;box-shadow:0 0 40px rgba(29,78,216,.35);}
+.btn-cta:hover{background:var(--lp-blue-b);transform:translateY(-2px);box-shadow:0 16px 40px rgba(29,78,216,.5);}
+.btn-cta-sec{background:transparent;color:var(--text);padding:.9rem 2.2rem;border-radius:10px;font-family:'Outfit',sans-serif;font-size:1rem;font-weight:500;border:1px solid rgba(255,255,255,.1);cursor:pointer;transition:all .25s;}
+.btn-cta-sec:hover{background:rgba(255,255,255,.04);border-color:rgba(255,255,255,.2);}
+
+/* PHONE MOCKUP */
+.phone-wrap{position:relative;z-index:1;animation:fadeUp .85s .32s ease both;display:flex;justify-content:center;}
+.phone-shell{width:300px;background:#0f172a;border-radius:40px;padding:10px;box-shadow:0 0 0 1px rgba(255,255,255,0.08),0 60px 120px rgba(0,0,0,.7),0 0 80px rgba(29,78,216,.15),inset 0 1px 0 rgba(255,255,255,0.05);position:relative;}
+.phone-notch{width:80px;height:24px;background:#0f172a;border-radius:0 0 16px 16px;margin:0 auto;position:relative;z-index:2;}
+.phone-screen{background:var(--app-bg);border-radius:32px;overflow:hidden;position:relative;}
+.app-header{background:linear-gradient(135deg,#1d4ed8 0%,#1e3a8a 60%,#312e81 100%);padding:20px 16px 0;color:white;}
+.app-balance-label{font-size:9px;font-weight:500;color:#93c5fd;text-transform:uppercase;letter-spacing:.08em;margin-bottom:3px;display:flex;align-items:center;gap:4px;}
+.app-balance-value{font-family:'Cabinet Grotesk',sans-serif;font-size:26px;font-weight:700;color:#fff;letter-spacing:-0.02em;}
+.app-invested{font-size:9px;color:#93c5fd;margin-top:2px;}
+.app-month-bar{display:flex;align-items:center;justify-content:space-between;margin-top:10px;background:rgba(255,255,255,.08);border-radius:10px;padding:6px 10px;}
+.app-month-txt{font-size:10px;font-weight:600;color:#fff;}
+.app-arrow{width:16px;height:16px;border-radius:50%;background:rgba(255,255,255,.15);display:flex;align-items:center;justify-content:center;font-size:8px;color:white;}
+.app-actions{display:flex;gap:6px;padding:8px 16px 10px;}
+.app-btn{flex:1;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.15);border-radius:10px;padding:6px 4px;display:flex;flex-direction:column;align-items:center;gap:3px;}
+.app-btn-ico{font-size:12px;}
+.app-btn-lbl{font-size:8px;font-weight:600;color:white;}
+.app-content{padding:10px 12px;display:flex;flex-direction:column;gap:8px;background:var(--app-bg);}
+.app-kpi-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;}
+.app-kpi{background:white;border:1px solid var(--app-border);border-radius:12px;padding:8px 10px;}
+.app-kpi-lbl{font-size:7px;font-weight:600;color:var(--app-gray400);text-transform:uppercase;letter-spacing:.08em;margin-bottom:3px;}
+.app-kpi-val{font-family:'Cabinet Grotesk',sans-serif;font-size:13px;font-weight:700;}
+.app-kpi-sub{font-size:7px;color:var(--app-gray400);margin-top:1px;}
+.app-kpi-bar{height:2px;border-radius:1px;margin-top:5px;background:#f3f4f6;}
+.app-kpi-bar-fill{height:2px;border-radius:1px;}
+.kv-green{color:#16a34a;}.kv-red{color:#dc2626;}.kv-blue{color:#1d4ed8;}.kv-violet{color:#7c3aed;}
+.kb-green{background:#22c55e;}.kb-red{background:#ef4444;}
+.app-reports-row{background:white;border:1px solid var(--app-border);border-radius:12px;padding:8px 10px;display:flex;align-items:center;gap:8px;}
+.app-reports-ico{width:28px;height:28px;background:#f1f5f9;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;}
+.app-reports-txt{flex:1;}
+.app-reports-title{font-size:10px;font-weight:600;color:var(--app-gray800);}
+.app-reports-sub{font-size:8px;color:var(--app-gray400);}
+.app-reports-arrow{font-size:10px;color:var(--app-gray400);}
+.app-card{background:white;border:1px solid var(--app-border);border-radius:12px;padding:8px 10px;}
+.app-card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:7px;}
+.app-card-title{font-size:10px;font-weight:600;color:var(--app-gray800);}
+.app-card-link{font-size:8px;color:#2563eb;font-weight:600;}
+.app-accounts-row{display:flex;gap:6px;overflow:hidden;}
+.app-acc{min-width:80px;background:#f9fafb;border:1px solid var(--app-border);border-radius:10px;padding:7px 8px;}
+.app-acc-ico{width:20px;height:20px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:9px;margin-bottom:4px;}
+.app-acc-name{font-size:7px;color:var(--app-gray400);margin-bottom:2px;}
+.app-acc-val{font-size:10px;font-weight:700;font-family:'Cabinet Grotesk',sans-serif;}
+.app-tx-row{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #f3f4f6;}
+.app-tx-row:last-child{border-bottom:none;}
+.app-tx-ico{width:24px;height:24px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:10px;flex-shrink:0;}
+.app-tx-info{flex:1;}
+.app-tx-desc{font-size:9px;font-weight:600;color:var(--app-gray800);}
+.app-tx-cat{font-size:7.5px;color:var(--app-gray400);}
+.app-tx-val{font-size:10px;font-weight:700;font-family:'Cabinet Grotesk',sans-serif;}
+.app-fab{position:absolute;bottom:14px;right:14px;width:40px;height:40px;background:#1d4ed8;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px;color:white;box-shadow:0 4px 14px rgba(29,78,216,.5);}
+
+/* SECTION COMMONS */
+section{padding:6rem 5vw;}
+.s-label{font-size:.72rem;text-transform:uppercase;letter-spacing:.14em;color:#60a5fa;margin-bottom:.9rem;font-weight:600;}
+.s-title{font-size:clamp(1.9rem,4vw,3.2rem);font-weight:900;max-width:640px;margin-bottom:1.1rem;}
+.s-sub{color:var(--muted);max-width:520px;font-size:1.05rem;margin-bottom:3rem;}
+.center{text-align:center;}.center .s-title,.center .s-sub{margin-left:auto;margin-right:auto;}
+
+/* BENEFITS */
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(265px,1fr));gap:14px;}
+.bcard{background:var(--bg2);border:1px solid var(--border);border-radius:16px;padding:1.6rem;transition:all .3s ease;cursor:default;position:relative;overflow:hidden;}
+.bcard::after{content:'';position:absolute;inset:0;background:radial-gradient(circle at top left,rgba(37,99,235,.09),transparent 65%);opacity:0;transition:opacity .3s;}
+.bcard:hover{border-color:var(--bblue);transform:translateY(-5px);box-shadow:0 20px 50px rgba(0,0,0,.4),0 0 24px var(--lp-gl);}
+.bcard:hover::after{opacity:1;}
+.bcard-ico{font-size:1.7rem;margin-bottom:1rem;position:relative;z-index:1;}
+.bcard h3{font-size:1.05rem;font-weight:700;margin-bottom:.45rem;position:relative;z-index:1;}
+.bcard p{font-size:.875rem;color:var(--muted);line-height:1.65;position:relative;z-index:1;}
+
+/* AI */
+.ai-wrap{background:var(--bg2);border-top:1px solid var(--border);border-bottom:1px solid var(--border);}
+.ai-inner{display:grid;grid-template-columns:1fr 1fr;gap:5rem;align-items:center;max-width:1140px;margin:0 auto;}
+.ai-list{list-style:none;display:flex;flex-direction:column;gap:14px;margin-top:1.8rem;}
+.ai-list li{display:flex;align-items:flex-start;gap:12px;font-size:.95rem;}
+.ai-ck{width:22px;height:22px;border-radius:6px;background:rgba(37,99,235,.18);border:1px solid var(--bblue);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:.7rem;color:#60a5fa;}
+.insight-box{background:var(--bg3);border:1px solid rgba(37,99,235,.4);border-radius:18px;padding:1.5rem;box-shadow:0 0 50px rgba(29,78,216,.18);position:relative;overflow:hidden;}
+.insight-box::before{content:'';position:absolute;top:-40px;right:-40px;width:150px;height:150px;border-radius:50%;background:rgba(37,99,235,.1);filter:blur(40px);}
+.ins-head{display:flex;align-items:center;gap:10px;margin-bottom:1rem;}
+.ins-av{width:38px;height:38px;border-radius:10px;background:linear-gradient(135deg,#1d4ed8,#3730a3);display:flex;align-items:center;justify-content:center;font-size:1.1rem;}
+.ins-name{font-family:'Cabinet Grotesk',sans-serif;font-weight:700;font-size:.95rem;}
+.ins-time{font-size:.72rem;color:var(--muted);}
+.ins-body{font-size:.88rem;color:var(--muted);line-height:1.7;margin-bottom:1rem;}
+.ins-tag{display:inline-flex;align-items:center;gap:6px;background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.25);color:var(--green);padding:5px 12px;border-radius:999px;font-size:.78rem;font-weight:500;}
+
+/* STEPS */
+.steps-wrap{max-width:920px;margin:0 auto;}
+.steps-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:2rem;}
+.step{text-align:center;}
+.step-n{width:54px;height:54px;border-radius:14px;background:var(--bg3);border:1px solid rgba(37,99,235,.4);display:flex;align-items:center;justify-content:center;font-family:'Cabinet Grotesk',sans-serif;font-weight:900;font-size:1.3rem;color:#60a5fa;margin:0 auto 1.2rem;}
+.step h3{font-size:1.05rem;font-weight:700;margin-bottom:.5rem;}
+.step p{font-size:.875rem;color:var(--muted);}
+
+/* BEFORE/AFTER */
+.ba-wrap{background:var(--bg2);border-top:1px solid var(--border);border-bottom:1px solid var(--border);}
+.ba-grid{display:grid;grid-template-columns:1fr 1fr;gap:2rem;max-width:780px;margin:0 auto;}
+.ba-card{border-radius:18px;padding:2rem;}
+.ba-card.bef{background:rgba(232,93,93,.07);border:1px solid rgba(232,93,93,.18);}
+.ba-card.aft{background:rgba(34,197,94,.07);border:1px solid rgba(34,197,94,.18);}
+.ba-lbl{font-size:.72rem;text-transform:uppercase;letter-spacing:.1em;font-weight:700;margin-bottom:1.2rem;}
+.bef .ba-lbl{color:var(--red);}.aft .ba-lbl{color:var(--green);}
+.ba-ico{font-size:2.2rem;margin-bottom:1rem;}
+.ba-list{list-style:none;display:flex;flex-direction:column;gap:8px;font-size:.875rem;color:var(--muted);}
+.bef .ba-list li::before{content:'✕ ';color:var(--red);}
+.aft .ba-list li::before{content:'✓ ';color:var(--green);}
+
+/* PRICE */
+.price-wrap{background:var(--bg);}
+.price-card{max-width:480px;margin:0 auto;background:var(--bg2);border:1px solid rgba(37,99,235,.4);border-radius:24px;padding:3rem 2.5rem;text-align:center;box-shadow:0 0 80px rgba(29,78,216,.18);position:relative;overflow:hidden;}
+.price-card::before{content:'';position:absolute;top:-60px;left:50%;transform:translateX(-50%);width:300px;height:200px;background:rgba(29,78,216,.12);filter:blur(60px);pointer-events:none;}
+.price-tag{font-family:'Cabinet Grotesk',sans-serif;font-weight:900;font-size:4rem;color:var(--text);margin:1rem 0;position:relative;}
+.price-tag sup{font-size:1.6rem;vertical-align:super;}
+.price-tag sub{font-size:1rem;color:var(--muted);font-family:'Outfit',sans-serif;font-weight:400;}
+.price-note{color:#60a5fa;font-weight:500;font-size:.92rem;margin-bottom:.5rem;}
+.price-card-note{font-size:.8rem;color:var(--muted);margin-bottom:2rem;line-height:1.5;}
+.price-items{list-style:none;text-align:left;display:flex;flex-direction:column;gap:11px;margin-bottom:2rem;}
+.price-items li{display:flex;align-items:center;gap:10px;font-size:.92rem;}
+.price-items li::before{content:'✓';color:#60a5fa;font-weight:700;font-size:.85rem;}
+.btn-price{width:100%;background:var(--lp-blue);color:#fff;padding:1rem;border-radius:12px;font-family:'Cabinet Grotesk',sans-serif;font-size:1.1rem;font-weight:800;border:none;cursor:pointer;transition:all .25s;box-shadow:0 0 40px rgba(29,78,216,.3);letter-spacing:-.01em;}
+.btn-price:hover{background:var(--lp-blue-b);box-shadow:0 16px 40px rgba(29,78,216,.5);transform:translateY(-2px);}
+.btn-login-price{width:100%;background:transparent;color:var(--muted);padding:.7rem;border-radius:12px;font-family:'Outfit',sans-serif;font-size:.9rem;font-weight:500;border:1px solid var(--border);cursor:pointer;transition:all .25s;margin-top:10px;}
+.btn-login-price:hover{border-color:var(--bblue);color:#60a5fa;}
+.guarantees{display:flex;justify-content:center;gap:1.2rem;margin-top:1.4rem;flex-wrap:wrap;}
+.guarantees span{font-size:.78rem;color:var(--muted);display:flex;align-items:center;gap:4px;}
+
+/* FAQ */
+.faq-inner{max-width:680px;margin:0 auto;}
+.faq-item{border-bottom:1px solid var(--border);}
+.faq-q{display:flex;justify-content:space-between;align-items:center;padding:1.3rem 0;cursor:pointer;font-weight:500;font-size:.97rem;transition:color .2s;}
+.faq-q:hover{color:#60a5fa;}
+.faq-arr{color:#60a5fa;font-size:1.3rem;transition:transform .25s;user-select:none;}
+.faq-item.open .faq-arr{transform:rotate(45deg);}
+.faq-a{font-size:.875rem;color:var(--muted);line-height:1.75;padding-bottom:1.2rem;display:none;}
+.faq-item.open .faq-a{display:block;}
+
+/* FOOTER */
+footer{background:var(--bg2);border-top:1px solid var(--border);padding:3rem 5vw;text-align:center;}
+.footer-logo{font-family:'Cabinet Grotesk',sans-serif;font-weight:900;font-size:1.5rem;letter-spacing:-.04em;margin-bottom:.4rem;}
+.footer-tag{color:var(--muted);font-size:.875rem;margin-bottom:1.5rem;}
+.footer-links{display:flex;justify-content:center;gap:1.5rem;flex-wrap:wrap;font-size:.82rem;margin-bottom:1.5rem;}
+.footer-links a{color:var(--muted);text-decoration:none;transition:color .2s;}
+.footer-links a:hover{color:var(--text);}
+.footer-copy{font-size:.75rem;color:rgba(107,122,150,.45);}
+
+/* STICKY */
+.sticky{position:fixed;bottom:1.4rem;left:50%;transform:translateX(-50%);z-index:199;opacity:0;pointer-events:none;transition:opacity .3s;display:flex;gap:8px;}
+.sticky.show{opacity:1;pointer-events:auto;}
+.sticky .s-btn-main{background:var(--lp-blue);color:#fff;padding:.8rem 1.6rem;border-radius:999px;font-family:'Cabinet Grotesk',sans-serif;font-size:.88rem;font-weight:800;border:none;cursor:pointer;letter-spacing:-.01em;box-shadow:0 8px 32px rgba(29,78,216,.5);transition:all .2s;white-space:nowrap;}
+.sticky .s-btn-main:hover{background:var(--lp-blue-b);transform:translateY(-2px);}
+.sticky .s-btn-login{background:rgba(6,7,9,0.9);color:#60a5fa;padding:.8rem 1.2rem;border-radius:999px;font-family:'Outfit',sans-serif;font-size:.88rem;font-weight:500;border:1px solid rgba(37,99,235,.4);cursor:pointer;transition:all .2s;white-space:nowrap;backdrop-filter:blur(10px);}
+.sticky .s-btn-login:hover{background:rgba(37,99,235,.15);}
+
+/* HERO LAYOUT */
+.hero-inner{display:grid;grid-template-columns:1fr auto;gap:4rem;align-items:center;max-width:1100px;width:100%;text-align:left;position:relative;z-index:1;}
+.hero-text .chip{margin-bottom:1.6rem;}
+.hero-text h1{margin-bottom:1.2rem;}
+.hero-text .hero-sub{margin:0 0 2.2rem 0;}
+.hero-text .hero-ctas{justify-content:flex-start;margin-bottom:0;}
+.trust-row{display:flex;align-items:center;gap:1rem;margin-top:1.6rem;flex-wrap:wrap;}
+.trust-item{display:flex;align-items:center;gap:5px;font-size:.78rem;color:var(--muted);}
+.trust-dot{width:4px;height:4px;border-radius:50%;background:rgba(255,255,255,.2);}
+
+/* ANIMS */
+@keyframes fadeUp{from{opacity:0;transform:translateY(22px);}to{opacity:1;transform:translateY(0);}}
+@keyframes floatPhone{0%,100%{transform:translateY(0);}50%{transform:translateY(-10px);}}
+.phone-float{animation:floatPhone 5s ease-in-out infinite;}
+.fi{opacity:0;transform:translateY(28px);transition:opacity .7s ease,transform .7s ease;}
+.fi.vis{opacity:1;transform:none;}
+
+/* RESPONSIVE */
+@media(max-width:900px){
+  .hero-inner{grid-template-columns:1fr;text-align:center;gap:3rem;}
+  .hero-text .chip{margin-left:auto;margin-right:auto;}
+  .hero-text .hero-ctas{justify-content:center;}
+  .trust-row{justify-content:center;}
+  .phone-wrap{display:flex;justify-content:center;}
+  .phone-shell{width:260px;}
+}
+@media(max-width:768px){
+  .ai-inner{grid-template-columns:1fr;gap:2.5rem;}
+  .steps-grid{grid-template-columns:1fr;gap:1.8rem;}
+  .ba-grid{grid-template-columns:1fr;gap:1.4rem;}
+}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="logo"><div class="logo-dot"></div>PlanejeApp</div>
+  <div class="nav-right">
+    <button class="btn-login" onclick="window.location.href='https://app.planejapp.com.br'">Entrar</button>
+    <button class="btn-nav" onclick="window.location.href='https://app.planejapp.com.br'">Criar conta</button>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="orb orb1"></div><div class="orb orb2"></div><div class="orb orb3"></div>
+  <div class="hero-inner">
+    <div class="hero-text" style="animation:fadeUp .65s ease both;">
+      <div class="chip"><span class="chip-pulse"></span> 30 dias grátis para experimentar</div>
+      <h1>Controle total da sua <span class="accent">vida financeira</span>, sem complicação.</h1>
+      <p class="hero-sub">O PlanejeApp usa inteligência artificial para te ajudar a organizar, economizar e crescer financeiramente.</p>
+      <div class="hero-ctas">
+        <button class="btn-cta" onclick="window.location.href='https://app.planejapp.com.br'">Começar grátis — 30 dias</button>
+        <button class="btn-cta-sec" onclick="document.getElementById('como').scrollIntoView({behavior:'smooth'})">Ver como funciona</button>
+      </div>
+      <div class="trust-row">
+        <div class="trust-item">🔒 Dados seguros</div>
+        <div class="trust-dot"></div>
+        <div class="trust-item">❌ Cancele quando quiser</div>
+        <div class="trust-dot"></div>
+        <div class="trust-item">💳 Cobrado só após 30 dias</div>
+      </div>
+    </div>
+
+    <div class="phone-wrap" style="animation:fadeUp .85s .2s ease both;">
+      <div class="phone-shell phone-float">
+        <div class="phone-notch"></div>
+        <div class="phone-screen">
+          <div class="app-header">
+            <div>
+              <div class="app-balance-label">🔵 Saldo disponível 👁</div>
+              <div class="app-balance-value">R$ 4.820,00</div>
+              <div class="app-invested">🐷 + R$ 2.350,00 investido</div>
+            </div>
+            <div class="app-month-bar">
+              <div class="app-arrow">‹</div>
+              <div class="app-month-txt">Abril 2025</div>
+              <div class="app-arrow">›</div>
+            </div>
+            <div class="app-actions">
+              <div class="app-btn"><div class="app-btn-ico">↑</div><div class="app-btn-lbl">Entrada</div></div>
+              <div class="app-btn"><div class="app-btn-ico">↓</div><div class="app-btn-lbl">Saída</div></div>
+              <div class="app-btn"><div class="app-btn-ico">⇄</div><div class="app-btn-lbl">Transferir</div></div>
+            </div>
+          </div>
+          <div class="app-content">
+            <div class="app-kpi-grid">
+              <div class="app-kpi"><div class="app-kpi-lbl">Entradas</div><div class="app-kpi-val kv-green">R$ 6.500</div><div class="app-kpi-bar"><div class="app-kpi-bar-fill kb-green" style="width:100%"></div></div></div>
+              <div class="app-kpi"><div class="app-kpi-lbl">Saídas</div><div class="app-kpi-val kv-red">R$ 1.680</div><div class="app-kpi-bar"><div class="app-kpi-bar-fill kb-red" style="width:26%"></div></div></div>
+              <div class="app-kpi"><div class="app-kpi-lbl">Saldo Atual</div><div class="app-kpi-val kv-blue">R$ 4.820</div><div class="app-kpi-sub">Realizado</div></div>
+              <div class="app-kpi"><div class="app-kpi-lbl">Previsão</div><div class="app-kpi-val kv-violet">R$ 5.100</div><div class="app-kpi-sub">Com planejado</div></div>
+            </div>
+            <div class="app-reports-row">
+              <div class="app-reports-ico">📊</div>
+              <div class="app-reports-txt"><div class="app-reports-title">Ver Relatórios</div><div class="app-reports-sub">8 gastos · 74% poupado este mês</div></div>
+              <div class="app-reports-arrow">›</div>
+            </div>
+            <div class="app-card">
+              <div class="app-card-header"><div class="app-card-title">Minhas contas</div><div class="app-card-link">Ver todas ›</div></div>
+              <div class="app-accounts-row">
+                <div class="app-acc"><div class="app-acc-ico" style="background:#dbeafe;">🏦</div><div class="app-acc-name">Nubank</div><div class="app-acc-val kv-blue">R$ 2.400</div></div>
+                <div class="app-acc"><div class="app-acc-ico" style="background:#ede9fe;">💜</div><div class="app-acc-name">Inter</div><div class="app-acc-val kv-violet">R$ 1.820</div></div>
+                <div class="app-acc"><div class="app-acc-ico" style="background:#dcfce7;">💵</div><div class="app-acc-name">Carteira</div><div class="app-acc-val kv-green">R$ 600</div></div>
+              </div>
+            </div>
+            <div class="app-card">
+              <div class="app-card-header"><div class="app-card-title">Transações recentes</div><div class="app-card-link">Ver todas ›</div></div>
+              <div class="app-tx-row"><div class="app-tx-ico" style="background:#fee2e2;">🛒</div><div class="app-tx-info"><div class="app-tx-desc">Supermercado</div><div class="app-tx-cat">Alimentação</div></div><div class="app-tx-val kv-red">- R$ 320</div></div>
+              <div class="app-tx-row"><div class="app-tx-ico" style="background:#dcfce7;">💼</div><div class="app-tx-info"><div class="app-tx-desc">Salário</div><div class="app-tx-cat">Renda</div></div><div class="app-tx-val kv-green">+ R$ 6.500</div></div>
+              <div class="app-tx-row"><div class="app-tx-ico" style="background:#fee2e2;">🚗</div><div class="app-tx-info"><div class="app-tx-desc">Combustível</div><div class="app-tx-cat">Transporte</div></div><div class="app-tx-val kv-red">- R$ 180</div></div>
+              <div class="app-tx-row"><div class="app-tx-ico" style="background:#fee2e2;">📱</div><div class="app-tx-info"><div class="app-tx-desc">Netflix</div><div class="app-tx-cat">Assinatura</div></div><div class="app-tx-val kv-red">- R$ 45</div></div>
+            </div>
+          </div>
+          <div class="app-fab">+</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- BENEFITS -->
+<section class="fi">
+  <div class="center">
+    <div class="s-label">Funcionalidades</div>
+    <h2 class="s-title">Tudo que você precisa para organizar seu dinheiro</h2>
+    <p class="s-sub">Ferramentas poderosas em uma interface simples, para você ter clareza total das suas finanças.</p>
+  </div>
+  <div class="cards">
+    <div class="bcard"><div class="bcard-ico">📊</div><h3>Controle total</h3><p>Registre entradas e saídas. Veja exatamente para onde seu dinheiro está indo, por categoria.</p></div>
+    <div class="bcard"><div class="bcard-ico">🎯</div><h3>Metas financeiras</h3><p>Defina metas, acompanhe progresso e receba alertas quando estiver perto do limite.</p></div>
+    <div class="bcard"><div class="bcard-ico">🤖</div><h3>IA 2x por semana</h3><p>Análises automáticas com insights personalizados baseados no seu perfil de gastos real.</p></div>
+    <div class="bcard"><div class="bcard-ico">📈</div><h3>Investimentos</h3><p>Acompanhe seus investimentos de forma simples e visualize o crescimento do patrimônio.</p></div>
+    <div class="bcard"><div class="bcard-ico">👥</div><h3>Casal &amp; família</h3><p>Compartilhe o controle financeiro com parceiro(a) ou família de forma integrada.</p></div>
+    <div class="bcard"><div class="bcard-ico">🔔</div><h3>Insights automáticos</h3><p>Notificações inteligentes sobre padrões, gastos excessivos e oportunidades de economia.</p></div>
+  </div>
+</section>
+
+<!-- AI -->
+<section class="ai-wrap fi">
+  <div class="ai-inner">
+    <div>
+      <div class="s-label">Inteligência Artificial</div>
+      <h2 class="s-title">Sua inteligência financeira pessoal</h2>
+      <p class="s-sub" style="margin-bottom:0">Uma IA treinada para entender seus hábitos e te ajudar a tomar melhores decisões com dinheiro.</p>
+      <ul class="ai-list">
+        <li><div class="ai-ck">✓</div><span>Analisa seus padrões de gasto toda semana</span></li>
+        <li><div class="ai-ck">✓</div><span>Sugere melhorias e identifica desperdícios</span></li>
+        <li><div class="ai-ck">✓</div><span>Aponta oportunidades de economia personalizadas</span></li>
+        <li><div class="ai-ck">✓</div><span>Ajuda a bater metas com planos realistas</span></li>
+      </ul>
+    </div>
+    <div>
+      <div class="insight-box">
+        <div class="ins-head">
+          <div class="ins-av">🤖</div>
+          <div><div class="ins-name">PlanejeApp IA</div><div class="ins-time">Análise desta semana · agora</div></div>
+        </div>
+        <div class="ins-body">Percebi que seus gastos com delivery aumentaram 34% este mês. Com base no seu histórico, reduzir para 2x por semana pode economizar <strong style="color:var(--green)">R$ 280/mês</strong> — suficiente para bater sua meta de reserva de emergência em 4 meses. 🎯</div>
+        <span class="ins-tag">💡 Economia potencial: R$ 280/mês</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section id="como" class="fi" style="background:var(--bg);">
+  <div class="center" style="margin-bottom:3rem;">
+    <div class="s-label">Simples assim</div>
+    <h2 class="s-title">Como funciona</h2>
+    <p class="s-sub">Três passos para ter controle total do seu dinheiro.</p>
+  </div>
+  <div class="steps-wrap">
+    <div class="steps-grid">
+      <div class="step"><div class="step-n">1</div><h3>Registre suas finanças</h3><p>Conecte suas contas ou registre manualmente receitas e despesas em segundos.</p></div>
+      <div class="step"><div class="step-n">2</div><h3>Acompanhe em tempo real</h3><p>Dashboards com gráficos, categorias e relatórios sempre atualizados.</p></div>
+      <div class="step"><div class="step-n">3</div><h3>Receba análises e melhore</h3><p>A IA entrega insights personalizados para decisões financeiras mais inteligentes.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- BEFORE/AFTER -->
+<section class="ba-wrap fi">
+  <div class="center" style="margin-bottom:3rem;">
+    <div class="s-label">Transformação</div>
+    <h2 class="s-title">Antes x Depois do PlanejeApp</h2>
+  </div>
+  <div class="ba-grid">
+    <div class="ba-card bef"><div class="ba-lbl">Sem controle</div><div class="ba-ico">😟</div><ul class="ba-list"><li>Dinheiro sumindo sem saber onde</li><li>Fim do mês sempre no vermelho</li><li>Nenhuma reserva de emergência</li><li>Metas que nunca saem do papel</li><li>Ansiedade financeira constante</li></ul></div>
+    <div class="ba-card aft"><div class="ba-lbl">Com o PlanejeApp</div><div class="ba-ico">😌</div><ul class="ba-list"><li>Clareza total de onde vai o dinheiro</li><li>Sobra dinheiro todo mês</li><li>Reserva de emergência crescendo</li><li>Metas sendo batidas na prática</li><li>Tranquilidade financeira de verdade</li></ul></div>
+  </div>
+</section>
+
+<!-- PRICE -->
+<section id="preco" class="price-wrap fi">
+  <div class="center" style="margin-bottom:3rem;">
+    <div class="s-label">Preço</div>
+    <h2 class="s-title">Um investimento mínimo, retorno máximo</h2>
+    <p class="s-sub">Menos que um café por semana para ter controle total da sua vida financeira.</p>
+  </div>
+  <div class="price-card">
+    <div style="font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.12em;font-weight:600;">Plano completo</div>
+    <div class="price-tag"><sup>R$</sup>12<span style="font-size:2.2rem;">,90</span><sub>/mês</sub></div>
+    <div class="price-note">🎁 30 dias grátis para começar</div>
+    <div class="price-card-note">Cartão de crédito necessário para ativar o trial.<br>Cobrança só após os 30 dias — cancele antes sem custo algum.</div>
+    <ul class="price-items">
+      <li>IA com análises 2x por semana</li>
+      <li>Controle completo de finanças</li>
+      <li>Metas e relatórios detalhados</li>
+      <li>Compartilhamento (casal/família)</li>
+      <li>Suporte dedicado</li>
+      <li>Acesso em todos os dispositivos</li>
+    </ul>
+    <button class="btn-price" onclick="window.location.href='https://app.planejapp.com.br'">Começar agora — 30 dias grátis</button>
+    <button class="btn-login-price" onclick="window.location.href='https://app.planejapp.com.br'">Já tenho conta — Entrar</button>
+    <div class="guarantees">
+      <span>🔒 Dados seguros</span>
+      <span>❌ Cancele quando quiser</span>
+      <span>💳 Cobrado só após 30 dias</span>
+    </div>
+  </div>
+</section>
+
+<!-- FAQ -->
+<section class="fi" style="background:var(--bg2);border-top:1px solid var(--border);">
+  <div class="center" style="margin-bottom:3rem;">
+    <div class="s-label">Dúvidas</div>
+    <h2 class="s-title">Perguntas frequentes</h2>
+  </div>
+  <div class="faq-inner">
+    <div class="faq-item"><div class="faq-q">Preciso conectar meu banco? <span class="faq-arr">+</span></div><div class="faq-a">Não é obrigatório. Você pode registrar suas finanças manualmente ou importar extratos. A conexão com bancos está disponível para facilitar sua experiência.</div></div>
+    <div class="faq-item"><div class="faq-q">Por que preciso do cartão para o trial? <span class="faq-arr">+</span></div><div class="faq-a">Para garantir a continuidade do serviço após o período gratuito. Você não será cobrado durante os 30 dias e pode cancelar antes sem nenhum custo.</div></div>
+    <div class="faq-item"><div class="faq-q">Posso cancelar quando quiser? <span class="faq-arr">+</span></div><div class="faq-a">Sim, sem burocracia. Cancele com um clique, sem perguntas. Seus dados ficam disponíveis por 30 dias após o cancelamento.</div></div>
+    <div class="faq-item"><div class="faq-q">Meus dados financeiros são seguros? <span class="faq-arr">+</span></div><div class="faq-a">Absolutamente. Usamos criptografia de ponta a ponta. Seus dados nunca são compartilhados com terceiros.</div></div>
+    <div class="faq-item"><div class="faq-q">Funciona para casal ou família? <span class="faq-arr">+</span></div><div class="faq-a">Sim! O PlanejeApp permite compartilhar o controle financeiro com parceiro(a) ou membros da família, com visibilidade individual e compartilhada.</div></div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-logo">PlanejeApp</div>
+  <div class="footer-tag">Sua vida financeira, no controle.</div>
+  <div class="footer-links"><a href="#">Início</a><a href="#">Funcionalidades</a><a href="#preco">Preços</a><a href="#">Privacidade</a><a href="#">Termos de uso</a><a href="https://app.planejapp.com.br">Entrar</a></div>
+  <div class="footer-copy">© 2025 PlanejeApp. Todos os direitos reservados.</div>
+</footer>
+
+<!-- STICKY -->
+<div class="sticky" id="sticky">
+  <button class="s-btn-login" onclick="window.location.href='https://app.planejapp.com.br'">Entrar</button>
+  <button class="s-btn-main" onclick="window.location.href='https://app.planejapp.com.br'">Começar grátis — 30 dias ↗</button>
+</div>
+
+<script>
+document.querySelectorAll('.faq-item').forEach(el=>{
+  el.querySelector('.faq-q').addEventListener('click',()=>el.classList.toggle('open'));
+});
+const obs=new IntersectionObserver(entries=>{
+  entries.forEach(e=>{if(e.isIntersecting)e.target.classList.add('vis');});
+},{threshold:.08});
+document.querySelectorAll('.fi').forEach(el=>obs.observe(el));
+const heroEl=document.querySelector('.hero');
+const stickyEl=document.getElementById('sticky');
+new IntersectionObserver(([e])=>{
+  stickyEl.classList.toggle('show',!e.isIntersecting);
+}).observe(heroEl);
+</script>
+</body>
+</html>
