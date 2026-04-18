@@ -304,6 +304,30 @@ export default function Home() {
           <KPICardNew title="Previsão" value={kpis.forecastBalance} color={kpis.forecastBalance >= 0 ? "violet" : "red"} subtitle="Com planejado" hidden={hidden} navigateTo={`/Transactions?filter=planned&month=${format(selectedDate, "yyyy-MM")}`} />
         </div>
 
+        {/* Score financeiro */}
+        <FinancialScore userId={activeOwnerId} selectedDate={selectedDate} />
+
+        {/* Projeção de caixa */}
+        <CashFlowProjection
+          transactions={transactions}
+          accounts={accounts}
+          currentBalance={totalBalance}
+        />
+
+        {/* Comparativo mensal */}
+        <MonthComparison
+          transactions={transactions}
+          accounts={accounts}
+          selectedDate={selectedDate}
+        />
+
+        {/* Orçamentos por categoria */}
+        <BudgetManager
+          transactions={transactions}
+          accounts={accounts}
+          selectedDate={selectedDate}
+        />
+
         {showReferralBanner && !isViewingSharedProfile && (
           <ReferralBanner onOpen={() => setShowReferralModal(true)} onDismiss={() => { setShowReferralBanner(false); localStorage.setItem("referral_banner_dismissed", "true"); }} />
         )}

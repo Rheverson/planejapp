@@ -30,9 +30,9 @@ export default function CashFlowProjection({ transactions, accounts, currentBala
     const today = new Date();
     const investmentIds = new Set(accounts.filter(a => a.type === "investment").map(a => a.id));
 
-    // Pega previstos dos próximos 30 dias
+    // Pega previstos de hoje até 30 dias (i=0 = hoje)
     const next30 = [];
-    for (let i = 1; i <= 30; i++) {
+    for (let i = 0; i <= 30; i++) {
       const d = addDays(today, i);
       const ds = format(d, "yyyy-MM-dd");
       const dayTxs = transactions.filter(t =>
