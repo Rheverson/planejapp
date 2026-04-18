@@ -48,7 +48,8 @@ export default function Profile() {
   useEffect(() => {
     const savedDarkMode = localStorage.getItem("darkMode") === "true";
     setDarkMode(savedDarkMode);
-    if (savedDarkMode) document.documentElement.classList.add("dark");
+    document.documentElement.classList.toggle("dark", savedDarkMode);
+    window.dispatchEvent(new CustomEvent("darkModeChange", { detail: savedDarkMode }));
   }, []);
 
   const { data: accounts = [] } = useQuery({
@@ -219,7 +220,7 @@ export default function Profile() {
       if (item.action === "referrals") setShowReferralModal(true);
       else if (item.action === "share") setShowSharedList(true);
       else if (item.action === "pending_invites") setShowPendingInvites(true);
-      else if (item.action === "plan") navigate(createPageUrl("PlanPage"));
+      else if (item.action === "plan") navigate("/PlanPage");
       else if (item.action === "toggle") {
         if (item.label === "Notificações") {
           setNotifications(!notifications);
@@ -229,6 +230,7 @@ export default function Profile() {
           setDarkMode(newDarkMode);
           localStorage.setItem("darkMode", newDarkMode.toString());
           document.documentElement.classList.toggle("dark", newDarkMode);
+          window.dispatchEvent(new CustomEvent("darkModeChange", { detail: newDarkMode }));
           toast.success(`Modo ${newDarkMode ? "escuro" : "claro"} ativado`);
         }
       } else if (item.action === "help") setShowHelpModal(true);
@@ -274,7 +276,7 @@ export default function Profile() {
         {/* Card de assinatura */}
         <div className="px-5 pb-4">
           <button
-            onClick={() => navigate(createPageUrl("PlanPage"))}
+            onClick={() => navigate("/PlanPage")}
             className={`w-full rounded-2xl p-4 flex items-center gap-3 text-left transition-opacity hover:opacity-90 ${
               isActive && !isCancelled
                 ? "bg-gradient-to-r from-violet-600 to-indigo-600"

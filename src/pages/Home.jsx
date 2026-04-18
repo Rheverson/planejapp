@@ -21,11 +21,14 @@ import TransactionForm from "@/components/transactions/TransactionForm";
 import TransferForm from "@/components/transactions/TransferForm";
 import MonthSelector from "@/components/common/MonthSelector";
 import EmptyState from "@/components/common/EmptyState";
+import FinancialScore from "@/components/financial/FinancialScore";
+import CashFlowProjection from "@/components/financial/CashFlowProjection";
+import MonthComparison from "@/components/financial/MonthComparison";
+import BudgetManager from "@/components/financial/BudgetManager";
 
 const fmt = (v) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
 
-// ── Mini barra de progresso ──────────────────────────────────
 function ProgressBar({ value, max, color }) {
   const pct = max > 0 ? Math.min((value / max) * 100, 100) : 0;
   const bgClass = { green: "bg-green-100 dark:bg-green-900/30", red: "bg-red-100 dark:bg-red-900/30", blue: "bg-blue-100 dark:bg-blue-900/30", violet: "bg-violet-100 dark:bg-violet-900/30" };
@@ -42,7 +45,6 @@ function ProgressBar({ value, max, color }) {
   );
 }
 
-// ── Card KPI compacto ─────────────────────────────────────────
 function KPICardNew({ title, value, color, subtitle, bar, barMax, navigateTo, hidden }) {
   const textClass = {
     green: "text-green-600 dark:text-green-400",
@@ -68,7 +70,6 @@ function KPICardNew({ title, value, color, subtitle, bar, barMax, navigateTo, hi
   return content;
 }
 
-// ── Card de conta compacto ───────────────────────────────────
 function AccountCardNew({ account, balance, hidden }) {
   const iconColors = {
     bank:       { bg: "bg-blue-100 dark:bg-blue-900/30",   icon: "text-blue-600 dark:text-blue-400"   },
@@ -234,14 +235,13 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 pb-24 transition-colors duration-200">
 
-      {/* ── HEADER COMPACTO ─────────────────────────────────── */}
-      <div className="bg-gradient-to-br from-blue-700 via-blue-800 to-indigo-900 text-white">
+      {/* ── HEADER — gradiente azul estilo landing ── */}
+      <div style={{ background: "linear-gradient(135deg, #0d1829 0%, #1d4ed8 50%, #1e3a8a 80%, #312e81 100%)" }} className="text-white">
         <div className="px-5 pt-12 pb-3">
           {isViewingSharedProfile && (
             <p className="text-blue-300 text-xs font-medium mb-2">👁 Visualizando perfil compartilhado</p>
           )}
 
-          {/* Saldo + olho + perfil */}
           <div className="flex items-start justify-between mb-1">
             <div>
               <div className="flex items-center gap-1.5 mb-1">
@@ -269,19 +269,17 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Seletor de mês compacto */}
           <div className="mt-3">
             <MonthSelector selectedDate={selectedDate} onChange={setSelectedDate} />
           </div>
         </div>
 
-        {/* Botões de ação */}
         {canAdd && (
           <div className="flex gap-2 px-5 py-3">
             {[
-              { label: "Entrada", icon: TrendingUp, type: "income", action: () => { setInitialType("income"); setShowTransactionForm(true); } },
-              { label: "Saída",   icon: TrendingDown, type: "expense", action: () => { setInitialType("expense"); setShowTransactionForm(true); } },
-              { label: "Transferir", icon: ArrowLeftRight, type: "transfer", action: () => setShowTransferForm(true) },
+              { label: "Entrada", icon: TrendingUp, action: () => { setInitialType("income"); setShowTransactionForm(true); } },
+              { label: "Saída",   icon: TrendingDown, action: () => { setInitialType("expense"); setShowTransactionForm(true); } },
+              { label: "Transferir", icon: ArrowLeftRight, action: () => setShowTransferForm(true) },
             ].map((btn) => (
               <motion.button
                 key={btn.label}
@@ -297,47 +295,19 @@ export default function Home() {
         )}
       </div>
 
-      {/* ── CONTEÚDO ─────────────────────────────────────────── */}
       <div className="px-4 pt-4 space-y-3">
 
-        {/* KPIs 2x2 */}
         <div className="grid grid-cols-2 gap-2.5">
-          <KPICardNew
-            title="Entradas" value={kpis.totalIncome} color="green"
-            bar barMax={kpis.totalIncome} hidden={hidden}
-            navigateTo={`/Transactions?filter=income&month=${format(selectedDate, "yyyy-MM")}`}
-          />
-          <KPICardNew
-            title="Saídas" value={kpis.totalExpense} color="red"
-            bar barMax={kpis.totalIncome} hidden={hidden}
-            navigateTo={`/Transactions?filter=expense&month=${format(selectedDate, "yyyy-MM")}`}
-          />
-          <KPICardNew
-            title="Saldo Atual" value={kpis.currentBalance}
-            color={kpis.currentBalance >= 0 ? "blue" : "red"}
-            subtitle="Realizado" hidden={hidden}
-            navigateTo={`/Transactions?filter=realized&month=${format(selectedDate, "yyyy-MM")}`}
-          />
-          <KPICardNew
-            title="Previsão" value={kpis.forecastBalance}
-            color={kpis.forecastBalance >= 0 ? "violet" : "red"}
-            subtitle="Com planejado" hidden={hidden}
-            navigateTo={`/Transactions?filter=planned&month=${format(selectedDate, "yyyy-MM")}`}
-          />
+          <KPICardNew title="Entradas" value={kpis.totalIncome} color="green" bar barMax={kpis.totalIncome} hidden={hidden} navigateTo={`/Transactions?filter=income&month=${format(selectedDate, "yyyy-MM")}`} />
+          <KPICardNew title="Saídas" value={kpis.totalExpense} color="red" bar barMax={kpis.totalIncome} hidden={hidden} navigateTo={`/Transactions?filter=expense&month=${format(selectedDate, "yyyy-MM")}`} />
+          <KPICardNew title="Saldo Atual" value={kpis.currentBalance} color={kpis.currentBalance >= 0 ? "blue" : "red"} subtitle="Realizado" hidden={hidden} navigateTo={`/Transactions?filter=realized&month=${format(selectedDate, "yyyy-MM")}`} />
+          <KPICardNew title="Previsão" value={kpis.forecastBalance} color={kpis.forecastBalance >= 0 ? "violet" : "red"} subtitle="Com planejado" hidden={hidden} navigateTo={`/Transactions?filter=planned&month=${format(selectedDate, "yyyy-MM")}`} />
         </div>
 
-        {/* Banner indicação */}
         {showReferralBanner && !isViewingSharedProfile && (
-          <ReferralBanner
-            onOpen={() => setShowReferralModal(true)}
-            onDismiss={() => {
-              setShowReferralBanner(false);
-              localStorage.setItem("referral_banner_dismissed", "true");
-            }}
-          />
+          <ReferralBanner onOpen={() => setShowReferralModal(true)} onDismiss={() => { setShowReferralBanner(false); localStorage.setItem("referral_banner_dismissed", "true"); }} />
         )}
 
-        {/* Relatórios */}
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
           <Link to={createPageUrl("Reports")} style={{ textDecoration: "none" }}>
             <div className="flex items-center gap-3 bg-white dark:bg-gray-800 rounded-2xl px-4 py-3 border border-gray-100 dark:border-gray-700">
@@ -347,9 +317,7 @@ export default function Home() {
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-gray-900 dark:text-white">Ver Relatórios</p>
                 <p className="text-xs text-gray-400 truncate">
-                  {expenseCount > 0
-                    ? `${expenseCount} gastos${savingsRate !== null ? ` · ${savingsRate}% poupado` : ""} este mês`
-                    : "Análise de gastos e metas"}
+                  {expenseCount > 0 ? `${expenseCount} gastos${savingsRate !== null ? ` · ${savingsRate}% poupado` : ""} este mês` : "Análise de gastos e metas"}
                 </p>
               </div>
               <ChevronRight className="w-4 h-4 text-gray-300 dark:text-gray-600 flex-shrink-0" />
@@ -357,7 +325,6 @@ export default function Home() {
           </Link>
         </motion.div>
 
-        {/* Contas */}
         {accounts.length > 0 && (
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
             className="bg-white dark:bg-gray-800 rounded-2xl px-4 py-3 border border-gray-100 dark:border-gray-700">
@@ -368,9 +335,7 @@ export default function Home() {
               </Link>
             </div>
             <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
-              {regularAccounts.map((acc) => (
-                <AccountCardNew key={acc.id} account={acc} balance={accountBalances[acc.id] || 0} hidden={hidden} />
-              ))}
+              {regularAccounts.map((acc) => <AccountCardNew key={acc.id} account={acc} balance={accountBalances[acc.id] || 0} hidden={hidden} />)}
             </div>
             {investmentAccounts.length > 0 && (
               <div className="mt-3">
@@ -378,16 +343,13 @@ export default function Home() {
                   <PiggyBank className="w-3 h-3" /> Investimentos
                 </p>
                 <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
-                  {investmentAccounts.map((acc) => (
-                    <AccountCardNew key={acc.id} account={acc} balance={accountBalances[acc.id] || 0} hidden={hidden} />
-                  ))}
+                  {investmentAccounts.map((acc) => <AccountCardNew key={acc.id} account={acc} balance={accountBalances[acc.id] || 0} hidden={hidden} />)}
                 </div>
               </div>
             )}
           </motion.div>
         )}
 
-        {/* Transações recentes */}
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}
           className="bg-white dark:bg-gray-800 rounded-2xl px-4 py-3 border border-gray-100 dark:border-gray-700">
           <div className="flex items-center justify-between mb-3">
@@ -403,55 +365,37 @@ export default function Home() {
               ))}
             </div>
           ) : (
-            <EmptyState
-              icon={Wallet}
-              title="Nenhuma transação"
-              description="Adicione sua primeira entrada ou saída."
-              action="Adicionar"
-              onAction={() => setShowTransactionForm(true)}
-            />
+            <EmptyState icon={Wallet} title="Nenhuma transação" description="Adicione sua primeira entrada ou saída." action="Adicionar" onAction={() => setShowTransactionForm(true)} />
           )}
         </motion.div>
-
       </div>
 
-      {/* FAB */}
+      {/* FAB — gradiente azul landing */}
       {canAdd && (
         <motion.button
           whileTap={{ scale: 0.9 }}
           onClick={() => setShowTransactionForm(true)}
-          className="fixed bottom-24 right-5 w-13 h-13 bg-blue-700 text-white rounded-full shadow-lg shadow-blue-700/30 flex items-center justify-center z-40"
-          style={{ width: 52, height: 52 }}
+          className="fixed bottom-24 right-5 z-40 flex items-center justify-center"
+          style={{
+            width: 52, height: 52,
+            background: "linear-gradient(135deg, #1d4ed8 0%, #3730a3 100%)",
+            borderRadius: "50%",
+            border: "none",
+            boxShadow: "0 0 28px rgba(29,78,216,0.5), 0 4px 16px rgba(0,0,0,0.25)",
+          }}
         >
-          <Plus className="w-5 h-5" />
+          <Plus className="w-5 h-5 text-white" />
         </motion.button>
       )}
 
       <AnimatePresence>
-        {showTransactionForm && (
-          <TransactionForm
-            accounts={accounts}
-            initialType={initialType}
-            onSubmit={(data) => createTransactionMutation.mutate(data)}
-            onClose={() => setShowTransactionForm(false)}
-          />
-        )}
+        {showTransactionForm && <TransactionForm accounts={accounts} initialType={initialType} onSubmit={(data) => createTransactionMutation.mutate(data)} onClose={() => setShowTransactionForm(false)} />}
       </AnimatePresence>
-
       <AnimatePresence>
-        {showTransferForm && (
-          <TransferForm
-            accounts={accounts}
-            onSubmit={(data) => createTransferMutation.mutate(data)}
-            onClose={() => setShowTransferForm(false)}
-          />
-        )}
+        {showTransferForm && <TransferForm accounts={accounts} onSubmit={(data) => createTransferMutation.mutate(data)} onClose={() => setShowTransferForm(false)} />}
       </AnimatePresence>
-
       <AnimatePresence>
-        {showReferralModal && (
-          <ReferralInviteModal onClose={() => setShowReferralModal(false)} />
-        )}
+        {showReferralModal && <ReferralInviteModal onClose={() => setShowReferralModal(false)} />}
       </AnimatePresence>
     </div>
   );
