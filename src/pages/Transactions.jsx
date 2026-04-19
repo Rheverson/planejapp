@@ -1,11 +1,11 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthContext";
 import { useSharedProfile } from "@/lib/SharedProfileContext";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, TrendingUp, SlidersHorizontal, X } from "lucide-react";
-import { startOfMonth, endOfMonth, isWithinInterval, parseISO } from "date-fns";
+import { Plus, TrendingUp, SlidersHorizontal, X, Search, Calendar } from "lucide-react";
+import { startOfMonth, endOfMonth, isWithinInterval, parseISO, isAfter, isBefore, isEqual } from "date-fns";
 import { toast } from "sonner";
 import { useSearchParams } from "react-router-dom";
 import { useMonth } from "@/lib/MonthContext";
@@ -14,20 +14,30 @@ import TransactionItem from "@/components/transactions/TransactionItem";
 import TransactionForm from "@/components/transactions/TransactionForm";
 import MonthSelector from "@/components/common/MonthSelector";
 import EmptyState from "@/components/common/EmptyState";
-import { Input } from "@/components/ui/input";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
 const CATEGORIES = [
-  "alimentação", "moradia", "transporte", "saúde", "educação",
-  "lazer", "compras", "salário", "freelance", "investimentos", "outros"
+  "alimentação","moradia","transporte","saúde","educação",
+  "lazer","compras","salário","freelance","investimentos","outros",
 ];
 
 const fmt = (v) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
 
+function useIsDark() {
+  const [dark, setDark] = useState(() => localStorage.getItem("darkMode") === "true");
+  useEffect(() => {
+    const h = (e) => setDark(e.detail);
+    window.addEventListener("darkModeChange", h);
+    return () => window.removeEventListener("darkModeChange", h);
+  }, []);
+  return dark;
+}
+
 export default function Transactions() {
+  const dark = useIsDark();
   const { user } = useAuth();
   const { activeOwnerId, isViewingSharedProfile, sharedPermissions } = useSharedProfile();
   const canAdd    = !isViewingSharedProfile || sharedPermissions?.add_transactions;
@@ -35,31 +45,38 @@ export default function Transactions() {
   const queryClient = useQueryClient();
   const { selectedDate, setSelectedDate } = useMonth();
   const [searchParams] = useSearchParams();
-  const [filter, setFilter]               = useState(searchParams.get("filter") || "all");
-  const [showForm, setShowForm]           = useState(false);
-  const [editTransaction, setEditTransaction] = useState(null);
-  const [searchQuery, setSearchQuery]     = useState("");
-  const [deleteId, setDeleteId]           = useState(null);
-  const [realizarPrevisao, setRealizarPrevisao] = useState(null);
-  const [showAdvanced, setShowAdvanced]   = useState(false);
 
-  const [advFilters, setAdvFilters] = useState({
-    categories: [], accountIds: [], minAmount: "", maxAmount: "",
+  const [filter, setFilter]                   = useState(searchParams.get("filter") || "all");
+  const [showForm, setShowForm]               = useState(false);
+  const [editTransaction, setEditTransaction] = useState(null);
+  const [searchQuery, setSearchQuery]         = useState("");
+  const [searchFocused, setSearchFocused]     = useState(false);
+  const [deleteId, setDeleteId]               = useState(null);
+  const [realizarPrevisao, setRealizarPrevisao] = useState(null);
+  const [showAdvanced, setShowAdvanced]       = useState(false);
+  const [advFilters, setAdvFilters]           = useState({
+    categories: [],
+    accountIds: [],
+    minAmount: "",
+    maxAmount: "",
+    dateFrom: "",
+    dateTo: "",
   });
 
   const hasAdvFilters =
     advFilters.categories.length > 0 || advFilters.accountIds.length > 0 ||
-    advFilters.minAmount !== "" || advFilters.maxAmount !== "";
+    advFilters.minAmount !== "" || advFilters.maxAmount !== "" ||
+    advFilters.dateFrom !== "" || advFilters.dateTo !== "";
 
   const clearAdvFilters = () =>
-    setAdvFilters({ categories: [], accountIds: [], minAmount: "", maxAmount: "" });
+    setAdvFilters({ categories: [], accountIds: [], minAmount: "", maxAmount: "", dateFrom: "", dateTo: "" });
 
   const toggleCategory = (cat) =>
     setAdvFilters(prev => ({
       ...prev,
       categories: prev.categories.includes(cat)
         ? prev.categories.filter(c => c !== cat)
-        : [...prev.categories, cat]
+        : [...prev.categories, cat],
     }));
 
   const toggleAccount = (id) =>
@@ -67,10 +84,10 @@ export default function Transactions() {
       ...prev,
       accountIds: prev.accountIds.includes(id)
         ? prev.accountIds.filter(a => a !== id)
-        : [...prev.accountIds, id]
+        : [...prev.accountIds, id],
     }));
 
-  React.useEffect(() => {
+  useEffect(() => {
     const monthParam = searchParams.get("month");
     if (monthParam) setSelectedDate(new Date(monthParam + "-02"));
     const filterParam = searchParams.get("filter");
@@ -81,8 +98,7 @@ export default function Transactions() {
     queryKey: ["accounts", activeOwnerId],
     queryFn: async () => {
       const { data, error } = await supabase.from("accounts").select("*").eq("user_id", activeOwnerId);
-      if (error) throw error;
-      return data;
+      if (error) throw error; return data;
     },
     enabled: !!activeOwnerId,
   });
@@ -91,35 +107,25 @@ export default function Transactions() {
     queryKey: ["transactions", activeOwnerId],
     queryFn: async () => {
       const { data, error } = await supabase.from("transactions").select("*").eq("user_id", activeOwnerId).order("date", { ascending: false });
-      if (error) throw error;
-      return data;
+      if (error) throw error; return data;
     },
     enabled: !!activeOwnerId,
   });
 
   const createMutation = useMutation({
-    mutationFn: async (data) => {
-      const { error } = await supabase.from("transactions").insert([{ ...data, user_id: activeOwnerId }]);
-      if (error) throw error;
-    },
+    mutationFn: async (data) => { const { error } = await supabase.from("transactions").insert([{ ...data, user_id: activeOwnerId }]); if (error) throw error; },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["transactions", activeOwnerId] }); setShowForm(false); toast.success("Transação criada!"); },
     onError: (err) => toast.error("Erro: " + err.message),
   });
 
   const updateMutation = useMutation({
-    mutationFn: async ({ id, data }) => {
-      const { error } = await supabase.from("transactions").update(data).eq("id", id);
-      if (error) throw error;
-    },
+    mutationFn: async ({ id, data }) => { const { error } = await supabase.from("transactions").update(data).eq("id", id); if (error) throw error; },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["transactions", activeOwnerId] }); setEditTransaction(null); setShowForm(false); toast.success("Transação atualizada!"); },
     onError: (err) => toast.error("Erro: " + err.message),
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async (id) => {
-      const { error } = await supabase.from("transactions").delete().eq("id", id);
-      if (error) throw error;
-    },
+    mutationFn: async (id) => { const { error } = await supabase.from("transactions").delete().eq("id", id); if (error) throw error; },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["transactions", activeOwnerId] }); setDeleteId(null); toast.success("Transação excluída!"); },
     onError: (err) => toast.error("Erro: " + err.message),
   });
@@ -164,7 +170,15 @@ export default function Transactions() {
   const monthStart = startOfMonth(selectedDate);
   const monthEnd   = endOfMonth(selectedDate);
 
+  // Mapa de contas para lookup rápido
+  const accountMap = useMemo(() => {
+    const m = {};
+    accounts.forEach(a => { m[a.id] = a; });
+    return m;
+  }, [accounts]);
+
   const filteredTransactions = useMemo(() => {
+    const q = searchQuery.toLowerCase().trim();
     return transactions
       .filter(t => isWithinInterval(parseISO(t.date), { start: monthStart, end: monthEnd }))
       .filter(t => {
@@ -175,18 +189,46 @@ export default function Transactions() {
         if (filter === "planned")  return t.is_realized === false;
         return true;
       })
-      .filter(t => !searchQuery || t.description?.toLowerCase().includes(searchQuery.toLowerCase()))
+      // Busca inteligente: título, categoria, valor, conta, notas
+      .filter(t => {
+        if (!q) return true;
+        const accName = accountMap[t.account_id]?.name?.toLowerCase() || "";
+        const amtStr  = fmt(t.amount).toLowerCase();
+        const amtNum  = String(t.amount);
+        return (
+          t.description?.toLowerCase().includes(q) ||
+          t.category?.toLowerCase().includes(q) ||
+          t.notes?.toLowerCase().includes(q) ||
+          accName.includes(q) ||
+          amtStr.includes(q) ||
+          amtNum.includes(q)
+        );
+      })
+      // Filtros avançados
       .filter(t => advFilters.categories.length === 0 || advFilters.categories.includes(t.category?.toLowerCase()))
       .filter(t => advFilters.accountIds.length === 0 || advFilters.accountIds.includes(t.account_id))
-      .filter(t => advFilters.minAmount === "" || t.amount >= parseFloat(advFilters.minAmount))
-      .filter(t => advFilters.maxAmount === "" || t.amount <= parseFloat(advFilters.maxAmount));
-  }, [transactions, monthStart, monthEnd, filter, searchQuery, advFilters]);
+      .filter(t => advFilters.minAmount === "" || Number(t.amount) >= parseFloat(advFilters.minAmount))
+      .filter(t => advFilters.maxAmount === "" || Number(t.amount) <= parseFloat(advFilters.maxAmount))
+      // Filtro de data personalizado
+      .filter(t => {
+        if (!advFilters.dateFrom && !advFilters.dateTo) return true;
+        const d = parseISO(t.date);
+        if (advFilters.dateFrom && advFilters.dateTo) {
+          const from = parseISO(advFilters.dateFrom);
+          const to   = parseISO(advFilters.dateTo);
+          return (isAfter(d, from) || isEqual(d, from)) && (isBefore(d, to) || isEqual(d, to));
+        }
+        if (advFilters.dateFrom) return isAfter(d, parseISO(advFilters.dateFrom)) || isEqual(d, parseISO(advFilters.dateFrom));
+        if (advFilters.dateTo)   return isBefore(d, parseISO(advFilters.dateTo))  || isEqual(d, parseISO(advFilters.dateTo));
+        return true;
+      });
+  }, [transactions, monthStart, monthEnd, filter, searchQuery, advFilters, accountMap]);
 
   const summary = useMemo(() => {
-    const investmentAccountIds = new Set(accounts.filter(a => a.type === "investment").map(a => a.id));
-    const nonInvestmentTx = filteredTransactions.filter(t => !investmentAccountIds.has(t.account_id));
-    const income  = nonInvestmentTx.filter(t => t.type === "income").reduce((s, t) => s + Number(t.amount), 0);
-    const expense = nonInvestmentTx.filter(t => t.type === "expense").reduce((s, t) => s + Number(t.amount), 0);
+    const invIds = new Set(accounts.filter(a => a.type === "investment").map(a => a.id));
+    const tx = filteredTransactions.filter(t => !invIds.has(t.account_id));
+    const income  = tx.filter(t => t.type === "income").reduce((s,t) => s + Number(t.amount), 0);
+    const expense = tx.filter(t => t.type === "expense").reduce((s,t) => s + Number(t.amount), 0);
     return { income, expense, balance: income - expense };
   }, [filteredTransactions, accounts]);
 
@@ -199,126 +241,194 @@ export default function Transactions() {
     { value: "transfer", label: "Transferências" },
   ];
 
+  // ── Tokens idênticos ao Home.jsx ──────────────────────────
+  const bg       = dark ? "#060709" : "#f1f4f9";
+  const cardBg   = dark ? "#0c0e13" : "#ffffff";
+  const cardBrd  = dark ? "rgba(255,255,255,0.07)" : "rgba(17,24,39,0.05)";
+  const text     = dark ? "#e8edf5" : "#0f172a";
+  const muted    = dark ? "#6b7a96" : "#64748b";
+  const linkCol  = dark ? "#60a5fa" : "#1d4ed8";
+  const inputBg  = dark ? "#12151c" : "#f8fafc";
+  const inputBrd = dark ? "rgba(255,255,255,0.08)" : "rgba(17,24,39,0.1)";
+
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 pb-24 transition-colors duration-200">
+    <div style={{ minHeight: "100vh", background: bg, paddingBottom: 96, fontFamily: "'Outfit',sans-serif" }}>
 
-      {/* ── HEADER COMPACTO ─────────────────────────────────── */}
-      <div className="bg-gradient-to-br from-blue-700 via-blue-800 to-indigo-900 text-white sticky top-0 z-20">
-        <div className="px-5 pt-12 pb-3">
+      {/* ══ HEADER ══════════════════════════════════════════════
+          Solução definitiva para o elemento transparente:
+          - Sem filter:blur nos orbs (blur vaza mesmo com overflow:hidden em alguns browsers)
+          - Gradiente radial inline no próprio fundo faz o mesmo efeito sem vazar
+          - isolation + overflow:hidden como camada extra de segurança
+      ══════════════════════════════════════════════════════════ */}
+      <div style={{
+        position: "sticky", top: 0, zIndex: 20,
+        isolation: "isolate",
+        overflow: "hidden",
+        borderRadius: "0 0 28px 28px",
+        boxShadow: dark
+          ? "0 8px 32px rgba(0,0,0,0.5)"
+          : "0 8px 32px rgba(29,78,216,0.2)",
+        /* Gradiente com orbs embutidos — sem filter:blur que causa bleeding */
+        background: dark
+          ? `
+              radial-gradient(ellipse 70% 60% at 50% -10%, rgba(37,99,235,0.35) 0%, transparent 70%),
+              radial-gradient(ellipse 40% 40% at 90% 110%, rgba(124,58,237,0.2) 0%, transparent 70%),
+              linear-gradient(160deg, #06080f 0%, #0a1425 40%, #0d1e3a 100%)
+            `
+          : `
+              radial-gradient(ellipse 70% 60% at 50% -10%, rgba(96,165,250,0.4) 0%, transparent 70%),
+              radial-gradient(ellipse 40% 40% at 90% 110%, rgba(167,139,250,0.25) 0%, transparent 70%),
+              linear-gradient(165deg, #1d4ed8 0%, #1e3a8a 55%, #312e81 100%)
+            `,
+      }}>
+        <div style={{ padding: "52px 20px 0" }}>
+
           {isViewingSharedProfile && (
-            <p className="text-blue-300 text-xs font-medium mb-2">👁 Visualizando perfil compartilhado</p>
+            <div style={{ background: "rgba(255,255,255,0.12)", borderRadius: 8, padding: "4px 12px", marginBottom: 10, fontSize: "0.72rem", color: "rgba(255,255,255,0.85)", display: "inline-block", fontWeight: 500 }}>
+              👁 Visualizando perfil compartilhado
+            </div>
           )}
-          <h1 className="text-2xl font-medium text-white mb-3">Transações</h1>
+
+          {/* Título + seletor de mês — mesma estrutura do Home */}
+          <p style={{ fontFamily: "'Cabinet Grotesk',sans-serif", fontWeight: 900, fontSize: "clamp(1.5rem,5vw,1.8rem)", color: "#ffffff", letterSpacing: "-0.03em", marginBottom: 8 }}>
+            Transações
+          </p>
+
           <MonthSelector selectedDate={selectedDate} onChange={setSelectedDate} />
-        </div>
 
-        {/* Resumo compacto */}
-        <div className="flex gap-0 mx-5 mb-3 bg-white/10 rounded-2xl overflow-hidden">
-          <div className="flex-1 text-center py-2.5 px-2">
-            <p className="text-[10px] text-blue-200 mb-0.5 uppercase tracking-wide">Entradas</p>
-            <p className="text-sm font-medium text-emerald-300">{fmt(summary.income)}</p>
+          {/* Resumo 3 colunas */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1px 1fr 1px 1fr", background: "rgba(255,255,255,0.1)", borderRadius: 14, margin: "10px 0 0", overflow: "hidden" }}>
+            <div style={{ padding: "9px 6px", textAlign: "center" }}>
+              <p style={{ fontSize: "0.56rem", fontWeight: 600, color: "rgba(255,255,255,0.5)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 2 }}>Entradas</p>
+              <p style={{ fontFamily: "'Cabinet Grotesk',sans-serif", fontWeight: 800, fontSize: "0.85rem", color: "#2ecc8a", letterSpacing: "-0.02em" }}>{fmt(summary.income)}</p>
+            </div>
+            <div style={{ background: "rgba(255,255,255,0.15)" }} />
+            <div style={{ padding: "9px 6px", textAlign: "center" }}>
+              <p style={{ fontSize: "0.56rem", fontWeight: 600, color: "rgba(255,255,255,0.5)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 2 }}>Saídas</p>
+              <p style={{ fontFamily: "'Cabinet Grotesk',sans-serif", fontWeight: 800, fontSize: "0.85rem", color: "#e85d5d", letterSpacing: "-0.02em" }}>{fmt(summary.expense)}</p>
+            </div>
+            <div style={{ background: "rgba(255,255,255,0.15)" }} />
+            <div style={{ padding: "9px 6px", textAlign: "center" }}>
+              <p style={{ fontSize: "0.56rem", fontWeight: 600, color: "rgba(255,255,255,0.5)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 2 }}>Saldo</p>
+              <p style={{ fontFamily: "'Cabinet Grotesk',sans-serif", fontWeight: 800, fontSize: "0.85rem", color: summary.balance >= 0 ? "#ffffff" : "#e85d5d", letterSpacing: "-0.02em" }}>{fmt(summary.balance)}</p>
+            </div>
           </div>
-          <div className="w-px bg-white/20" />
-          <div className="flex-1 text-center py-2.5 px-2">
-            <p className="text-[10px] text-blue-200 mb-0.5 uppercase tracking-wide">Saídas</p>
-            <p className="text-sm font-medium text-red-300">{fmt(summary.expense)}</p>
-          </div>
-          <div className="w-px bg-white/20" />
-          <div className="flex-1 text-center py-2.5 px-2">
-            <p className="text-[10px] text-blue-200 mb-0.5 uppercase tracking-wide">Saldo</p>
-            <p className={`text-sm font-medium ${summary.balance >= 0 ? "text-white" : "text-red-300"}`}>
-              {fmt(summary.balance)}
-            </p>
-          </div>
-        </div>
 
-        {/* Busca + filtro avançado */}
-        <div className="px-5 pb-3 flex gap-2">
-          <Input
-            placeholder="Buscar..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="flex-1 h-9 rounded-xl bg-white/10 border-white/20 text-white placeholder:text-blue-300 text-sm"
-          />
-          <button
-            onClick={() => setShowAdvanced(!showAdvanced)}
-            className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 relative transition-all ${
-              showAdvanced || hasAdvFilters
-                ? "bg-white text-blue-700"
-                : "bg-white/10 text-white hover:bg-white/20"
-            }`}
-          >
-            <SlidersHorizontal className="w-4 h-4" />
-            {hasAdvFilters && (
-              <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-orange-400 rounded-full" />
-            )}
-          </button>
-        </div>
-
-        {/* Filtros rápidos */}
-        <div className="flex gap-1.5 px-5 pb-3 overflow-x-auto">
-          {FILTERS.map(({ value, label }) => (
-            <button
-              key={value}
-              onClick={() => setFilter(value)}
-              className={`flex-shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-all ${
-                filter === value
-                  ? "bg-white text-blue-700"
-                  : "bg-white/15 text-white hover:bg-white/25"
-              }`}
-            >
-              {label}
+          {/* Busca + botão filtros avançados */}
+          <div style={{ display: "flex", gap: 8, margin: "10px 0 0" }}>
+            <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 8, background: "rgba(255,255,255,0.12)", border: `1px solid ${searchFocused ? "rgba(255,255,255,0.35)" : "rgba(255,255,255,0.15)"}`, borderRadius: 12, padding: "0 12px", height: 38, transition: "border-color .2s" }}>
+              <Search size={13} color="rgba(255,255,255,0.5)" />
+              <input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onFocus={() => setSearchFocused(true)}
+                onBlur={() => setSearchFocused(false)}
+                placeholder="Título, categoria, valor, conta..."
+                style={{ flex: 1, background: "none", border: "none", outline: "none", color: "#ffffff", fontSize: "0.82rem", fontFamily: "'Outfit',sans-serif" }}
+              />
+              {searchQuery && (
+                <button onClick={() => setSearchQuery("")} style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.5)", display: "flex" }}>
+                  <X size={13} />
+                </button>
+              )}
+            </div>
+            <button onClick={() => setShowAdvanced(!showAdvanced)}
+              style={{ width: 38, height: 38, borderRadius: 12, flexShrink: 0, background: showAdvanced || hasAdvFilters ? "#ffffff" : "rgba(255,255,255,0.12)", border: `1px solid ${showAdvanced || hasAdvFilters ? "transparent" : "rgba(255,255,255,0.15)"}`, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", position: "relative", transition: "all .2s" }}>
+              <SlidersHorizontal size={15} color={showAdvanced || hasAdvFilters ? "#1d4ed8" : "rgba(255,255,255,0.9)"} />
+              {hasAdvFilters && (
+                <div style={{ position: "absolute", top: -4, right: -4, width: 10, height: 10, background: "#f59e0b", borderRadius: "50%", border: "2px solid #1e3a8a" }} />
+              )}
             </button>
-          ))}
+          </div>
+
+          {/* Pills de filtro rápido */}
+          <div style={{ display: "flex", gap: 6, padding: "8px 0 14px", overflowX: "auto" }}>
+            {FILTERS.map(({ value, label }) => (
+              <button key={value} onClick={() => setFilter(value)}
+                style={{ flexShrink: 0, padding: "4px 13px", borderRadius: 999, fontSize: "0.73rem", fontWeight: 600, fontFamily: "'Outfit',sans-serif", background: filter === value ? "#ffffff" : "rgba(255,255,255,0.13)", color: filter === value ? "#1d4ed8" : "rgba(255,255,255,0.9)", border: filter === value ? "none" : "0.5px solid rgba(255,255,255,0.18)", cursor: "pointer", transition: "all .2s" }}>
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
-      {/* Filtros avançados */}
+      {/* ══ FILTROS AVANÇADOS ═══════════════════════════════════ */}
       <AnimatePresence>
         {showAdvanced && (
           <motion.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
-            className="bg-white dark:bg-gray-800 border-b border-gray-100 dark:border-gray-700 overflow-hidden"
+            style={{ overflow: "hidden", background: cardBg, borderBottom: `1px solid ${cardBrd}` }}
           >
-            <div className="px-5 py-4 space-y-4">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-medium text-gray-900 dark:text-white">Filtros avançados</p>
+            <div style={{ padding: "14px 16px", display: "flex", flexDirection: "column", gap: 14 }}>
+
+              {/* Header filtros */}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <p style={{ fontFamily: "'Cabinet Grotesk',sans-serif", fontSize: "0.88rem", fontWeight: 700, color: text }}>Filtros avançados</p>
                 {hasAdvFilters && (
-                  <button onClick={clearAdvFilters} className="flex items-center gap-1 text-xs text-red-500 font-medium">
-                    <X className="w-3 h-3" /> Limpar
+                  <button onClick={clearAdvFilters} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: "0.72rem", color: "#e85d5d", fontWeight: 600, background: "none", border: "none", cursor: "pointer" }}>
+                    <X size={12} /> Limpar tudo
                   </button>
                 )}
               </div>
 
+              {/* Período personalizado */}
               <div>
-                <p className="text-xs font-medium text-gray-400 dark:text-gray-500 mb-2">Categoria</p>
-                <div className="flex flex-wrap gap-1.5">
+                <p style={{ fontSize: "0.63rem", fontWeight: 600, color: muted, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8, display: "flex", alignItems: "center", gap: 5 }}>
+                  <Calendar size={11} /> Período
+                </p>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <input type="date" value={advFilters.dateFrom}
+                    onChange={e => setAdvFilters(prev => ({ ...prev, dateFrom: e.target.value }))}
+                    style={{ flex: 1, height: 36, padding: "0 10px", borderRadius: 10, border: `1px solid ${inputBrd}`, background: inputBg, color: text, fontSize: "0.8rem", fontFamily: "'Outfit',sans-serif", outline: "none" }}
+                  />
+                  <span style={{ fontSize: "0.7rem", color: muted, flexShrink: 0 }}>até</span>
+                  <input type="date" value={advFilters.dateTo}
+                    onChange={e => setAdvFilters(prev => ({ ...prev, dateTo: e.target.value }))}
+                    style={{ flex: 1, height: 36, padding: "0 10px", borderRadius: 10, border: `1px solid ${inputBrd}`, background: inputBg, color: text, fontSize: "0.8rem", fontFamily: "'Outfit',sans-serif", outline: "none" }}
+                  />
+                </div>
+              </div>
+
+              {/* Valor */}
+              <div>
+                <p style={{ fontSize: "0.63rem", fontWeight: 600, color: muted, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8 }}>Valor (R$)</p>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <input type="number" placeholder="Mínimo" value={advFilters.minAmount}
+                    onChange={e => setAdvFilters(prev => ({ ...prev, minAmount: e.target.value }))}
+                    style={{ flex: 1, height: 36, padding: "0 12px", borderRadius: 10, border: `1px solid ${inputBrd}`, background: inputBg, color: text, fontSize: "0.82rem", fontFamily: "'Outfit',sans-serif", outline: "none" }}
+                  />
+                  <span style={{ fontSize: "0.7rem", color: muted, flexShrink: 0 }}>até</span>
+                  <input type="number" placeholder="Máximo" value={advFilters.maxAmount}
+                    onChange={e => setAdvFilters(prev => ({ ...prev, maxAmount: e.target.value }))}
+                    style={{ flex: 1, height: 36, padding: "0 12px", borderRadius: 10, border: `1px solid ${inputBrd}`, background: inputBg, color: text, fontSize: "0.82rem", fontFamily: "'Outfit',sans-serif", outline: "none" }}
+                  />
+                </div>
+              </div>
+
+              {/* Categoria */}
+              <div>
+                <p style={{ fontSize: "0.63rem", fontWeight: 600, color: muted, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8 }}>Categoria</p>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                   {CATEGORIES.map(cat => (
                     <button key={cat} onClick={() => toggleCategory(cat)}
-                      className={`px-2.5 py-1 rounded-full text-xs font-medium transition-all capitalize ${
-                        advFilters.categories.includes(cat)
-                          ? "bg-blue-600 text-white"
-                          : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300"
-                      }`}>
+                      style={{ padding: "4px 11px", borderRadius: 999, fontSize: "0.7rem", fontWeight: 600, fontFamily: "'Outfit',sans-serif", background: advFilters.categories.includes(cat) ? "#1d4ed8" : (dark ? "#12151c" : "#f1f4f9"), color: advFilters.categories.includes(cat) ? "#ffffff" : muted, border: advFilters.categories.includes(cat) ? "none" : `1px solid ${cardBrd}`, cursor: "pointer", textTransform: "capitalize", transition: "all .15s" }}>
                       {cat}
                     </button>
                   ))}
                 </div>
               </div>
 
+              {/* Conta */}
               {accounts.length > 0 && (
                 <div>
-                  <p className="text-xs font-medium text-gray-400 dark:text-gray-500 mb-2">Conta</p>
-                  <div className="flex flex-wrap gap-1.5">
+                  <p style={{ fontSize: "0.63rem", fontWeight: 600, color: muted, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8 }}>Conta</p>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                     {accounts.map(acc => (
                       <button key={acc.id} onClick={() => toggleAccount(acc.id)}
-                        className={`px-2.5 py-1 rounded-full text-xs font-medium transition-all ${
-                          advFilters.accountIds.includes(acc.id)
-                            ? "bg-blue-600 text-white"
-                            : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300"
-                        }`}>
+                        style={{ padding: "4px 11px", borderRadius: 999, fontSize: "0.7rem", fontWeight: 600, fontFamily: "'Outfit',sans-serif", background: advFilters.accountIds.includes(acc.id) ? "#1d4ed8" : (dark ? "#12151c" : "#f1f4f9"), color: advFilters.accountIds.includes(acc.id) ? "#ffffff" : muted, border: advFilters.accountIds.includes(acc.id) ? "none" : `1px solid ${cardBrd}`, cursor: "pointer", transition: "all .15s" }}>
                         {acc.name}
                       </button>
                     ))}
@@ -326,35 +436,26 @@ export default function Transactions() {
                 </div>
               )}
 
-              <div>
-                <p className="text-xs font-medium text-gray-400 dark:text-gray-500 mb-2">Valor (R$)</p>
-                <div className="flex items-center gap-2">
-                  <input type="number" placeholder="Mínimo" value={advFilters.minAmount}
-                    onChange={e => setAdvFilters(prev => ({ ...prev, minAmount: e.target.value }))}
-                    className="flex-1 h-9 px-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-sm text-gray-800 dark:text-white placeholder:text-gray-400" />
-                  <span className="text-gray-400 text-xs">até</span>
-                  <input type="number" placeholder="Máximo" value={advFilters.maxAmount}
-                    onChange={e => setAdvFilters(prev => ({ ...prev, maxAmount: e.target.value }))}
-                    className="flex-1 h-9 px-3 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-sm text-gray-800 dark:text-white placeholder:text-gray-400" />
-                </div>
-              </div>
-
-              {hasAdvFilters && (
-                <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl px-3 py-2">
-                  <p className="text-xs text-blue-600 dark:text-blue-400 font-medium">
-                    {filteredTransactions.length} transação(ões) encontrada(s)
+              {/* Resultado */}
+              <div style={{ background: dark ? "rgba(37,99,235,0.1)" : "rgba(29,78,216,0.06)", border: `1px solid ${dark ? "rgba(37,99,235,0.2)" : "rgba(29,78,216,0.12)"}`, borderRadius: 10, padding: "7px 12px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <p style={{ fontSize: "0.73rem", color: linkCol, fontWeight: 600 }}>
+                  {filteredTransactions.length} transação(ões) encontrada(s)
+                </p>
+                {(searchQuery || hasAdvFilters) && (
+                  <p style={{ fontSize: "0.65rem", color: muted }}>
+                    {fmt(summary.income - summary.expense)} líquido
                   </p>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* ── LISTA ─────────────────────────────────────────────── */}
-      <div className="px-4 py-4">
+      {/* ══ LISTA ═══════════════════════════════════════════════ */}
+      <div style={{ padding: "14px 14px 0" }}>
         {filteredTransactions.length > 0 ? (
-          <div className="space-y-2">
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {filteredTransactions.map((transaction) => (
               <motion.div key={transaction.id} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }}>
                 <TransactionItem
@@ -372,8 +473,8 @@ export default function Transactions() {
           <EmptyState
             icon={TrendingUp}
             title="Nenhuma transação"
-            description="Período sem dados."
-            action="Adicionar"
+            description={searchQuery || hasAdvFilters ? "Tente ajustar os filtros." : "Período sem dados."}
+            action={canAdd && !searchQuery && !hasAdvFilters ? "Adicionar" : undefined}
             onAction={() => canAdd && setShowForm(true)}
           />
         )}
@@ -382,12 +483,11 @@ export default function Transactions() {
       {/* FAB */}
       {canAdd && (
         <motion.button
-          whileTap={{ scale: 0.9 }}
+          whileTap={{ scale: 0.88 }}
+          whileHover={{ scale: 1.06 }}
           onClick={() => { setEditTransaction(null); setShowForm(true); }}
-          className="fixed bottom-24 right-5 w-13 h-13 bg-blue-700 text-white rounded-full shadow-lg z-40 flex items-center justify-center"
-          style={{ width: 52, height: 52 }}
-        >
-          <Plus className="w-5 h-5" />
+          style={{ position: "fixed", bottom: 88, right: 20, width: 52, height: 52, background: "linear-gradient(135deg,#1d4ed8,#3730a3)", border: "none", borderRadius: "50%", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 0 24px rgba(29,78,216,0.5),0 4px 14px rgba(0,0,0,0.25)", zIndex: 40 }}>
+          <Plus size={21} color="#fff" />
         </motion.button>
       )}
 
@@ -421,7 +521,7 @@ export default function Transactions() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={() => deleteMutation.mutate(deleteId)} className="bg-red-600 hover:bg-red-700 text-white">
+            <AlertDialogAction onClick={() => deleteMutation.mutate(deleteId)} style={{ background: "#dc2626", color: "#ffffff", border: "none" }}>
               Excluir
             </AlertDialogAction>
           </AlertDialogFooter>
