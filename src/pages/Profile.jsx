@@ -368,9 +368,12 @@ export default function Profile() {
           <motion.div key={section.title} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 * idx }}>
             <p className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-3 px-1">{section.title}</p>
             <div className="bg-white dark:bg-gray-800 rounded-2xl overflow-hidden shadow-sm border border-gray-100 dark:border-gray-700">
-              {section.items.map((item, i) => (
-                <button key={item.label} onClick={() => handleMenuAction(item)} disabled={isLoggingOut}
-                  className={`w-full flex items-center justify-between p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors disabled:opacity-50 ${i !== section.items.length - 1 ? "border-b border-gray-100 dark:border-gray-700" : ""}`}>
+              {section.items.map((item, i) => {
+                const isToggle = item.action === "toggle";
+                const El = isToggle ? "div" : "button";
+                return (
+                <El key={item.label} onClick={() => handleMenuAction(item)} disabled={isLoggingOut}
+                  className={`w-full flex items-center justify-between p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors disabled:opacity-50 cursor-pointer ${i !== section.items.length - 1 ? "border-b border-gray-100 dark:border-gray-700" : ""}`}>
                   <div className="flex items-center gap-3">
                     <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
                       item.action === "referrals" ? "bg-orange-100 dark:bg-orange-900/30" :
@@ -395,8 +398,9 @@ export default function Profile() {
                   ) : (
                     <ChevronRight className="w-5 h-5 text-gray-400" />
                   )}
-                </button>
-              ))}
+                </El>
+                );
+              })}
             </div>
           </motion.div>
         ))}

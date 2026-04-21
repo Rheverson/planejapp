@@ -1,11 +1,8 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { X, TrendingUp, TrendingDown, Repeat, Zap } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { X, TrendingUp, TrendingDown, Repeat, Zap } from "lucide-react";
 import CategorySuggestion from "./CategorySuggestion";
 import { useCategorySuggestion } from "./useCategorySuggestion";
 import { useAuth } from "@/lib/AuthContext";
@@ -13,31 +10,39 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 
 const frequencyOptions = [
-  { value: "monthly", label: "Mensal" },
+  { value: "monthly", label: "Mensal"  },
   { value: "weekly",  label: "Semanal" },
-  { value: "yearly",  label: "Anual" },
+  { value: "yearly",  label: "Anual"   },
 ];
 const dayOptions = Array.from({ length: 31 }, (_, i) => i + 1);
-const today = new Date().toISOString().split("T")[0];
+const today    = new Date().toISOString().split("T")[0];
 const todayDay = new Date().getDate();
+
+function useIsDark() {
+  const [dark, setDark] = useState(() => localStorage.getItem("darkMode") === "true");
+  useEffect(() => {
+    const h = (e) => setDark(e.detail);
+    window.addEventListener("darkModeChange", h);
+    return () => window.removeEventListener("darkModeChange", h);
+  }, []);
+  return dark;
+}
 
 export default function TransactionForm({ accounts, onSubmit, onClose, initialType = "expense", initialData = null }) {
   const isEditing = !!initialData;
-  const { user } = useAuth();
+  const dark      = useIsDark();
+  const { user }  = useAuth();
 
   const { data: allCategories = [] } = useQuery({
-    queryKey: ['categories', user?.id],
+    queryKey: ["categories", user?.id],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('categories')
-        .select('*')
+        .from("categories").select("*")
         .or(`user_id.eq.${user?.id},is_default.eq.true`)
-        .order('is_default', { ascending: false })
-        .order('name');
-      if (error) throw error;
-      return data;
+        .order("is_default", { ascending: false }).order("name");
+      if (error) throw error; return data;
     },
-    enabled: !!user?.id
+    enabled: !!user?.id,
   });
 
   const [type, setType]                         = useState(initialData?.type || initialType);
@@ -57,21 +62,13 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
   const { suggestion, confidence, confirmCategory } = useCategorySuggestion(description, type);
   const categories = allCategories.filter(c => c.type === type).map(c => c.name);
 
-  const handleAutoRealizeChange = (val) => { setAutoRealize(val); if (val) setIsRealized(false); };
-  const handleIsRealizedChange  = (val) => { setIsRealized(val); if (val) setAutoRealize(false); };
-  const handleDescriptionChange = (val) => {
-    setDescription(val);
-    if (val && !category) setShowSuggestion(true);
-    else if (!val) setShowSuggestion(false);
-  };
-  const handleDateChange = (val) => {
-    setDate(val);
-    if (isRecurring && recurringFreq === "monthly")
-      setRecurringDay(new Date(val + "T00:00:00").getDate());
-  };
-  const handleCategoryChange = (val) => { setCategory(val); setShowSuggestion(false); };
-  const handleTypeChange     = (val) => { setType(val); setCategory(""); setShowSuggestion(false); };
-  const handleAcceptSuggestion = () => { setCategory(suggestion); setShowSuggestion(false); };
+  const handleAutoRealizeChange  = (val) => { setAutoRealize(val); if (val) setIsRealized(false); };
+  const handleIsRealizedChange   = (val) => { setIsRealized(val); if (val) setAutoRealize(false); };
+  const handleDescriptionChange  = (val) => { setDescription(val); if (val && !category) setShowSuggestion(true); else if (!val) setShowSuggestion(false); };
+  const handleDateChange         = (val) => { setDate(val); if (isRecurring && recurringFreq === "monthly") setRecurringDay(new Date(val + "T00:00:00").getDate()); };
+  const handleCategoryChange     = (val) => { setCategory(val); setShowSuggestion(false); };
+  const handleTypeChange         = (val) => { setType(val); setCategory(""); setShowSuggestion(false); };
+  const handleAcceptSuggestion   = () => { setCategory(suggestion); setShowSuggestion(false); };
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -91,81 +88,125 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
 
   const showAutoRealize = !isRecurring && !isRealized;
 
+  // ── Tokens ────────────────────────────────────────────────
+  const modalBg  = dark ? "#0c0e13" : "#ffffff";
+  const headerBg = dark ? "#0c0e13" : "#ffffff";
+  const headerBrd = dark ? "rgba(255,255,255,0.07)" : "rgba(17,24,39,0.06)";
+  const text     = dark ? "#e8edf5" : "#0f172a";
+  const muted    = dark ? "#6b7a96" : "#64748b";
+  const inputBg  = dark ? "#12151c" : "#f8fafc";
+  const inputBrd = dark ? "rgba(255,255,255,0.08)" : "rgba(17,24,39,0.1)";
+  const inputBrdFocus = "#1d4ed8";
+  const rowBg    = dark ? "rgba(255,255,255,0.03)" : "#f8fafc";
+  const rowBrd   = dark ? "rgba(255,255,255,0.06)" : "rgba(17,24,39,0.07)";
+  const pillBg   = dark ? "#12151c" : "#f1f4f9";
+  const pillBrd  = dark ? "rgba(255,255,255,0.08)" : "rgba(17,24,39,0.1)";
+
+  // Cores por tipo
+  const incomeC  = { bg: "#059669", hover: "#047857", tint: dark ? "rgba(5,150,105,0.12)" : "rgba(5,150,105,0.08)", text: dark ? "#2ecc8a" : "#059669" };
+  const expenseC = { bg: "#dc2626", hover: "#b91c1c", tint: dark ? "rgba(220,38,38,0.12)" : "rgba(220,38,38,0.08)", text: dark ? "#e85d5d" : "#dc2626" };
+  const currentTypeC = type === "income" ? incomeC : expenseC;
+  const submitBg = type === "income"
+    ? "linear-gradient(135deg,#059669,#047857)"
+    : "linear-gradient(135deg,#dc2626,#b91c1c)";
+
+  const inputStyle = {
+    width: "100%", height: 40, padding: "0 12px",
+    background: inputBg, border: `1px solid ${inputBrd}`,
+    borderRadius: 12, color: text, fontSize: "0.85rem",
+    fontFamily: "'Outfit',sans-serif", outline: "none",
+    transition: "border-color .2s",
+  };
+
+  const labelStyle = {
+    fontSize: "0.65rem", fontWeight: 600, color: muted,
+    textTransform: "uppercase", letterSpacing: "0.08em",
+    display: "block", marginBottom: 5,
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center pb-16 sm:pb-0"
       onClick={onClose}
+      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", backdropFilter: "blur(6px)", zIndex: 50, display: "flex", alignItems: "flex-end", justifyContent: "center", paddingBottom: 64 }}
     >
       <motion.div
-        initial={{ y: 100, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 100, opacity: 0 }}
-        onClick={(e) => e.stopPropagation()}
-        className="bg-white dark:bg-gray-900 rounded-t-3xl sm:rounded-3xl w-full max-w-md max-h-[88vh] overflow-y-auto shadow-2xl"
+        initial={{ y: 100, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        exit={{ y: 100, opacity: 0 }}
+        transition={{ type: "spring", damping: 28, stiffness: 280 }}
+        onClick={e => e.stopPropagation()}
+        style={{ background: modalBg, borderRadius: "24px 24px 0 0", width: "100%", maxWidth: 480, maxHeight: "90vh", display: "flex", flexDirection: "column", overflow: "hidden", fontFamily: "'Outfit',sans-serif" }}
       >
-        {/* Header */}
-        <div className="sticky top-0 bg-white dark:bg-gray-900 px-4 py-3 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between z-10">
-          <h2 className="text-base font-bold text-gray-900 dark:text-white">
+        {/* Handle */}
+        <div style={{ display: "flex", justifyContent: "center", paddingTop: 10, paddingBottom: 2 }}>
+          <div style={{ width: 36, height: 4, borderRadius: 999, background: dark ? "rgba(255,255,255,0.1)" : "rgba(17,24,39,0.1)" }} />
+        </div>
+
+        {/* Header sticky */}
+        <div style={{ position: "sticky", top: 0, background: headerBg, padding: "10px 20px 12px", borderBottom: `1px solid ${headerBrd}`, display: "flex", alignItems: "center", justifyContent: "space-between", zIndex: 10 }}>
+          <p style={{ fontFamily: "'Cabinet Grotesk',sans-serif", fontWeight: 800, fontSize: "1rem", color: text, letterSpacing: "-0.02em" }}>
             {isEditing ? "Editar Transação" : "Nova Transação"}
-          </h2>
+          </p>
           <button type="button" onClick={onClose}
-            className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors">
-            <X className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+            style={{ width: 30, height: 30, borderRadius: "50%", background: dark ? "rgba(255,255,255,0.06)" : "#f1f4f9", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <X size={15} color={muted} />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="px-4 py-3 space-y-3 pb-5">
+        {/* Formulário */}
+        <form onSubmit={handleSubmit} style={{ flex: 1, overflowY: "auto", padding: "14px 20px 24px", display: "flex", flexDirection: "column", gap: 14 }}>
 
-          {/* Tipo */}
-          <div className="flex gap-1.5 p-1 bg-gray-100 dark:bg-gray-800 rounded-xl">
+          {/* Tipo — toggle entrada/saída */}
+          <div style={{ display: "flex", gap: 6, padding: 5, background: dark ? "rgba(255,255,255,0.04)" : "#f1f4f9", borderRadius: 14, border: `1px solid ${rowBrd}` }}>
             {[
-              { val: "income",  label: "Entrada", Icon: TrendingUp,   active: "bg-emerald-500" },
-              { val: "expense", label: "Saída",   Icon: TrendingDown, active: "bg-red-500" },
-            ].map(({ val, label, Icon, active }) => (
-              <button key={val} type="button" onClick={() => handleTypeChange(val)}
-                className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-medium transition-all ${
-                  type === val
-                    ? `${active} text-white shadow-sm`
-                    : "text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
-                }`}
+              { val: "income",  label: "Entrada", Icon: TrendingUp,   c: incomeC  },
+              { val: "expense", label: "Saída",   Icon: TrendingDown, c: expenseC },
+            ].map(({ val, label, Icon, c }) => (
+              <motion.button
+                key={val} type="button" whileTap={{ scale: 0.95 }}
+                onClick={() => handleTypeChange(val)}
+                style={{
+                  flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 7,
+                  padding: "8px 0", borderRadius: 10, border: "none", cursor: "pointer",
+                  fontFamily: "'Cabinet Grotesk',sans-serif", fontWeight: 700, fontSize: "0.88rem",
+                  transition: "all .2s",
+                  background: type === val ? c.bg : "transparent",
+                  color: type === val ? "#ffffff" : muted,
+                  boxShadow: type === val ? `0 2px 12px ${c.bg}55` : "none",
+                }}
               >
-                <Icon className="w-3.5 h-3.5" /> {label}
-              </button>
+                <Icon size={15} strokeWidth={2.2} />
+                {label}
+              </motion.button>
             ))}
           </div>
 
-          {/* Valor */}
-          <div className="space-y-1">
-            <Label className="text-xs font-medium text-gray-600 dark:text-gray-400">Valor</Label>
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 text-sm font-medium">R$</span>
-              <Input
-                type="number" step="0.01" placeholder="0,00" value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                className="pl-10 h-11 text-xl font-bold rounded-xl
-                  bg-white dark:bg-gray-800
-                  text-gray-900 dark:text-white
-                  border-gray-200 dark:border-gray-700
-                  placeholder:text-gray-300 dark:placeholder:text-gray-600
-                  focus:border-blue-400 dark:focus:border-blue-500
-                  focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900/30"
+          {/* Valor — destaque visual */}
+          <div>
+            <label style={labelStyle}>Valor</label>
+            <div style={{ position: "relative" }}>
+              <span style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", fontSize: "0.9rem", fontWeight: 600, color: muted }}>R$</span>
+              <input
+                type="number" step="0.01" placeholder="0,00"
+                value={amount} onChange={e => setAmount(e.target.value)}
+                onFocus={e => e.target.style.borderColor = inputBrdFocus}
+                onBlur={e => e.target.style.borderColor = inputBrd}
                 required
+                style={{ ...inputStyle, height: 52, paddingLeft: 42, fontSize: "1.4rem", fontWeight: 800, fontFamily: "'Cabinet Grotesk',sans-serif", color: currentTypeC.text, letterSpacing: "-0.02em" }}
               />
             </div>
           </div>
 
           {/* Descrição */}
-          <div className="space-y-1">
-            <Label className="text-xs font-medium text-gray-600 dark:text-gray-400">Descrição</Label>
-            <Input
-              placeholder="Ex: Salário, Aluguel, Mercado..." value={description}
-              onChange={(e) => handleDescriptionChange(e.target.value)}
-              className="h-10 text-sm rounded-xl
-                bg-white dark:bg-gray-800
-                text-gray-900 dark:text-white
-                border-gray-200 dark:border-gray-700
-                placeholder:text-gray-300 dark:placeholder:text-gray-600
-                focus:border-blue-400 dark:focus:border-blue-500"
-              required
+          <div>
+            <label style={labelStyle}>Descrição</label>
+            <input
+              placeholder="Ex: Salário, Aluguel, Mercado..."
+              value={description} onChange={e => handleDescriptionChange(e.target.value)}
+              onFocus={e => e.target.style.borderColor = inputBrdFocus}
+              onBlur={e => e.target.style.borderColor = inputBrd}
+              required style={inputStyle}
             />
           </div>
 
@@ -176,30 +217,30 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
             isVisible={showSuggestion && !!suggestion && !category}
           />
 
-          {/* Categoria e Conta */}
-          <div className="grid grid-cols-2 gap-2">
-            <div className="space-y-1">
-              <Label className="text-xs font-medium text-gray-600 dark:text-gray-400">Categoria</Label>
+          {/* Categoria + Conta */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <div>
+              <label style={labelStyle}>Categoria</label>
               <Select value={category} onValueChange={handleCategoryChange}>
-                <SelectTrigger className="h-10 text-sm rounded-xl bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white">
+                <SelectTrigger style={{ height: 40, borderRadius: 12, background: inputBg, border: `1px solid ${inputBrd}`, fontSize: "0.82rem", color: text, fontFamily: "'Outfit',sans-serif" }}>
                   <SelectValue placeholder="Selecione" />
                 </SelectTrigger>
-                <SelectContent className="dark:bg-gray-800 dark:border-gray-700">
-                  {categories.map((cat) => (
-                    <SelectItem key={cat} value={cat.toLowerCase()} className="dark:text-white dark:focus:bg-gray-700">{cat}</SelectItem>
+                <SelectContent>
+                  {categories.map(cat => (
+                    <SelectItem key={cat} value={cat.toLowerCase()}>{cat}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1">
-              <Label className="text-xs font-medium text-gray-600 dark:text-gray-400">Conta</Label>
+            <div>
+              <label style={labelStyle}>Conta</label>
               <Select value={accountId} onValueChange={setAccountId}>
-                <SelectTrigger className="h-10 text-sm rounded-xl bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white">
+                <SelectTrigger style={{ height: 40, borderRadius: 12, background: inputBg, border: `1px solid ${inputBrd}`, fontSize: "0.82rem", color: text, fontFamily: "'Outfit',sans-serif" }}>
                   <SelectValue placeholder="Selecione" />
                 </SelectTrigger>
-                <SelectContent className="dark:bg-gray-800 dark:border-gray-700">
-                  {accounts.map((acc) => (
-                    <SelectItem key={acc.id} value={acc.id} className="dark:text-white dark:focus:bg-gray-700">{acc.name}</SelectItem>
+                <SelectContent>
+                  {accounts.map(acc => (
+                    <SelectItem key={acc.id} value={acc.id}>{acc.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -207,59 +248,49 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
           </div>
 
           {/* Data */}
-          <div className="space-y-1">
-            <Label className="text-xs font-medium text-gray-600 dark:text-gray-400">
-              {isRecurring ? "Primeira ocorrência" : "Data"}
-            </Label>
-            <Input
-              type="date" value={date} onChange={(e) => handleDateChange(e.target.value)}
-              className="h-10 text-sm rounded-xl
-                bg-white dark:bg-gray-800
-                text-gray-900 dark:text-white
-                border-gray-200 dark:border-gray-700
-                [color-scheme:light] dark:[color-scheme:dark]"
+          <div>
+            <label style={labelStyle}>{isRecurring ? "Primeira ocorrência" : "Data"}</label>
+            <input
+              type="date" value={date}
+              onChange={e => handleDateChange(e.target.value)}
               required
+              style={{ ...inputStyle, colorScheme: dark ? "dark" : "light" }}
             />
           </div>
 
           {/* Recorrente */}
           {!isEditing && (
-            <div className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+            <div style={{ borderRadius: 14, border: `1px solid ${rowBrd}`, overflow: "hidden" }}>
               <button type="button" onClick={() => setIsRecurring(!isRecurring)}
-                className="w-full flex items-center justify-between px-3 py-2.5 bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
-                <div className="flex items-center gap-2">
-                  <Repeat className={`w-4 h-4 ${isRecurring ? "text-blue-500" : "text-gray-400 dark:text-gray-500"}`} />
-                  <div className="text-left">
-                    <p className="text-sm font-medium text-gray-900 dark:text-white">Recorrente</p>
-                    <p className="text-xs text-gray-400 dark:text-gray-500">
+                style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "11px 14px", background: isRecurring ? (dark ? "rgba(29,78,216,0.08)" : "rgba(29,78,216,0.04)") : rowBg, border: "none", cursor: "pointer", gap: 12 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <div style={{ width: 32, height: 32, borderRadius: 10, background: isRecurring ? "rgba(29,78,216,0.12)" : (dark ? "rgba(255,255,255,0.05)" : "#f1f4f9"), display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <Repeat size={15} color={isRecurring ? "#1d4ed8" : muted} />
+                  </div>
+                  <div style={{ textAlign: "left" }}>
+                    <p style={{ fontSize: "0.85rem", fontWeight: 600, color: text, marginBottom: 1 }}>Recorrente</p>
+                    <p style={{ fontSize: "0.68rem", color: muted }}>
                       {isRecurring ? "Ocorrências viram previsão automaticamente" : "Repetir todo mês, semana ou ano"}
                     </p>
                   </div>
                 </div>
-                <div onClick={(e) => e.stopPropagation()}>
+                <div onClick={e => e.stopPropagation()}>
                   <Switch checked={isRecurring} onCheckedChange={setIsRecurring} />
                 </div>
               </button>
 
               <AnimatePresence>
                 {isRecurring && (
-                  <motion.div
-                    initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2 }}
-                    className="overflow-hidden"
-                  >
-                    <div className="px-3 py-3 space-y-3 border-t border-gray-100 dark:border-gray-700">
-                      <div className="space-y-1">
-                        <Label className="text-xs font-medium text-gray-600 dark:text-gray-400">Frequência</Label>
-                        <div className="flex gap-1.5">
+                  <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2 }} style={{ overflow: "hidden" }}>
+                    <div style={{ padding: "12px 14px", borderTop: `1px solid ${rowBrd}`, display: "flex", flexDirection: "column", gap: 12 }}>
+
+                      {/* Frequência */}
+                      <div>
+                        <label style={labelStyle}>Frequência</label>
+                        <div style={{ display: "flex", gap: 6 }}>
                           {frequencyOptions.map(({ value, label }) => (
                             <button key={value} type="button" onClick={() => setRecurringFreq(value)}
-                              className={`flex-1 py-1.5 text-xs font-semibold rounded-lg border transition-colors ${
-                                recurringFreq === value
-                                  ? "bg-blue-600 text-white border-blue-600"
-                                  : "bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-200 dark:border-gray-700 hover:border-blue-300"
-                              }`}
-                            >
+                              style={{ flex: 1, padding: "6px 0", fontSize: "0.72rem", fontWeight: 600, borderRadius: 10, border: `1px solid ${recurringFreq === value ? "#1d4ed8" : inputBrd}`, background: recurringFreq === value ? "#1d4ed8" : inputBg, color: recurringFreq === value ? "#fff" : muted, cursor: "pointer", fontFamily: "'Outfit',sans-serif", transition: "all .15s" }}>
                               {label}
                             </button>
                           ))}
@@ -267,36 +298,31 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
                       </div>
 
                       {recurringFreq === "monthly" && (
-                        <div className="space-y-1">
-                          <Label className="text-xs font-medium text-gray-600 dark:text-gray-400">Todo dia</Label>
-                          <Select value={String(recurringDay)} onValueChange={(v) => setRecurringDay(parseInt(v))}>
-                            <SelectTrigger className="h-10 text-sm rounded-xl bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-900 dark:text-white">
+                        <div>
+                          <label style={labelStyle}>Todo dia</label>
+                          <Select value={String(recurringDay)} onValueChange={v => setRecurringDay(parseInt(v))}>
+                            <SelectTrigger style={{ height: 40, borderRadius: 12, background: inputBg, border: `1px solid ${inputBrd}`, fontSize: "0.82rem", color: text }}>
                               <SelectValue placeholder="Dia" />
                             </SelectTrigger>
-                            <SelectContent className="max-h-48 dark:bg-gray-800 dark:border-gray-700">
-                              {dayOptions.map((d) => (
-                                <SelectItem key={d} value={String(d)} className="dark:text-white dark:focus:bg-gray-700">Dia {d}</SelectItem>
+                            <SelectContent style={{ maxHeight: 200 }}>
+                              {dayOptions.map(d => (
+                                <SelectItem key={d} value={String(d)}>Dia {d}</SelectItem>
                               ))}
                             </SelectContent>
                           </Select>
-                          <p className="text-xs text-gray-400 dark:text-gray-500">Gera previsão todo dia {recurringDay} por 12 meses</p>
+                          <p style={{ fontSize: "0.65rem", color: muted, marginTop: 4 }}>Gera previsão todo dia {recurringDay} por 12 meses</p>
                         </div>
                       )}
 
-                      <div className="space-y-1">
-                        <Label className="text-xs font-medium text-gray-600 dark:text-gray-400">
-                          Encerra em <span className="font-normal text-gray-400 dark:text-gray-500">(opcional)</span>
-                        </Label>
-                        <Input
-                          type="date" value={recurringEndDate} min={date}
-                          onChange={(e) => setRecurringEndDate(e.target.value)}
-                          className="h-10 text-sm rounded-xl
-                            bg-white dark:bg-gray-800
-                            text-gray-900 dark:text-white
-                            border-gray-200 dark:border-gray-700
-                            [color-scheme:light] dark:[color-scheme:dark]"
+                      <div>
+                        <label style={labelStyle}>
+                          Encerra em <span style={{ fontWeight: 400, color: muted }}>(opcional)</span>
+                        </label>
+                        <input type="date" value={recurringEndDate} min={date}
+                          onChange={e => setRecurringEndDate(e.target.value)}
+                          style={{ ...inputStyle, colorScheme: dark ? "dark" : "light" }}
                         />
-                        <p className="text-xs text-gray-400 dark:text-gray-500">Sem data final gera 12 meses</p>
+                        <p style={{ fontSize: "0.65rem", color: muted, marginTop: 4 }}>Sem data final gera 12 meses</p>
                       </div>
                     </div>
                   </motion.div>
@@ -307,34 +333,37 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
 
           {/* Realizada / Auto realizar */}
           {!isRecurring && (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between px-3 py-2.5 bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-transparent dark:border-gray-700/50">
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {/* Já realizada */}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "11px 14px", background: rowBg, borderRadius: 14, border: `1px solid ${rowBrd}` }}>
                 <div>
-                  <p className="text-sm font-medium text-gray-900 dark:text-white">Já foi realizada?</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">{isRealized ? "Transação confirmada" : "Previsão futura"}</p>
+                  <p style={{ fontSize: "0.85rem", fontWeight: 600, color: text, marginBottom: 1 }}>Já foi realizada?</p>
+                  <p style={{ fontSize: "0.68rem", color: muted }}>{isRealized ? "Transação confirmada" : "Previsão futura"}</p>
                 </div>
                 <Switch checked={isRealized} onCheckedChange={handleIsRealizedChange} />
               </div>
 
+              {/* Auto realizar */}
               <AnimatePresence>
                 {showAutoRealize && (
-                  <motion.div
-                    initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }}
-                    exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.2 }}
-                  >
-                    <div className={`flex items-center justify-between px-3 py-2.5 rounded-xl border transition-colors ${
-                      autoRealize
-                        ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800'
-                        : 'bg-gray-50 dark:bg-gray-800/50 border-transparent dark:border-gray-700/50'
-                    }`}>
-                      <div className="flex items-center gap-2">
-                        <Zap className={`w-4 h-4 ${autoRealize ? 'text-blue-600' : 'text-gray-400 dark:text-gray-500'}`} />
+                  <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.2 }} style={{ overflow: "hidden" }}>
+                    <div style={{
+                      display: "flex", alignItems: "center", justifyContent: "space-between",
+                      padding: "11px 14px", borderRadius: 14,
+                      background: autoRealize ? (dark ? "rgba(29,78,216,0.1)" : "rgba(29,78,216,0.05)") : rowBg,
+                      border: `1px solid ${autoRealize ? (dark ? "rgba(29,78,216,0.25)" : "rgba(29,78,216,0.15)") : rowBrd}`,
+                      transition: "all .2s",
+                    }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <div style={{ width: 32, height: 32, borderRadius: 10, background: autoRealize ? "rgba(29,78,216,0.12)" : (dark ? "rgba(255,255,255,0.05)" : "#f1f4f9"), display: "flex", alignItems: "center", justifyContent: "center" }}>
+                          <Zap size={15} color={autoRealize ? "#1d4ed8" : muted} />
+                        </div>
                         <div>
-                          <p className="text-sm font-medium text-gray-900 dark:text-white">Realizar automaticamente</p>
-                          <p className="text-xs text-gray-500 dark:text-gray-400">
+                          <p style={{ fontSize: "0.85rem", fontWeight: 600, color: text, marginBottom: 1 }}>Realizar automaticamente</p>
+                          <p style={{ fontSize: "0.68rem", color: muted }}>
                             {autoRealize
-                              ? `Será realizada em ${new Date(date + 'T00:00:00').toLocaleDateString('pt-BR')}`
-                              : 'Marcar como realizada na data de vencimento'}
+                              ? `Será realizada em ${new Date(date + "T00:00:00").toLocaleDateString("pt-BR")}`
+                              : "Marcar como realizada na data de vencimento"}
                           </p>
                         </div>
                       </div>
@@ -346,20 +375,28 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
             </div>
           )}
 
-          {/* Botão */}
-          <Button type="submit"
-            className={`w-full h-11 rounded-xl text-sm font-semibold text-white shadow-lg ${
-              type === "income"
-                ? "bg-emerald-500 hover:bg-emerald-600 shadow-emerald-200 dark:shadow-emerald-900/30"
-                : "bg-red-500 hover:bg-red-600 shadow-red-200 dark:shadow-red-900/30"
-            }`}
+          {/* Botão submit */}
+          <motion.button
+            type="submit" whileTap={{ scale: 0.97 }}
+            style={{
+              width: "100%", height: 48, borderRadius: 14, border: "none", cursor: "pointer",
+              background: submitBg,
+              color: "#ffffff",
+              fontFamily: "'Cabinet Grotesk',sans-serif",
+              fontWeight: 800, fontSize: "0.95rem", letterSpacing: "-0.01em",
+              boxShadow: type === "income"
+                ? "0 4px 16px rgba(5,150,105,0.35)"
+                : "0 4px 16px rgba(220,38,38,0.35)",
+              marginTop: 4,
+            }}
           >
             {isEditing
               ? "Salvar alterações"
               : isRecurring
                 ? `Criar recorrência ${type === "income" ? "de entrada" : "de saída"}`
                 : `Adicionar ${type === "income" ? "Entrada" : "Saída"}`}
-          </Button>
+          </motion.button>
+
         </form>
       </motion.div>
     </motion.div>

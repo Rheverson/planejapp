@@ -6,11 +6,18 @@ import { addDays, format, parseISO, startOfMonth, endOfMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
 function useIsDark() {
-  const [dark, setDark] = useState(() => localStorage.getItem("darkMode") === "true");
+  const [dark, setDark] = useState(() =>
+    localStorage.getItem("darkMode") === "true" ||
+    document.documentElement.classList.contains("dark")
+  );
   useEffect(() => {
+    const obs = new MutationObserver(() =>
+      setDark(document.documentElement.classList.contains("dark"))
+    );
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
     const h = (e) => setDark(e.detail);
     window.addEventListener("darkModeChange", h);
-    return () => window.removeEventListener("darkModeChange", h);
+    return () => { obs.disconnect(); window.removeEventListener("darkModeChange", h); };
   }, []);
   return dark;
 }
@@ -36,6 +43,7 @@ export default function CashFlowProjection({ transactions, accounts, currentBala
       const d = addDays(today, i);
       const ds = format(d, "yyyy-MM-dd");
       const dayTxs = transactions.filter(t =>
+        t.date &&
         t.date === ds &&
         t.is_realized === false &&
         t.type !== "transfer" &&
@@ -97,7 +105,7 @@ export default function CashFlowProjection({ transactions, accounts, currentBala
         <div style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 10, padding: "10px 12px", marginBottom: 12, display: "flex", gap: 8, alignItems: "flex-start" }}>
           <AlertTriangle size={14} color="#ef4444" style={{ marginTop: 1, flexShrink: 0 }} />
           <p style={{ fontSize: "0.72rem", color: "#ef4444", lineHeight: 1.5 }}>
-            <strong>Atenção!</strong> Seu saldo pode ficar negativo em {format(parseISO(lowestDate), "dd/MM", { locale: ptBR })} — mínimo projetado: <strong>{fmt(lowestBalance)}</strong>
+            <strong>Atenção!</strong> Seu saldo pode ficar negativo{lowestDate ? ` em ${format(parseISO(lowestDate), "dd/MM", { locale: ptBR })}` : ""} — mínimo projetado: <strong>{fmt(lowestBalance)}</strong>
           </p>
         </div>
       )}

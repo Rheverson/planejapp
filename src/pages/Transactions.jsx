@@ -46,21 +46,16 @@ export default function Transactions() {
   const { selectedDate, setSelectedDate } = useMonth();
   const [searchParams] = useSearchParams();
 
-  const [filter, setFilter]                   = useState(searchParams.get("filter") || "all");
-  const [showForm, setShowForm]               = useState(false);
-  const [editTransaction, setEditTransaction] = useState(null);
-  const [searchQuery, setSearchQuery]         = useState("");
-  const [searchFocused, setSearchFocused]     = useState(false);
-  const [deleteId, setDeleteId]               = useState(null);
+  const [filter, setFilter]                     = useState(searchParams.get("filter") || "all");
+  const [showForm, setShowForm]                 = useState(false);
+  const [editTransaction, setEditTransaction]   = useState(null);
+  const [searchQuery, setSearchQuery]           = useState("");
+  const [searchFocused, setSearchFocused]       = useState(false);
+  const [deleteId, setDeleteId]                 = useState(null);
   const [realizarPrevisao, setRealizarPrevisao] = useState(null);
-  const [showAdvanced, setShowAdvanced]       = useState(false);
-  const [advFilters, setAdvFilters]           = useState({
-    categories: [],
-    accountIds: [],
-    minAmount: "",
-    maxAmount: "",
-    dateFrom: "",
-    dateTo: "",
+  const [showAdvanced, setShowAdvanced]         = useState(false);
+  const [advFilters, setAdvFilters]             = useState({
+    categories: [], accountIds: [], minAmount: "", maxAmount: "", dateFrom: "", dateTo: "",
   });
 
   const hasAdvFilters =
@@ -72,20 +67,10 @@ export default function Transactions() {
     setAdvFilters({ categories: [], accountIds: [], minAmount: "", maxAmount: "", dateFrom: "", dateTo: "" });
 
   const toggleCategory = (cat) =>
-    setAdvFilters(prev => ({
-      ...prev,
-      categories: prev.categories.includes(cat)
-        ? prev.categories.filter(c => c !== cat)
-        : [...prev.categories, cat],
-    }));
+    setAdvFilters(prev => ({ ...prev, categories: prev.categories.includes(cat) ? prev.categories.filter(c => c !== cat) : [...prev.categories, cat] }));
 
   const toggleAccount = (id) =>
-    setAdvFilters(prev => ({
-      ...prev,
-      accountIds: prev.accountIds.includes(id)
-        ? prev.accountIds.filter(a => a !== id)
-        : [...prev.accountIds, id],
-    }));
+    setAdvFilters(prev => ({ ...prev, accountIds: prev.accountIds.includes(id) ? prev.accountIds.filter(a => a !== id) : [...prev.accountIds, id] }));
 
   useEffect(() => {
     const monthParam = searchParams.get("month");
@@ -96,19 +81,13 @@ export default function Transactions() {
 
   const { data: accounts = [] } = useQuery({
     queryKey: ["accounts", activeOwnerId],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("accounts").select("*").eq("user_id", activeOwnerId);
-      if (error) throw error; return data;
-    },
+    queryFn: async () => { const { data, error } = await supabase.from("accounts").select("*").eq("user_id", activeOwnerId); if (error) throw error; return data; },
     enabled: !!activeOwnerId,
   });
 
   const { data: transactions = [] } = useQuery({
     queryKey: ["transactions", activeOwnerId],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("transactions").select("*").eq("user_id", activeOwnerId).order("date", { ascending: false });
-      if (error) throw error; return data;
-    },
+    queryFn: async () => { const { data, error } = await supabase.from("transactions").select("*").eq("user_id", activeOwnerId).order("date", { ascending: false }); if (error) throw error; return data; },
     enabled: !!activeOwnerId,
   });
 
@@ -131,29 +110,26 @@ export default function Transactions() {
   });
 
   const realizarMutation = useMutation({
-    mutationFn: async ({ transaction, valorRealizado }) => {
-      const restante = transaction.amount - valorRealizado;
-      await supabase.from("transactions").update({ is_realized: true, amount: valorRealizado }).eq("id", transaction.id);
+    mutationFn: async ({ transaction, valorRealizado, dataRealizacao }) => {
+      const valorNum = Number(valorRealizado);
+      const totalNum = Number(transaction.amount);
+      const restante = totalNum - valorNum;
+      if (isNaN(valorNum) || valorNum <= 0) throw new Error("Valor inválido");
+      const { error: errUpdate } = await supabase.from("transactions").update({ is_realized: true, amount: valorNum, date: dataRealizacao }).eq("id", transaction.id);
+      if (errUpdate) throw errUpdate;
       if (restante > 0.01) {
-        await supabase.from("transactions").insert([{
-          description: transaction.description, amount: restante, type: transaction.type,
-          category: transaction.category, account_id: transaction.account_id,
-          date: transaction.date, is_realized: false, notes: transaction.notes, user_id: activeOwnerId,
-        }]);
+        const { error: errInsert } = await supabase.from("transactions").insert([{ description: transaction.description, amount: restante, type: transaction.type, category: transaction.category, account_id: transaction.account_id, date: transaction.date, is_realized: false, notes: transaction.notes, user_id: activeOwnerId }]);
+        if (errInsert) throw errInsert;
       }
     },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["transactions", activeOwnerId] }); setRealizarPrevisao(null); toast.success("Realização registrada!"); },
-    onError: (err) => toast.error("Erro: " + err.message),
+    onError: (err) => toast.error("Erro: " + (err.message || JSON.stringify(err))),
   });
 
   const duplicarMutation = useMutation({
     mutationFn: async ({ transaction, meses }) => {
       const dia = transaction.date.split("-")[2];
-      const inserts = meses.map((mes) => ({
-        description: transaction.description, amount: transaction.amount, type: transaction.type,
-        category: transaction.category, account_id: transaction.account_id,
-        date: `${mes}-${dia}`, is_realized: false, notes: transaction.notes, user_id: activeOwnerId,
-      }));
+      const inserts = meses.map((mes) => ({ description: transaction.description, amount: Number(transaction.amount), type: transaction.type, category: transaction.category, account_id: transaction.account_id, date: `${mes}-${dia}`, is_realized: false, notes: transaction.notes, user_id: activeOwnerId }));
       const { error } = await supabase.from("transactions").insert(inserts);
       if (error) throw error;
     },
@@ -170,12 +146,7 @@ export default function Transactions() {
   const monthStart = startOfMonth(selectedDate);
   const monthEnd   = endOfMonth(selectedDate);
 
-  // Mapa de contas para lookup rápido
-  const accountMap = useMemo(() => {
-    const m = {};
-    accounts.forEach(a => { m[a.id] = a; });
-    return m;
-  }, [accounts]);
+  const accountMap = useMemo(() => { const m = {}; accounts.forEach(a => { m[a.id] = a; }); return m; }, [accounts]);
 
   const filteredTransactions = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
@@ -189,33 +160,27 @@ export default function Transactions() {
         if (filter === "planned")  return t.is_realized === false;
         return true;
       })
-      // Busca inteligente: título, categoria, valor, conta, notas
       .filter(t => {
         if (!q) return true;
         const accName = accountMap[t.account_id]?.name?.toLowerCase() || "";
-        const amtStr  = fmt(t.amount).toLowerCase();
-        const amtNum  = String(t.amount);
         return (
           t.description?.toLowerCase().includes(q) ||
           t.category?.toLowerCase().includes(q) ||
           t.notes?.toLowerCase().includes(q) ||
           accName.includes(q) ||
-          amtStr.includes(q) ||
-          amtNum.includes(q)
+          fmt(Number(t.amount)).toLowerCase().includes(q) ||
+          String(t.amount).includes(q)
         );
       })
-      // Filtros avançados
       .filter(t => advFilters.categories.length === 0 || advFilters.categories.includes(t.category?.toLowerCase()))
       .filter(t => advFilters.accountIds.length === 0 || advFilters.accountIds.includes(t.account_id))
       .filter(t => advFilters.minAmount === "" || Number(t.amount) >= parseFloat(advFilters.minAmount))
       .filter(t => advFilters.maxAmount === "" || Number(t.amount) <= parseFloat(advFilters.maxAmount))
-      // Filtro de data personalizado
       .filter(t => {
         if (!advFilters.dateFrom && !advFilters.dateTo) return true;
         const d = parseISO(t.date);
         if (advFilters.dateFrom && advFilters.dateTo) {
-          const from = parseISO(advFilters.dateFrom);
-          const to   = parseISO(advFilters.dateTo);
+          const from = parseISO(advFilters.dateFrom), to = parseISO(advFilters.dateTo);
           return (isAfter(d, from) || isEqual(d, from)) && (isBefore(d, to) || isEqual(d, to));
         }
         if (advFilters.dateFrom) return isAfter(d, parseISO(advFilters.dateFrom)) || isEqual(d, parseISO(advFilters.dateFrom));
@@ -241,55 +206,42 @@ export default function Transactions() {
     { value: "transfer", label: "Transferências" },
   ];
 
-  // ── Tokens idênticos ao Home.jsx ──────────────────────────
-  const bg       = dark ? "#060709" : "#f1f4f9";
-  const cardBg   = dark ? "#0c0e13" : "#ffffff";
-  const cardBrd  = dark ? "rgba(255,255,255,0.07)" : "rgba(17,24,39,0.05)";
-  const text     = dark ? "#e8edf5" : "#0f172a";
-  const muted    = dark ? "#6b7a96" : "#64748b";
-  const linkCol  = dark ? "#60a5fa" : "#1d4ed8";
-  const inputBg  = dark ? "#12151c" : "#f8fafc";
+  // ── Tokens — idênticos ao Accounts.jsx ───────────────────
+  const bg      = dark ? "#060709" : "#f1f4f9";
+  const cardBg  = dark ? "#0c0e13" : "#ffffff";  // mesmo do Accounts
+  const cardBrd = dark ? "rgba(255,255,255,0.07)" : "rgba(17,24,39,0.05)";
+  const text    = dark ? "#e8edf5" : "#0f172a";
+  const muted   = dark ? "#6b7a96" : "#64748b";
+  const linkCol = dark ? "#60a5fa" : "#1d4ed8";
+  const inputBg  = dark ? "#0a0c10" : "#f8fafc";
   const inputBrd = dark ? "rgba(255,255,255,0.08)" : "rgba(17,24,39,0.1)";
 
   return (
     <div style={{ minHeight: "100vh", background: bg, paddingBottom: 96, fontFamily: "'Outfit',sans-serif" }}>
 
-      {/* ══ HEADER ══════════════════════════════════════════════
-          Solução definitiva para o elemento transparente:
-          - Sem filter:blur nos orbs (blur vaza mesmo com overflow:hidden em alguns browsers)
-          - Gradiente radial inline no próprio fundo faz o mesmo efeito sem vazar
-          - isolation + overflow:hidden como camada extra de segurança
+      {/* ══ HEADER — sem sticky, mesmo padrão do Accounts/Goals ══
+          overflow:hidden + isolation clipam os radial-gradients
       ══════════════════════════════════════════════════════════ */}
       <div style={{
-        position: "sticky", top: 0, zIndex: 20,
         isolation: "isolate",
         overflow: "hidden",
         borderRadius: "0 0 28px 28px",
-        boxShadow: dark
-          ? "0 8px 32px rgba(0,0,0,0.5)"
-          : "0 8px 32px rgba(29,78,216,0.2)",
-        /* Gradiente com orbs embutidos — sem filter:blur que causa bleeding */
+        boxShadow: dark ? "0 8px 32px rgba(0,0,0,0.55)" : "0 8px 32px rgba(29,78,216,0.2)",
         background: dark
-          ? `
-              radial-gradient(ellipse 70% 60% at 50% -10%, rgba(37,99,235,0.35) 0%, transparent 70%),
-              radial-gradient(ellipse 40% 40% at 90% 110%, rgba(124,58,237,0.2) 0%, transparent 70%),
-              linear-gradient(160deg, #06080f 0%, #0a1425 40%, #0d1e3a 100%)
-            `
-          : `
-              radial-gradient(ellipse 70% 60% at 50% -10%, rgba(96,165,250,0.4) 0%, transparent 70%),
-              radial-gradient(ellipse 40% 40% at 90% 110%, rgba(167,139,250,0.25) 0%, transparent 70%),
-              linear-gradient(165deg, #1d4ed8 0%, #1e3a8a 55%, #312e81 100%)
-            `,
+          ? `radial-gradient(ellipse 70% 60% at 50% -10%, rgba(37,99,235,0.35) 0%, transparent 70%),
+             radial-gradient(ellipse 40% 40% at 90% 110%, rgba(124,58,237,0.2) 0%, transparent 70%),
+             linear-gradient(160deg, #06080f 0%, #0a1425 40%, #0d1e3a 100%)`
+          : `radial-gradient(ellipse 70% 60% at 50% -10%, rgba(96,165,250,0.4) 0%, transparent 70%),
+             radial-gradient(ellipse 40% 40% at 90% 110%, rgba(167,139,250,0.25) 0%, transparent 70%),
+             linear-gradient(165deg, #1d4ed8 0%, #1e3a8a 55%, #312e81 100%)`,
       }}>
         <div style={{ padding: "52px 20px 0" }}>
-
           {isViewingSharedProfile && (
             <div style={{ background: "rgba(255,255,255,0.12)", borderRadius: 8, padding: "4px 12px", marginBottom: 10, fontSize: "0.72rem", color: "rgba(255,255,255,0.85)", display: "inline-block", fontWeight: 500 }}>
               👁 Visualizando perfil compartilhado
             </div>
           )}
 
-          {/* Título + seletor de mês — mesma estrutura do Home */}
           <p style={{ fontFamily: "'Cabinet Grotesk',sans-serif", fontWeight: 900, fontSize: "clamp(1.5rem,5vw,1.8rem)", color: "#ffffff", letterSpacing: "-0.03em", marginBottom: 8 }}>
             Transações
           </p>
@@ -298,34 +250,26 @@ export default function Transactions() {
 
           {/* Resumo 3 colunas */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1px 1fr 1px 1fr", background: "rgba(255,255,255,0.1)", borderRadius: 14, margin: "10px 0 0", overflow: "hidden" }}>
-            <div style={{ padding: "9px 6px", textAlign: "center" }}>
-              <p style={{ fontSize: "0.56rem", fontWeight: 600, color: "rgba(255,255,255,0.5)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 2 }}>Entradas</p>
-              <p style={{ fontFamily: "'Cabinet Grotesk',sans-serif", fontWeight: 800, fontSize: "0.85rem", color: "#2ecc8a", letterSpacing: "-0.02em" }}>{fmt(summary.income)}</p>
-            </div>
-            <div style={{ background: "rgba(255,255,255,0.15)" }} />
-            <div style={{ padding: "9px 6px", textAlign: "center" }}>
-              <p style={{ fontSize: "0.56rem", fontWeight: 600, color: "rgba(255,255,255,0.5)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 2 }}>Saídas</p>
-              <p style={{ fontFamily: "'Cabinet Grotesk',sans-serif", fontWeight: 800, fontSize: "0.85rem", color: "#e85d5d", letterSpacing: "-0.02em" }}>{fmt(summary.expense)}</p>
-            </div>
-            <div style={{ background: "rgba(255,255,255,0.15)" }} />
-            <div style={{ padding: "9px 6px", textAlign: "center" }}>
-              <p style={{ fontSize: "0.56rem", fontWeight: 600, color: "rgba(255,255,255,0.5)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 2 }}>Saldo</p>
-              <p style={{ fontFamily: "'Cabinet Grotesk',sans-serif", fontWeight: 800, fontSize: "0.85rem", color: summary.balance >= 0 ? "#ffffff" : "#e85d5d", letterSpacing: "-0.02em" }}>{fmt(summary.balance)}</p>
-            </div>
+            {[
+              { label: "Entradas", value: summary.income,  color: "#2ecc8a" },
+              { label: "Saídas",   value: summary.expense, color: "#e85d5d" },
+              { label: "Saldo",    value: summary.balance, color: summary.balance >= 0 ? "#ffffff" : "#e85d5d" },
+            ].flatMap((item, i) => [
+              i > 0 ? <div key={`sep-${i}`} style={{ background: "rgba(255,255,255,0.15)" }} /> : null,
+              <div key={item.label} style={{ padding: "9px 6px", textAlign: "center" }}>
+                <p style={{ fontSize: "0.56rem", fontWeight: 600, color: "rgba(255,255,255,0.5)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 2 }}>{item.label}</p>
+                <p style={{ fontFamily: "'Cabinet Grotesk',sans-serif", fontWeight: 800, fontSize: "0.85rem", color: item.color, letterSpacing: "-0.02em" }}>{fmt(item.value)}</p>
+              </div>
+            ]).filter(Boolean)}
           </div>
 
-          {/* Busca + botão filtros avançados */}
+          {/* Busca */}
           <div style={{ display: "flex", gap: 8, margin: "10px 0 0" }}>
             <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 8, background: "rgba(255,255,255,0.12)", border: `1px solid ${searchFocused ? "rgba(255,255,255,0.35)" : "rgba(255,255,255,0.15)"}`, borderRadius: 12, padding: "0 12px", height: 38, transition: "border-color .2s" }}>
               <Search size={13} color="rgba(255,255,255,0.5)" />
-              <input
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onFocus={() => setSearchFocused(true)}
-                onBlur={() => setSearchFocused(false)}
+              <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onFocus={() => setSearchFocused(true)} onBlur={() => setSearchFocused(false)}
                 placeholder="Título, categoria, valor, conta..."
-                style={{ flex: 1, background: "none", border: "none", outline: "none", color: "#ffffff", fontSize: "0.82rem", fontFamily: "'Outfit',sans-serif" }}
-              />
+                style={{ flex: 1, background: "none", border: "none", outline: "none", color: "#ffffff", fontSize: "0.82rem", fontFamily: "'Outfit',sans-serif" }} />
               {searchQuery && (
                 <button onClick={() => setSearchQuery("")} style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.5)", display: "flex" }}>
                   <X size={13} />
@@ -335,14 +279,12 @@ export default function Transactions() {
             <button onClick={() => setShowAdvanced(!showAdvanced)}
               style={{ width: 38, height: 38, borderRadius: 12, flexShrink: 0, background: showAdvanced || hasAdvFilters ? "#ffffff" : "rgba(255,255,255,0.12)", border: `1px solid ${showAdvanced || hasAdvFilters ? "transparent" : "rgba(255,255,255,0.15)"}`, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", position: "relative", transition: "all .2s" }}>
               <SlidersHorizontal size={15} color={showAdvanced || hasAdvFilters ? "#1d4ed8" : "rgba(255,255,255,0.9)"} />
-              {hasAdvFilters && (
-                <div style={{ position: "absolute", top: -4, right: -4, width: 10, height: 10, background: "#f59e0b", borderRadius: "50%", border: "2px solid #1e3a8a" }} />
-              )}
+              {hasAdvFilters && <div style={{ position: "absolute", top: -4, right: -4, width: 10, height: 10, background: "#f59e0b", borderRadius: "50%", border: "2px solid #1e3a8a" }} />}
             </button>
           </div>
 
-          {/* Pills de filtro rápido */}
-          <div style={{ display: "flex", gap: 6, padding: "8px 0 14px", overflowX: "auto" }}>
+          {/* Pills */}
+          <div style={{ display: "flex", gap: 6, padding: "8px 0 18px", overflowX: "auto" }}>
             {FILTERS.map(({ value, label }) => (
               <button key={value} onClick={() => setFilter(value)}
                 style={{ flexShrink: 0, padding: "4px 13px", borderRadius: 999, fontSize: "0.73rem", fontWeight: 600, fontFamily: "'Outfit',sans-serif", background: filter === value ? "#ffffff" : "rgba(255,255,255,0.13)", color: filter === value ? "#1d4ed8" : "rgba(255,255,255,0.9)", border: filter === value ? "none" : "0.5px solid rgba(255,255,255,0.18)", cursor: "pointer", transition: "all .2s" }}>
@@ -356,15 +298,9 @@ export default function Transactions() {
       {/* ══ FILTROS AVANÇADOS ═══════════════════════════════════ */}
       <AnimatePresence>
         {showAdvanced && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            style={{ overflow: "hidden", background: cardBg, borderBottom: `1px solid ${cardBrd}` }}
-          >
+          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
+            style={{ overflow: "hidden", background: cardBg, borderBottom: `1px solid ${cardBrd}` }}>
             <div style={{ padding: "14px 16px", display: "flex", flexDirection: "column", gap: 14 }}>
-
-              {/* Header filtros */}
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                 <p style={{ fontFamily: "'Cabinet Grotesk',sans-serif", fontSize: "0.88rem", fontWeight: 700, color: text }}>Filtros avançados</p>
                 {hasAdvFilters && (
@@ -373,118 +309,94 @@ export default function Transactions() {
                   </button>
                 )}
               </div>
-
-              {/* Período personalizado */}
               <div>
                 <p style={{ fontSize: "0.63rem", fontWeight: 600, color: muted, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8, display: "flex", alignItems: "center", gap: 5 }}>
                   <Calendar size={11} /> Período
                 </p>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <input type="date" value={advFilters.dateFrom}
-                    onChange={e => setAdvFilters(prev => ({ ...prev, dateFrom: e.target.value }))}
-                    style={{ flex: 1, height: 36, padding: "0 10px", borderRadius: 10, border: `1px solid ${inputBrd}`, background: inputBg, color: text, fontSize: "0.8rem", fontFamily: "'Outfit',sans-serif", outline: "none" }}
-                  />
+                  <input type="date" value={advFilters.dateFrom} onChange={e => setAdvFilters(prev => ({ ...prev, dateFrom: e.target.value }))}
+                    style={{ flex: 1, height: 36, padding: "0 10px", borderRadius: 10, border: `1px solid ${inputBrd}`, background: inputBg, color: text, fontSize: "0.8rem", outline: "none", colorScheme: dark ? "dark" : "light" }} />
                   <span style={{ fontSize: "0.7rem", color: muted, flexShrink: 0 }}>até</span>
-                  <input type="date" value={advFilters.dateTo}
-                    onChange={e => setAdvFilters(prev => ({ ...prev, dateTo: e.target.value }))}
-                    style={{ flex: 1, height: 36, padding: "0 10px", borderRadius: 10, border: `1px solid ${inputBrd}`, background: inputBg, color: text, fontSize: "0.8rem", fontFamily: "'Outfit',sans-serif", outline: "none" }}
-                  />
+                  <input type="date" value={advFilters.dateTo} onChange={e => setAdvFilters(prev => ({ ...prev, dateTo: e.target.value }))}
+                    style={{ flex: 1, height: 36, padding: "0 10px", borderRadius: 10, border: `1px solid ${inputBrd}`, background: inputBg, color: text, fontSize: "0.8rem", outline: "none", colorScheme: dark ? "dark" : "light" }} />
                 </div>
               </div>
-
-              {/* Valor */}
               <div>
                 <p style={{ fontSize: "0.63rem", fontWeight: 600, color: muted, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8 }}>Valor (R$)</p>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <input type="number" placeholder="Mínimo" value={advFilters.minAmount}
-                    onChange={e => setAdvFilters(prev => ({ ...prev, minAmount: e.target.value }))}
-                    style={{ flex: 1, height: 36, padding: "0 12px", borderRadius: 10, border: `1px solid ${inputBrd}`, background: inputBg, color: text, fontSize: "0.82rem", fontFamily: "'Outfit',sans-serif", outline: "none" }}
-                  />
+                  <input type="number" placeholder="Mínimo" value={advFilters.minAmount} onChange={e => setAdvFilters(prev => ({ ...prev, minAmount: e.target.value }))}
+                    style={{ flex: 1, height: 36, padding: "0 12px", borderRadius: 10, border: `1px solid ${inputBrd}`, background: inputBg, color: text, fontSize: "0.82rem", outline: "none" }} />
                   <span style={{ fontSize: "0.7rem", color: muted, flexShrink: 0 }}>até</span>
-                  <input type="number" placeholder="Máximo" value={advFilters.maxAmount}
-                    onChange={e => setAdvFilters(prev => ({ ...prev, maxAmount: e.target.value }))}
-                    style={{ flex: 1, height: 36, padding: "0 12px", borderRadius: 10, border: `1px solid ${inputBrd}`, background: inputBg, color: text, fontSize: "0.82rem", fontFamily: "'Outfit',sans-serif", outline: "none" }}
-                  />
+                  <input type="number" placeholder="Máximo" value={advFilters.maxAmount} onChange={e => setAdvFilters(prev => ({ ...prev, maxAmount: e.target.value }))}
+                    style={{ flex: 1, height: 36, padding: "0 12px", borderRadius: 10, border: `1px solid ${inputBrd}`, background: inputBg, color: text, fontSize: "0.82rem", outline: "none" }} />
                 </div>
               </div>
-
-              {/* Categoria */}
               <div>
                 <p style={{ fontSize: "0.63rem", fontWeight: 600, color: muted, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8 }}>Categoria</p>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                   {CATEGORIES.map(cat => (
                     <button key={cat} onClick={() => toggleCategory(cat)}
-                      style={{ padding: "4px 11px", borderRadius: 999, fontSize: "0.7rem", fontWeight: 600, fontFamily: "'Outfit',sans-serif", background: advFilters.categories.includes(cat) ? "#1d4ed8" : (dark ? "#12151c" : "#f1f4f9"), color: advFilters.categories.includes(cat) ? "#ffffff" : muted, border: advFilters.categories.includes(cat) ? "none" : `1px solid ${cardBrd}`, cursor: "pointer", textTransform: "capitalize", transition: "all .15s" }}>
+                      style={{ padding: "4px 11px", borderRadius: 999, fontSize: "0.7rem", fontWeight: 600, background: advFilters.categories.includes(cat) ? "#1d4ed8" : (dark ? "rgba(255,255,255,0.04)" : "#f1f4f9"), color: advFilters.categories.includes(cat) ? "#ffffff" : muted, border: advFilters.categories.includes(cat) ? "none" : `1px solid ${cardBrd}`, cursor: "pointer", textTransform: "capitalize", transition: "all .15s" }}>
                       {cat}
                     </button>
                   ))}
                 </div>
               </div>
-
-              {/* Conta */}
               {accounts.length > 0 && (
                 <div>
                   <p style={{ fontSize: "0.63rem", fontWeight: 600, color: muted, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8 }}>Conta</p>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                     {accounts.map(acc => (
                       <button key={acc.id} onClick={() => toggleAccount(acc.id)}
-                        style={{ padding: "4px 11px", borderRadius: 999, fontSize: "0.7rem", fontWeight: 600, fontFamily: "'Outfit',sans-serif", background: advFilters.accountIds.includes(acc.id) ? "#1d4ed8" : (dark ? "#12151c" : "#f1f4f9"), color: advFilters.accountIds.includes(acc.id) ? "#ffffff" : muted, border: advFilters.accountIds.includes(acc.id) ? "none" : `1px solid ${cardBrd}`, cursor: "pointer", transition: "all .15s" }}>
+                        style={{ padding: "4px 11px", borderRadius: 999, fontSize: "0.7rem", fontWeight: 600, background: advFilters.accountIds.includes(acc.id) ? "#1d4ed8" : (dark ? "rgba(255,255,255,0.04)" : "#f1f4f9"), color: advFilters.accountIds.includes(acc.id) ? "#ffffff" : muted, border: advFilters.accountIds.includes(acc.id) ? "none" : `1px solid ${cardBrd}`, cursor: "pointer", transition: "all .15s" }}>
                         {acc.name}
                       </button>
                     ))}
                   </div>
                 </div>
               )}
-
-              {/* Resultado */}
-              <div style={{ background: dark ? "rgba(37,99,235,0.1)" : "rgba(29,78,216,0.06)", border: `1px solid ${dark ? "rgba(37,99,235,0.2)" : "rgba(29,78,216,0.12)"}`, borderRadius: 10, padding: "7px 12px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <p style={{ fontSize: "0.73rem", color: linkCol, fontWeight: 600 }}>
-                  {filteredTransactions.length} transação(ões) encontrada(s)
-                </p>
-                {(searchQuery || hasAdvFilters) && (
-                  <p style={{ fontSize: "0.65rem", color: muted }}>
-                    {fmt(summary.income - summary.expense)} líquido
-                  </p>
-                )}
+              <div style={{ background: dark ? "rgba(37,99,235,0.08)" : "rgba(29,78,216,0.05)", border: `1px solid ${dark ? "rgba(37,99,235,0.18)" : "rgba(29,78,216,0.12)"}`, borderRadius: 10, padding: "7px 12px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <p style={{ fontSize: "0.73rem", color: linkCol, fontWeight: 600 }}>{filteredTransactions.length} transação(ões) encontrada(s)</p>
+                {(searchQuery || hasAdvFilters) && (<p style={{ fontSize: "0.65rem", color: muted }}>{fmt(summary.balance)} líquido</p>)}
               </div>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* ══ LISTA ═══════════════════════════════════════════════ */}
+      {/* ══ LISTA — TransactionItem controla seu próprio bg ════ */}
       <div style={{ padding: "14px 14px 0" }}>
         {filteredTransactions.length > 0 ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {filteredTransactions.map((transaction) => (
-              <motion.div key={transaction.id} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }}>
-                <TransactionItem
-                  transaction={transaction}
-                  accounts={accounts}
-                  onRegistrar={(t) => setRealizarPrevisao(t)}
-                  onDuplicar={(t, meses) => duplicarMutation.mutate({ transaction: t, meses })}
-                  onEdit={canAdd ? handleEdit : null}
-                  onDelete={canDelete ? (id) => setDeleteId(id) : null}
-                />
-              </motion.div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {filteredTransactions.map((transaction, idx) => (
+              <TransactionItem
+                key={transaction.id}
+                transaction={transaction}
+                accounts={accounts}
+                delay={idx < 12 ? idx * 0.025 : 0}
+                onRegistrar={(t) => setRealizarPrevisao(t)}
+                onDuplicar={(t, meses) => duplicarMutation.mutate({ transaction: t, meses })}
+                onEdit={canAdd ? handleEdit : null}
+                onDelete={canDelete ? (id) => setDeleteId(id) : null}
+              />
             ))}
           </div>
         ) : (
-          <EmptyState
-            icon={TrendingUp}
-            title="Nenhuma transação"
-            description={searchQuery || hasAdvFilters ? "Tente ajustar os filtros." : "Período sem dados."}
-            action={canAdd && !searchQuery && !hasAdvFilters ? "Adicionar" : undefined}
-            onAction={() => canAdd && setShowForm(true)}
-          />
+          <div style={{ background: cardBg, border: `1px solid ${cardBrd}`, borderRadius: 16, padding: 24 }}>
+            <EmptyState
+              icon={TrendingUp}
+              title="Nenhuma transação"
+              description={searchQuery || hasAdvFilters ? "Tente ajustar os filtros." : "Período sem dados."}
+              action={canAdd && !searchQuery && !hasAdvFilters ? "Adicionar" : undefined}
+              onAction={() => canAdd && setShowForm(true)}
+            />
+          </div>
         )}
       </div>
 
       {/* FAB */}
       {canAdd && (
-        <motion.button
-          whileTap={{ scale: 0.88 }}
-          whileHover={{ scale: 1.06 }}
+        <motion.button whileTap={{ scale: 0.88 }} whileHover={{ scale: 1.06 }}
           onClick={() => { setEditTransaction(null); setShowForm(true); }}
           style={{ position: "fixed", bottom: 88, right: 20, width: 52, height: 52, background: "linear-gradient(135deg,#1d4ed8,#3730a3)", border: "none", borderRadius: "50%", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 0 24px rgba(29,78,216,0.5),0 4px 14px rgba(0,0,0,0.25)", zIndex: 40 }}>
           <Plus size={21} color="#fff" />
@@ -493,13 +405,9 @@ export default function Transactions() {
 
       <AnimatePresence>
         {showForm && (
-          <TransactionForm
-            accounts={accounts}
-            onSubmit={handleSubmit}
+          <TransactionForm accounts={accounts} onSubmit={handleSubmit}
             onClose={() => { setShowForm(false); setEditTransaction(null); }}
-            initialType={editTransaction?.type || "expense"}
-            initialData={editTransaction}
-          />
+            initialType={editTransaction?.type || "expense"} initialData={editTransaction} />
         )}
       </AnimatePresence>
 
