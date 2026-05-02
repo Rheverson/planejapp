@@ -331,6 +331,7 @@ export default function Accounts() {
             </button>
           ))}
         </div>
+      </div>
 
       {/* ── CONTEÚDO ─────────────────────────────────────────── */}
       <div className="px-4 py-4 space-y-4">
