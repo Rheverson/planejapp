@@ -203,26 +203,33 @@ export default function Home() {
     const ip = p.filter(t => t.type === "income").reduce((s,t)=>s+Number(t.amount),0);
     const er = r.filter(t => t.type === "expense").reduce((s,t)=>s+Number(t.amount),0);
     const ep = p.filter(t => t.type === "expense").reduce((s,t)=>s+Number(t.amount),0);
-    // forecastBalance = saldo atual nas contas + entradas previstas - despesas previstas
-    // (o saldo atual já inclui o realizado do mês, então só somamos o planejado)
-    const invIds2 = new Set(accounts.filter(a => a.type === "investment").map(a => a.id));
-    const totalBalanceRegular = accounts
-      .filter(a => a.type !== "investment")
-      .reduce((s, a) => {
-        let b = Number(a.initial_balance) || 0;
-        transactions.forEach(t => {
-          if (t.account_id !== a.id && t.transfer_account_id !== a.id) return;
-          if (t.is_realized === false) return;
-          if (t.type === "income"    && t.account_id === a.id) b += Number(t.amount);
-          if (t.type === "expense"   && t.account_id === a.id) b -= Number(t.amount);
-          if (t.type === "transfer"  && t.account_id === a.id) b -= Number(t.amount);
-          if (t.type === "transfer"  && t.transfer_account_id === a.id) b += Number(t.amount);
-        });
-        return s + b;
-      }, 0);
-    const forecastBalance = totalBalanceRegular + ip - ep;
+    // Mês atual: Previsão = saldo real hoje + previstos do mês
+    // Outros meses: net do mês (realizado + planejado)
+    const today = new Date();
+    const isCurrentMonth = selectedDate.getMonth() === today.getMonth() &&
+                           selectedDate.getFullYear() === today.getFullYear();
+
+    let forecastBalance;
+    if (isCurrentMonth) {
+      const currentRealBalance = accounts
+        .filter(a => a.type !== "investment")
+        .reduce((s, a) => {
+          let b = Number(a.initial_balance) || 0;
+          transactions.forEach(t => {
+            if (t.is_realized === false) return;
+            if (t.type === "income"   && t.account_id === a.id) b += Number(t.amount);
+            if (t.type === "expense"  && t.account_id === a.id) b -= Number(t.amount);
+            if (t.type === "transfer" && t.account_id === a.id) b -= Number(t.amount);
+            if (t.type === "transfer" && t.transfer_account_id === a.id) b += Number(t.amount);
+          });
+          return s + b;
+        }, 0);
+      forecastBalance = currentRealBalance + ip - ep;
+    } else {
+      forecastBalance = (ir + ip) - (er + ep);
+    }
     return { totalIncome: ir+ip, totalExpense: er+ep, currentBalance: ir-er, forecastBalance };
-  }, [monthTransactions, accounts]);
+  }, [monthTransactions, accounts, selectedDate, transactions]);
 
   const accountBalances = useMemo(() => {
     const b = {};
