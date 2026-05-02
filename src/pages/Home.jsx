@@ -194,43 +194,7 @@ export default function Home() {
     [transactions, monthStart, monthEnd]
   );
 
-  const kpis = useMemo(() => {
-    const invIds = new Set(accounts.filter(a => a.type === "investment").map(a => a.id));
-    const tx = monthTransactions.filter(t => !invIds.has(t.account_id));
-    const r  = tx.filter(t => t.is_realized !== false);
-    const p  = tx.filter(t => t.is_realized === false);
-    const ir = r.filter(t => t.type === "income").reduce((s,t)=>s+Number(t.amount),0);
-    const ip = p.filter(t => t.type === "income").reduce((s,t)=>s+Number(t.amount),0);
-    const er = r.filter(t => t.type === "expense").reduce((s,t)=>s+Number(t.amount),0);
-    const ep = p.filter(t => t.type === "expense").reduce((s,t)=>s+Number(t.amount),0);
-    // Mês atual: Previsão = saldo real hoje + previstos do mês
-    // Outros meses: net do mês (realizado + planejado)
-    const today = new Date();
-    const isCurrentMonth = selectedDate.getMonth() === today.getMonth() &&
-                           selectedDate.getFullYear() === today.getFullYear();
-
-    let forecastBalance;
-    if (isCurrentMonth) {
-      const currentRealBalance = accounts
-        .filter(a => a.type !== "investment")
-        .reduce((s, a) => {
-          let b = Number(a.initial_balance) || 0;
-          transactions.forEach(t => {
-            if (t.is_realized === false) return;
-            if (t.type === "income"   && t.account_id === a.id) b += Number(t.amount);
-            if (t.type === "expense"  && t.account_id === a.id) b -= Number(t.amount);
-            if (t.type === "transfer" && t.account_id === a.id) b -= Number(t.amount);
-            if (t.type === "transfer" && t.transfer_account_id === a.id) b += Number(t.amount);
-          });
-          return s + b;
-        }, 0);
-      forecastBalance = currentRealBalance + ip - ep;
-    } else {
-      forecastBalance = (ir + ip) - (er + ep);
-    }
-    return { totalIncome: ir+ip, totalExpense: er+ep, currentBalance: ir-er, forecastBalance };
-  }, [monthTransactions, accounts, selectedDate, transactions]);
-
+  // Calcula saldos das contas ANTES do kpis para poder usar totalBalance na previsão
   const accountBalances = useMemo(() => {
     const b = {};
     accounts.forEach(a => { b[a.id] = Number(a.initial_balance) || 0; });
@@ -248,8 +212,32 @@ export default function Home() {
 
   const regularAccounts    = accounts.filter(a => a.type !== "investment");
   const investmentAccounts = accounts.filter(a => a.type === "investment");
+  // totalBalance = saldo real atual de todas as contas não-investimento
   const totalBalance  = regularAccounts.reduce((s,a)=>s+(accountBalances[a.id]||0),0);
   const totalInvested = investmentAccounts.reduce((s,a)=>s+(accountBalances[a.id]||0),0);
+
+  const kpis = useMemo(() => {
+    const invIds = new Set(accounts.filter(a => a.type === "investment").map(a => a.id));
+    const tx = monthTransactions.filter(t => !invIds.has(t.account_id));
+    const r  = tx.filter(t => t.is_realized !== false);
+    const p  = tx.filter(t => t.is_realized === false);
+    const ir = r.filter(t => t.type === "income").reduce((s,t)=>s+Number(t.amount),0);
+    const ip = p.filter(t => t.type === "income").reduce((s,t)=>s+Number(t.amount),0);
+    const er = r.filter(t => t.type === "expense").reduce((s,t)=>s+Number(t.amount),0);
+    const ep = p.filter(t => t.type === "expense").reduce((s,t)=>s+Number(t.amount),0);
+
+    // Mês atual: Previsão = saldo real das contas hoje + entradas previstas - despesas previstas
+    // Outros meses: net do mês (realizado + planejado)
+    const today = new Date();
+    const isCurrentMonth = selectedDate.getMonth() === today.getMonth() &&
+                           selectedDate.getFullYear() === today.getFullYear();
+
+    const forecastBalance = isCurrentMonth
+      ? totalBalance + ip - ep   // usa o totalBalance já calculado acima
+      : (ir + ip) - (er + ep);
+
+    return { totalIncome: ir+ip, totalExpense: er+ep, currentBalance: ir-er, forecastBalance };
+  }, [monthTransactions, accounts, selectedDate, totalBalance]);
   const expenseCount  = monthTransactions.filter(t=>t.type==="expense"&&t.is_realized!==false).length;
   const recentTx = monthTransactions.slice(0, 5);
 
