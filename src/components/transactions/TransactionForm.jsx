@@ -67,7 +67,6 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
   const [recurringDay, setRecurringDay]         = useState(initialData?.recurring_day || todayDay);
   const [recurringEndDate, setRecurringEndDate] = useState(initialData?.recurring_end_date || "");
   const [showSuggestion, setShowSuggestion]     = useState(false);
-  const [creditCardId, setCreditCardId]         = useState(initialData?.credit_card_id || "");
 
   const { data: creditCards = [] } = useQuery({
     queryKey: ["credit_cards", user?.id],
@@ -77,6 +76,16 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
     },
     enabled: !!user?.id,
   });
+
+  // walletId pode ser account_id ou credit_card_id prefixado com "cc_"
+  const [walletId, setWalletId] = useState(() => {
+    if (initialData?.credit_card_id) return "cc_" + initialData.credit_card_id;
+    return initialData?.account_id || "";
+  });
+
+  const selectedCard = walletId.startsWith("cc_")
+    ? creditCards.find(cc => cc.id === walletId.replace("cc_", ""))
+    : null;
 
   const { suggestion, confidence, confirmCategory } = useCategorySuggestion(description, type);
   const categories = allCategories.filter(c => c.type === type).map(c => c.name);
@@ -92,31 +101,29 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
   const handleSubmit = (e) => {
     e.preventDefault();
     if (description && category) confirmCategory(category, description);
-    // Calcula invoice_month se tiver cartão vinculado
+    // Calcula invoice_month se cartão selecionado
     let invoiceMonth = null;
-    if (creditCardId) {
-      const card = creditCards.find(cc => cc.id === creditCardId);
-      if (card) {
-        const d = new Date(date + "T00:00:00");
-        if (card.expense_date_mode === "purchase_date") {
-          invoiceMonth = format(d, "yyyy-MM");
-        } else {
-          // closing_date: se passou do fechamento vai para próximo mês
-          invoiceMonth = d.getDate() > card.closing_day
-            ? format(addMonths(d, 1), "yyyy-MM")
-            : format(d, "yyyy-MM");
-        }
-      }
+    let finalCreditCardId = null;
+    let finalAccountId = accountId;
+
+    if (selectedCard) {
+      finalCreditCardId = selectedCard.id;
+      finalAccountId = null; // não debita conta agora
+      const d = new Date(date + "T00:00:00");
+      invoiceMonth = selectedCard.expense_date_mode === "purchase_date"
+        ? format(d, "yyyy-MM")
+        : d.getDate() > selectedCard.closing_day
+          ? format(addMonths(d, 1), "yyyy-MM")
+          : format(d, "yyyy-MM");
     }
 
     onSubmit({
       description, amount: parseFloat(amount) || 0, category,
       account_id: accountId || null, date,
-      is_realized: isRecurring ? false : (creditCardId ? false : isRealized),
-      credit_card_id: creditCardId || null,
+      is_realized: isRecurring ? false : (finalCreditCardId ? false : isRealized),
+      credit_card_id: finalCreditCardId,
       invoice_month: invoiceMonth,
-      // Compra no cartão: account_id vai null (não debita conta agora)
-      ...(creditCardId ? { account_id: null } : {}),
+      account_id: finalAccountId || null,
       auto_realize: !isRecurring && !isRealized ? autoRealize : false,
       notes: initialData?.notes || "", type,
       is_recurring: isRecurring,
@@ -245,7 +252,7 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
             isVisible={showSuggestion && !!suggestion && !category}
           />
 
-          {/* Categoria + Conta */}
+          {/* Categoria + Carteira */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
             <div>
               <label style={labelStyle}>Categoria</label>
@@ -259,33 +266,47 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
               </Select>
             </div>
             <div>
-              <label style={labelStyle}>Conta</label>
-              <Select value={accountId} onValueChange={setAccountId}>
-                <SelectTrigger style={{ height: 40, borderRadius: 12, background: inputBg, border: `1px solid ${inputBrd}`, fontSize: "0.82rem", color: text, fontFamily: "'Outfit',sans-serif" }}>
+              <label style={labelStyle}>Carteira</label>
+              <Select value={walletId} onValueChange={v => {
+                setWalletId(v);
+                // Sincroniza accountId para contas normais
+                if (!v.startsWith("cc_")) setAccountId(v);
+                else setAccountId("");
+              }}>
+                <SelectTrigger style={{ height: 40, borderRadius: 12, background: walletId.startsWith("cc_") ? (type==="expense"?"rgba(139,92,246,0.08)":inputBg) : inputBg, border: `1px solid ${walletId.startsWith("cc_")?"rgba(139,92,246,0.4)":inputBrd}`, fontSize: "0.82rem", color: text, fontFamily: "'Outfit',sans-serif" }}>
                   <SelectValue placeholder="Selecione" />
                 </SelectTrigger>
                 <SelectContent>
-                  {accounts.map(acc => <SelectItem key={acc.id} value={acc.id}>{acc.name}</SelectItem>)}
+                  {accounts.length > 0 && (
+                    <>
+                      <SelectItem value="__sep_acc__" disabled style={{fontSize:"0.65rem",color:"#9ca3af",fontWeight:600}}>🏦 CONTAS</SelectItem>
+                      {accounts.map(acc => <SelectItem key={acc.id} value={acc.id}>🏦 {acc.name}</SelectItem>)}
+                    </>
+                  )}
+                  {type === "expense" && creditCards.length > 0 && (
+                    <>
+                      <SelectItem value="__sep_cc__" disabled style={{fontSize:"0.65rem",color:"#9ca3af",fontWeight:600}}>💳 CARTÕES</SelectItem>
+                      {creditCards.map(cc => <SelectItem key={cc.id} value={"cc_"+cc.id}>💳 {cc.name}</SelectItem>)}
+                    </>
+                  )}
                 </SelectContent>
               </Select>
             </div>
           </div>
 
-          {/* Cartão de crédito — só para despesas */}
-          {type === "expense" && creditCards.length > 0 && (
-            <div>
-              <label style={labelStyle}>Cartão de crédito <span style={{fontWeight:400,color:muted}}>(opcional)</span></label>
-              <Select value={creditCardId} onValueChange={v => { setCreditCardId(v === "none" ? "" : v); }}>
-                <SelectTrigger style={{ height: 40, borderRadius: 12, background: inputBg, border: `1px solid ${inputBrd}`, fontSize: "0.82rem", color: text, fontFamily: "'Outfit',sans-serif" }}>
-                  <SelectValue placeholder="💳 Sem cartão (débito)" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">💳 Sem cartão (débito)</SelectItem>
-                  {creditCards.map(cc => (
-                    <SelectItem key={cc.id} value={cc.id}>💳 {cc.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          {/* Aviso quando cartão selecionado */}
+          {selectedCard && (
+            <div style={{ padding: "8px 12px", background: "rgba(139,92,246,0.08)", border: "1px solid rgba(139,92,246,0.2)", borderRadius: 10, fontSize: "0.7rem", color: "#8b5cf6" }}>
+              💳 Vai para fatura de {(() => {
+                const d = new Date(date + "T00:00:00");
+                const m = selectedCard.expense_date_mode === "purchase_date"
+                  ? format(d, "yyyy-MM")
+                  : d.getDate() > selectedCard.closing_day
+                    ? format(addMonths(d, 1), "yyyy-MM")
+                    : format(d, "yyyy-MM");
+                const [y,mo] = m.split("-");
+                return new Date(Number(y), Number(mo)-1).toLocaleString("pt-BR",{month:"long",year:"numeric"});
+              })()} · Não debita a conta agora
             </div>
           )}
 
