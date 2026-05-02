@@ -14,6 +14,7 @@ import TransactionItem from "@/components/transactions/TransactionItem";
 import TransactionForm from "@/components/transactions/TransactionForm";
 import MonthSelector from "@/components/common/MonthSelector";
 import EmptyState from "@/components/common/EmptyState";
+import CreditCardManager from "@/components/financial/CreditCardManager";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -67,10 +68,20 @@ export default function Transactions() {
     setAdvFilters({ categories: [], accountIds: [], minAmount: "", maxAmount: "", dateFrom: "", dateTo: "" });
 
   const toggleCategory = (cat) =>
-    setAdvFilters(prev => ({ ...prev, categories: prev.categories.includes(cat) ? prev.categories.filter(c => c !== cat) : [...prev.categories, cat] }));
+    setAdvFilters(prev => ({
+      ...prev,
+      categories: prev.categories.includes(cat)
+        ? prev.categories.filter(c => c !== cat)
+        : [...prev.categories, cat],
+    }));
 
   const toggleAccount = (id) =>
-    setAdvFilters(prev => ({ ...prev, accountIds: prev.accountIds.includes(id) ? prev.accountIds.filter(a => a !== id) : [...prev.accountIds, id] }));
+    setAdvFilters(prev => ({
+      ...prev,
+      accountIds: prev.accountIds.includes(id)
+        ? prev.accountIds.filter(a => a !== id)
+        : [...prev.accountIds, id],
+    }));
 
   useEffect(() => {
     const monthParam = searchParams.get("month");
@@ -81,55 +92,94 @@ export default function Transactions() {
 
   const { data: accounts = [] } = useQuery({
     queryKey: ["accounts", activeOwnerId],
-    queryFn: async () => { const { data, error } = await supabase.from("accounts").select("*").eq("user_id", activeOwnerId); if (error) throw error; return data; },
+    queryFn: async () => {
+      const { data, error } = await supabase.from("accounts").select("*").eq("user_id", activeOwnerId);
+      if (error) throw error; return data;
+    },
     enabled: !!activeOwnerId,
   });
 
   const { data: transactions = [] } = useQuery({
     queryKey: ["transactions", activeOwnerId],
-    queryFn: async () => { const { data, error } = await supabase.from("transactions").select("*").eq("user_id", activeOwnerId).order("date", { ascending: false }); if (error) throw error; return data; },
+    queryFn: async () => {
+      const { data, error } = await supabase.from("transactions").select("*").eq("user_id", activeOwnerId).order("date", { ascending: false });
+      if (error) throw error; return data;
+    },
     enabled: !!activeOwnerId,
   });
 
   const createMutation = useMutation({
-    mutationFn: async (data) => { const { error } = await supabase.from("transactions").insert([{ ...data, user_id: activeOwnerId }]); if (error) throw error; },
+    mutationFn: async (data) => {
+      const { error } = await supabase.from("transactions").insert([{ ...data, user_id: activeOwnerId }]);
+      if (error) throw error;
+    },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["transactions", activeOwnerId] }); setShowForm(false); toast.success("Transação criada!"); },
     onError: (err) => toast.error("Erro: " + err.message),
   });
 
   const updateMutation = useMutation({
-    mutationFn: async ({ id, data }) => { const { error } = await supabase.from("transactions").update(data).eq("id", id); if (error) throw error; },
+    mutationFn: async ({ id, data }) => {
+      const { error } = await supabase.from("transactions").update(data).eq("id", id);
+      if (error) throw error;
+    },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["transactions", activeOwnerId] }); setEditTransaction(null); setShowForm(false); toast.success("Transação atualizada!"); },
     onError: (err) => toast.error("Erro: " + err.message),
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async (id) => { const { error } = await supabase.from("transactions").delete().eq("id", id); if (error) throw error; },
+    mutationFn: async (id) => {
+      const { error } = await supabase.from("transactions").delete().eq("id", id);
+      if (error) throw error;
+    },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["transactions", activeOwnerId] }); setDeleteId(null); toast.success("Transação excluída!"); },
     onError: (err) => toast.error("Erro: " + err.message),
   });
 
+  // ✅ realizarMutation corrigido — usa dataRealizacao do modal
   const realizarMutation = useMutation({
     mutationFn: async ({ transaction, valorRealizado, dataRealizacao }) => {
-      const valorNum = Number(valorRealizado);
-      const totalNum = Number(transaction.amount);
-      const restante = totalNum - valorNum;
-      if (isNaN(valorNum) || valorNum <= 0) throw new Error("Valor inválido");
-      const { error: errUpdate } = await supabase.from("transactions").update({ is_realized: true, amount: valorNum, date: dataRealizacao }).eq("id", transaction.id);
+      const restante = Number(transaction.amount) - valorRealizado;
+
+      // Atualiza a transação original com o valor pago e a data real
+      const { error: errUpdate } = await supabase.from("transactions").update({
+        is_realized: true,
+        amount: valorRealizado,
+        date: dataRealizacao, // ← data de hoje (ou editada pelo usuário)
+      }).eq("id", transaction.id);
       if (errUpdate) throw errUpdate;
+
+      // Se pagamento parcial, cria nova previsão com o restante na data original
       if (restante > 0.01) {
-        const { error: errInsert } = await supabase.from("transactions").insert([{ description: transaction.description, amount: restante, type: transaction.type, category: transaction.category, account_id: transaction.account_id, date: transaction.date, is_realized: false, notes: transaction.notes, user_id: activeOwnerId }]);
+        const { error: errInsert } = await supabase.from("transactions").insert([{
+          description: transaction.description,
+          amount: restante,
+          type: transaction.type,
+          category: transaction.category,
+          account_id: transaction.account_id,
+          date: transaction.date, // ← mantém a data prevista original
+          is_realized: false,
+          notes: transaction.notes,
+          user_id: activeOwnerId,
+        }]);
         if (errInsert) throw errInsert;
       }
     },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["transactions", activeOwnerId] }); setRealizarPrevisao(null); toast.success("Realização registrada!"); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["transactions", activeOwnerId] });
+      setRealizarPrevisao(null);
+      toast.success("Realização registrada!");
+    },
     onError: (err) => toast.error("Erro: " + (err.message || JSON.stringify(err))),
   });
 
   const duplicarMutation = useMutation({
     mutationFn: async ({ transaction, meses }) => {
       const dia = transaction.date.split("-")[2];
-      const inserts = meses.map((mes) => ({ description: transaction.description, amount: Number(transaction.amount), type: transaction.type, category: transaction.category, account_id: transaction.account_id, date: `${mes}-${dia}`, is_realized: false, notes: transaction.notes, user_id: activeOwnerId }));
+      const inserts = meses.map((mes) => ({
+        description: transaction.description, amount: Number(transaction.amount), type: transaction.type,
+        category: transaction.category, account_id: transaction.account_id,
+        date: `${mes}-${dia}`, is_realized: false, notes: transaction.notes, user_id: activeOwnerId,
+      }));
       const { error } = await supabase.from("transactions").insert(inserts);
       if (error) throw error;
     },
@@ -146,7 +196,11 @@ export default function Transactions() {
   const monthStart = startOfMonth(selectedDate);
   const monthEnd   = endOfMonth(selectedDate);
 
-  const accountMap = useMemo(() => { const m = {}; accounts.forEach(a => { m[a.id] = a; }); return m; }, [accounts]);
+  const accountMap = useMemo(() => {
+    const m = {};
+    accounts.forEach(a => { m[a.id] = a; });
+    return m;
+  }, [accounts]);
 
   const filteredTransactions = useMemo(() => {
     const q = searchQuery.toLowerCase().trim();
@@ -163,13 +217,15 @@ export default function Transactions() {
       .filter(t => {
         if (!q) return true;
         const accName = accountMap[t.account_id]?.name?.toLowerCase() || "";
+        const amtStr  = fmt(Number(t.amount)).toLowerCase();
+        const amtNum  = String(t.amount);
         return (
           t.description?.toLowerCase().includes(q) ||
           t.category?.toLowerCase().includes(q) ||
           t.notes?.toLowerCase().includes(q) ||
           accName.includes(q) ||
-          fmt(Number(t.amount)).toLowerCase().includes(q) ||
-          String(t.amount).includes(q)
+          amtStr.includes(q) ||
+          amtNum.includes(q)
         );
       })
       .filter(t => advFilters.categories.length === 0 || advFilters.categories.includes(t.category?.toLowerCase()))
@@ -180,7 +236,8 @@ export default function Transactions() {
         if (!advFilters.dateFrom && !advFilters.dateTo) return true;
         const d = parseISO(t.date);
         if (advFilters.dateFrom && advFilters.dateTo) {
-          const from = parseISO(advFilters.dateFrom), to = parseISO(advFilters.dateTo);
+          const from = parseISO(advFilters.dateFrom);
+          const to   = parseISO(advFilters.dateTo);
           return (isAfter(d, from) || isEqual(d, from)) && (isBefore(d, to) || isEqual(d, to));
         }
         if (advFilters.dateFrom) return isAfter(d, parseISO(advFilters.dateFrom)) || isEqual(d, parseISO(advFilters.dateFrom));
@@ -199,6 +256,7 @@ export default function Transactions() {
 
   const FILTERS = [
     { value: "all",      label: "Todos"          },
+    { value: "cards",    label: "💳 Faturas"     },
     { value: "realized", label: "Realizados"     },
     { value: "planned",  label: "Previstos"      },
     { value: "income",   label: "Entradas"       },
@@ -206,27 +264,24 @@ export default function Transactions() {
     { value: "transfer", label: "Transferências" },
   ];
 
-  // ── Tokens — idênticos ao Accounts.jsx ───────────────────
-  const bg      = dark ? "#060709" : "#f1f4f9";
-  const cardBg  = dark ? "#0c0e13" : "#ffffff";  // mesmo do Accounts
-  const cardBrd = dark ? "rgba(255,255,255,0.07)" : "rgba(17,24,39,0.05)";
-  const text    = dark ? "#e8edf5" : "#0f172a";
-  const muted   = dark ? "#6b7a96" : "#64748b";
-  const linkCol = dark ? "#60a5fa" : "#1d4ed8";
-  const inputBg  = dark ? "#0a0c10" : "#f8fafc";
+  const bg       = dark ? "#060709" : "#f1f4f9";
+  const cardBg   = dark ? "#0c0e13" : "#ffffff";
+  const cardBrd  = dark ? "rgba(255,255,255,0.07)" : "rgba(17,24,39,0.05)";
+  const text     = dark ? "#e8edf5" : "#0f172a";
+  const muted    = dark ? "#6b7a96" : "#64748b";
+  const linkCol  = dark ? "#60a5fa" : "#1d4ed8";
+  const inputBg  = dark ? "#12151c" : "#f8fafc";
   const inputBrd = dark ? "rgba(255,255,255,0.08)" : "rgba(17,24,39,0.1)";
 
   return (
     <div style={{ minHeight: "100vh", background: bg, paddingBottom: 96, fontFamily: "'Outfit',sans-serif" }}>
 
-      {/* ══ HEADER — sem sticky, mesmo padrão do Accounts/Goals ══
-          overflow:hidden + isolation clipam os radial-gradients
-      ══════════════════════════════════════════════════════════ */}
+      {/* ══ HEADER ══════════════════════════════════════════════ */}
       <div style={{
-        isolation: "isolate",
-        overflow: "hidden",
+        position: "sticky", top: 0, zIndex: 20,
+        isolation: "isolate", overflow: "hidden",
         borderRadius: "0 0 28px 28px",
-        boxShadow: dark ? "0 8px 32px rgba(0,0,0,0.55)" : "0 8px 32px rgba(29,78,216,0.2)",
+        boxShadow: dark ? "0 8px 32px rgba(0,0,0,0.5)" : "0 8px 32px rgba(29,78,216,0.2)",
         background: dark
           ? `radial-gradient(ellipse 70% 60% at 50% -10%, rgba(37,99,235,0.35) 0%, transparent 70%),
              radial-gradient(ellipse 40% 40% at 90% 110%, rgba(124,58,237,0.2) 0%, transparent 70%),
@@ -269,7 +324,8 @@ export default function Transactions() {
               <Search size={13} color="rgba(255,255,255,0.5)" />
               <input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onFocus={() => setSearchFocused(true)} onBlur={() => setSearchFocused(false)}
                 placeholder="Título, categoria, valor, conta..."
-                style={{ flex: 1, background: "none", border: "none", outline: "none", color: "#ffffff", fontSize: "0.82rem", fontFamily: "'Outfit',sans-serif" }} />
+                style={{ flex: 1, background: "none", border: "none", outline: "none", color: "#ffffff", fontSize: "0.82rem", fontFamily: "'Outfit',sans-serif" }}
+              />
               {searchQuery && (
                 <button onClick={() => setSearchQuery("")} style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.5)", display: "flex" }}>
                   <X size={13} />
@@ -283,8 +339,8 @@ export default function Transactions() {
             </button>
           </div>
 
-          {/* Pills */}
-          <div style={{ display: "flex", gap: 6, padding: "8px 0 18px", overflowX: "auto" }}>
+          {/* Pills filtro */}
+          <div style={{ display: "flex", gap: 6, padding: "8px 0 14px", overflowX: "auto" }}>
             {FILTERS.map(({ value, label }) => (
               <button key={value} onClick={() => setFilter(value)}
                 style={{ flexShrink: 0, padding: "4px 13px", borderRadius: 999, fontSize: "0.73rem", fontWeight: 600, fontFamily: "'Outfit',sans-serif", background: filter === value ? "#ffffff" : "rgba(255,255,255,0.13)", color: filter === value ? "#1d4ed8" : "rgba(255,255,255,0.9)", border: filter === value ? "none" : "0.5px solid rgba(255,255,255,0.18)", cursor: "pointer", transition: "all .2s" }}>
@@ -309,18 +365,20 @@ export default function Transactions() {
                   </button>
                 )}
               </div>
+
               <div>
                 <p style={{ fontSize: "0.63rem", fontWeight: 600, color: muted, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8, display: "flex", alignItems: "center", gap: 5 }}>
                   <Calendar size={11} /> Período
                 </p>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <input type="date" value={advFilters.dateFrom} onChange={e => setAdvFilters(prev => ({ ...prev, dateFrom: e.target.value }))}
-                    style={{ flex: 1, height: 36, padding: "0 10px", borderRadius: 10, border: `1px solid ${inputBrd}`, background: inputBg, color: text, fontSize: "0.8rem", outline: "none", colorScheme: dark ? "dark" : "light" }} />
+                    style={{ flex: 1, height: 36, padding: "0 10px", borderRadius: 10, border: `1px solid ${inputBrd}`, background: inputBg, color: text, fontSize: "0.8rem", outline: "none" }} />
                   <span style={{ fontSize: "0.7rem", color: muted, flexShrink: 0 }}>até</span>
                   <input type="date" value={advFilters.dateTo} onChange={e => setAdvFilters(prev => ({ ...prev, dateTo: e.target.value }))}
-                    style={{ flex: 1, height: 36, padding: "0 10px", borderRadius: 10, border: `1px solid ${inputBrd}`, background: inputBg, color: text, fontSize: "0.8rem", outline: "none", colorScheme: dark ? "dark" : "light" }} />
+                    style={{ flex: 1, height: 36, padding: "0 10px", borderRadius: 10, border: `1px solid ${inputBrd}`, background: inputBg, color: text, fontSize: "0.8rem", outline: "none" }} />
                 </div>
               </div>
+
               <div>
                 <p style={{ fontSize: "0.63rem", fontWeight: 600, color: muted, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8 }}>Valor (R$)</p>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -331,68 +389,80 @@ export default function Transactions() {
                     style={{ flex: 1, height: 36, padding: "0 12px", borderRadius: 10, border: `1px solid ${inputBrd}`, background: inputBg, color: text, fontSize: "0.82rem", outline: "none" }} />
                 </div>
               </div>
+
               <div>
                 <p style={{ fontSize: "0.63rem", fontWeight: 600, color: muted, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8 }}>Categoria</p>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                   {CATEGORIES.map(cat => (
                     <button key={cat} onClick={() => toggleCategory(cat)}
-                      style={{ padding: "4px 11px", borderRadius: 999, fontSize: "0.7rem", fontWeight: 600, background: advFilters.categories.includes(cat) ? "#1d4ed8" : (dark ? "rgba(255,255,255,0.04)" : "#f1f4f9"), color: advFilters.categories.includes(cat) ? "#ffffff" : muted, border: advFilters.categories.includes(cat) ? "none" : `1px solid ${cardBrd}`, cursor: "pointer", textTransform: "capitalize", transition: "all .15s" }}>
+                      style={{ padding: "4px 11px", borderRadius: 999, fontSize: "0.7rem", fontWeight: 600, background: advFilters.categories.includes(cat) ? "#1d4ed8" : (dark ? "#12151c" : "#f1f4f9"), color: advFilters.categories.includes(cat) ? "#ffffff" : muted, border: advFilters.categories.includes(cat) ? "none" : `1px solid ${cardBrd}`, cursor: "pointer", textTransform: "capitalize", transition: "all .15s" }}>
                       {cat}
                     </button>
                   ))}
                 </div>
               </div>
+
               {accounts.length > 0 && (
                 <div>
                   <p style={{ fontSize: "0.63rem", fontWeight: 600, color: muted, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8 }}>Conta</p>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                     {accounts.map(acc => (
                       <button key={acc.id} onClick={() => toggleAccount(acc.id)}
-                        style={{ padding: "4px 11px", borderRadius: 999, fontSize: "0.7rem", fontWeight: 600, background: advFilters.accountIds.includes(acc.id) ? "#1d4ed8" : (dark ? "rgba(255,255,255,0.04)" : "#f1f4f9"), color: advFilters.accountIds.includes(acc.id) ? "#ffffff" : muted, border: advFilters.accountIds.includes(acc.id) ? "none" : `1px solid ${cardBrd}`, cursor: "pointer", transition: "all .15s" }}>
+                        style={{ padding: "4px 11px", borderRadius: 999, fontSize: "0.7rem", fontWeight: 600, background: advFilters.accountIds.includes(acc.id) ? "#1d4ed8" : (dark ? "#12151c" : "#f1f4f9"), color: advFilters.accountIds.includes(acc.id) ? "#ffffff" : muted, border: advFilters.accountIds.includes(acc.id) ? "none" : `1px solid ${cardBrd}`, cursor: "pointer", transition: "all .15s" }}>
                         {acc.name}
                       </button>
                     ))}
                   </div>
                 </div>
               )}
-              <div style={{ background: dark ? "rgba(37,99,235,0.08)" : "rgba(29,78,216,0.05)", border: `1px solid ${dark ? "rgba(37,99,235,0.18)" : "rgba(29,78,216,0.12)"}`, borderRadius: 10, padding: "7px 12px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <p style={{ fontSize: "0.73rem", color: linkCol, fontWeight: 600 }}>{filteredTransactions.length} transação(ões) encontrada(s)</p>
-                {(searchQuery || hasAdvFilters) && (<p style={{ fontSize: "0.65rem", color: muted }}>{fmt(summary.balance)} líquido</p>)}
+
+              <div style={{ background: dark ? "rgba(37,99,235,0.1)" : "rgba(29,78,216,0.06)", border: `1px solid ${dark ? "rgba(37,99,235,0.2)" : "rgba(29,78,216,0.12)"}`, borderRadius: 10, padding: "7px 12px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <p style={{ fontSize: "0.73rem", color: linkCol, fontWeight: 600 }}>
+                  {filteredTransactions.length} transação(ões) encontrada(s)
+                </p>
+                {(searchQuery || hasAdvFilters) && (
+                  <p style={{ fontSize: "0.65rem", color: muted }}>{fmt(summary.balance)} líquido</p>
+                )}
               </div>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* ══ LISTA — TransactionItem controla seu próprio bg ════ */}
-      <div style={{ padding: "14px 14px 0" }}>
+      {/* ══ FATURAS ════════════════════════════════════════════ */}
+      {filter === "cards" && (
+        <div style={{ padding: "14px 14px 0" }}>
+          <CreditCardManager selectedDate={selectedDate} />
+        </div>
+      )}
+
+      {/* ══ LISTA ═══════════════════════════════════════════════ */}
+      {filter !== "cards" && <div style={{ padding: "14px 14px 0" }}>
         {filteredTransactions.length > 0 ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            {filteredTransactions.map((transaction, idx) => (
-              <TransactionItem
-                key={transaction.id}
-                transaction={transaction}
-                accounts={accounts}
-                delay={idx < 12 ? idx * 0.025 : 0}
-                onRegistrar={(t) => setRealizarPrevisao(t)}
-                onDuplicar={(t, meses) => duplicarMutation.mutate({ transaction: t, meses })}
-                onEdit={canAdd ? handleEdit : null}
-                onDelete={canDelete ? (id) => setDeleteId(id) : null}
-              />
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {filteredTransactions.map((transaction) => (
+              <motion.div key={transaction.id} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }}>
+                <TransactionItem
+                  transaction={transaction}
+                  accounts={accounts}
+                  onRegistrar={(t) => setRealizarPrevisao(t)}
+                  onDuplicar={(t, meses) => duplicarMutation.mutate({ transaction: t, meses })}
+                  onEdit={canAdd ? handleEdit : null}
+                  onDelete={canDelete ? (id) => setDeleteId(id) : null}
+                />
+              </motion.div>
             ))}
           </div>
         ) : (
-          <div style={{ background: cardBg, border: `1px solid ${cardBrd}`, borderRadius: 16, padding: 24 }}>
-            <EmptyState
-              icon={TrendingUp}
-              title="Nenhuma transação"
-              description={searchQuery || hasAdvFilters ? "Tente ajustar os filtros." : "Período sem dados."}
-              action={canAdd && !searchQuery && !hasAdvFilters ? "Adicionar" : undefined}
-              onAction={() => canAdd && setShowForm(true)}
-            />
-          </div>
+          <EmptyState
+            icon={TrendingUp}
+            title="Nenhuma transação"
+            description={searchQuery || hasAdvFilters ? "Tente ajustar os filtros." : "Período sem dados."}
+            action={canAdd && !searchQuery && !hasAdvFilters ? "Adicionar" : undefined}
+            onAction={() => canAdd && setShowForm(true)}
+          />
         )}
-      </div>
+      </div>}
 
       {/* FAB */}
       {canAdd && (
