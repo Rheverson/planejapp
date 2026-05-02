@@ -135,4 +135,4 @@ export default function GoalProgressCard({ goal, current, onEdit, onDelete, dela
       )}
     </motion.div>
   );
-}
+} 
