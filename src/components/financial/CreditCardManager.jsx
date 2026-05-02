@@ -100,16 +100,20 @@ function InvoiceCard({ card, invoiceMonth, transactions, dark, onPay }) {
             {!isClosed && daysUntilDue > 0 && <span style={{ color: daysUntilDue <= 5 ? "#f59e0b" : muted }}> ({daysUntilDue}d)</span>}
           </p>
         </div>
-        {isClosed && total > 0 && (
+        {total > 0 && (
           <button onClick={() => onPay(card, total, invoiceMonth, dueDate)}
             style={{
               padding: "8px 14px", borderRadius: 10, border: "none",
-              background: "linear-gradient(135deg,#1d4ed8,#3730a3)",
+              background: isClosed
+                ? "linear-gradient(135deg,#1d4ed8,#3730a3)"
+                : "linear-gradient(135deg,#059669,#047857)",
               color: "#fff", fontFamily: "'Cabinet Grotesk', sans-serif",
               fontWeight: 700, fontSize: "0.78rem", cursor: "pointer",
-              boxShadow: "0 0 14px rgba(29,78,216,0.3)",
+              boxShadow: isClosed
+                ? "0 0 14px rgba(29,78,216,0.3)"
+                : "0 0 14px rgba(5,150,105,0.3)",
             }}>
-            Pagar
+            {isClosed ? "Pagar" : "Pagar antecipado"}
           </button>
         )}
       </div>
