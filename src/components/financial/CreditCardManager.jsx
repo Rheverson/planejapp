@@ -335,9 +335,45 @@ export default function CreditCardManager({ selectedDate }) {
     onError: (err) => toast.error("Erro: " + err.message),
   });
 
-  const handlePay = async (card, total, invoiceMonth, dueDate) => {
-    toast.info("Registrar pagamento em breve!");
-    // TODO: abrir modal de pagamento
+  const [payingInvoice, setPayingInvoice] = useState(null); // { card, total, invoiceMonth, dueDate }
+
+  const payInvoiceMutation = useMutation({
+    mutationFn: async ({ card, total, invoiceMonth }) => {
+      // 1. Cria transação de débito na conta vinculada ao cartão
+      if (!card.account_id) throw new Error("Cartão sem conta vinculada para pagamento.");
+      const { error: txError } = await supabase.from("transactions").insert([{
+        user_id: activeOwnerId,
+        description: `Pagamento fatura ${card.name} ${invoiceMonth}`,
+        amount: total,
+        type: "expense",
+        category: "faturas",
+        account_id: card.account_id,
+        date: format(new Date(), "yyyy-MM-dd"),
+        is_realized: true,
+        notes: `Fatura ${invoiceMonth}`,
+      }]);
+      if (txError) throw txError;
+
+      // 2. Marca todas as transações da fatura como pagas
+      const { error: updateError } = await supabase.from("transactions")
+        .update({ is_realized: true })
+        .eq("user_id", activeOwnerId)
+        .eq("credit_card_id", card.id)
+        .eq("invoice_month", invoiceMonth);
+      if (updateError) throw updateError;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["card_transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["accounts"] });
+      setPayingInvoice(null);
+      toast.success("Fatura paga! Saldo debitado da conta.");
+    },
+    onError: (err) => toast.error("Erro ao pagar fatura: " + err.message),
+  });
+
+  const handlePay = (card, total, invoiceMonth, dueDate) => {
+    setPayingInvoice({ card, total, invoiceMonth, dueDate });
   };
 
   if (cards.length === 0 && !showForm) {
@@ -385,6 +421,52 @@ export default function CreditCardManager({ selectedDate }) {
           </div>
         ))}
       </div>
+
+      {/* Modal confirmação de pagamento */}
+      <AnimatePresence>
+        {payingInvoice && (
+          <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}
+            style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",backdropFilter:"blur(4px)",zIndex:70,display:"flex",alignItems:"flex-end",justifyContent:"center"}}
+            onClick={()=>setPayingInvoice(null)}>
+            <motion.div initial={{y:60,opacity:0}} animate={{y:0,opacity:1}} exit={{y:60,opacity:0}}
+              transition={{type:"spring",stiffness:300,damping:30}}
+              onClick={e=>e.stopPropagation()}
+              style={{background:dark?"#0c0e13":"#ffffff",border:`0.5px solid ${dark?"rgba(255,255,255,0.08)":"rgba(17,24,39,0.08)"}`,borderRadius:"20px 20px 0 0",width:"100%",maxWidth:480,padding:"20px 20px 32px",boxShadow:"0 -8px 40px rgba(0,0,0,0.2)"}}>
+              <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16}}>
+                <div style={{width:40,height:40,borderRadius:12,background:payingInvoice.card.color+"20",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                  <CreditCard size={20} color={payingInvoice.card.color} />
+                </div>
+                <div>
+                  <p style={{fontFamily:"'Cabinet Grotesk',sans-serif",fontWeight:800,fontSize:"1rem",color:dark?"#e8edf5":"#0f172a",margin:0}}>Pagar fatura</p>
+                  <p style={{fontSize:"0.72rem",color:dark?"#6b7a96":"#64748b",margin:0}}>{payingInvoice.card.name} · {payingInvoice.invoiceMonth}</p>
+                </div>
+              </div>
+
+              <div style={{background:dark?"#12151c":"#f8fafc",borderRadius:12,padding:"14px 16px",marginBottom:16}}>
+                <p style={{fontSize:"0.65rem",color:dark?"#6b7a96":"#9ca3af",marginBottom:4,textTransform:"uppercase",letterSpacing:"0.08em"}}>Total a pagar</p>
+                <p style={{fontFamily:"'Cabinet Grotesk',sans-serif",fontWeight:800,fontSize:"1.6rem",color:"#dc2626",letterSpacing:"-0.02em",margin:0}}>
+                  {new Intl.NumberFormat("pt-BR",{style:"currency",currency:"BRL"}).format(payingInvoice.total)}
+                </p>
+                <p style={{fontSize:"0.7rem",color:dark?"#6b7a96":"#64748b",marginTop:4}}>
+                  Será debitado de: <strong>{accounts.find(a=>a.id===payingInvoice.card.account_id)?.name || "conta vinculada"}</strong>
+                </p>
+              </div>
+
+              <div style={{display:"flex",gap:10}}>
+                <button onClick={()=>setPayingInvoice(null)}
+                  style={{flex:1,height:44,borderRadius:12,border:`1px solid ${dark?"rgba(255,255,255,0.1)":"#e2e8f0"}`,background:"transparent",color:dark?"#6b7a96":"#64748b",fontFamily:"'Cabinet Grotesk',sans-serif",fontWeight:700,fontSize:"0.88rem",cursor:"pointer"}}>
+                  Cancelar
+                </button>
+                <button onClick={()=>payInvoiceMutation.mutate(payingInvoice)}
+                  disabled={payInvoiceMutation.isPending}
+                  style={{flex:2,height:44,borderRadius:12,border:"none",background:"linear-gradient(135deg,#1d4ed8,#3730a3)",color:"#fff",fontFamily:"'Cabinet Grotesk',sans-serif",fontWeight:800,fontSize:"0.88rem",cursor:"pointer",boxShadow:"0 0 20px rgba(29,78,216,0.3)",opacity:payInvoiceMutation.isPending?0.6:1}}>
+                  {payInvoiceMutation.isPending ? "Pagando..." : "✓ Confirmar pagamento"}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {showForm && (

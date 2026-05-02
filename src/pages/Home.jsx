@@ -200,6 +200,8 @@ export default function Home() {
     accounts.forEach(a => { b[a.id] = Number(a.initial_balance) || 0; });
     transactions.forEach(t => {
       if (t.is_realized === false) return;
+      // Compras no cartão NÃO afetam saldo da conta — só o pagamento da fatura afeta
+      if (t.credit_card_id && t.type === "expense") return;
       if (t.type === "income" && t.account_id)    b[t.account_id] = (b[t.account_id]||0) + Number(t.amount);
       else if (t.type === "expense" && t.account_id) b[t.account_id] = (b[t.account_id]||0) - Number(t.amount);
       else if (t.type === "transfer") {
@@ -218,7 +220,8 @@ export default function Home() {
 
   const kpis = useMemo(() => {
     const invIds = new Set(accounts.filter(a => a.type === "investment").map(a => a.id));
-    const tx = monthTransactions.filter(t => !invIds.has(t.account_id));
+    // Exclui compras de cartão das transações normais (aparecem nas faturas, não no fluxo de conta)
+    const tx = monthTransactions.filter(t => !invIds.has(t.account_id) && !t.credit_card_id);
     const r  = tx.filter(t => t.is_realized !== false);
     const p  = tx.filter(t => t.is_realized === false);
     const ir = r.filter(t => t.type === "income").reduce((s,t)=>s+Number(t.amount),0);

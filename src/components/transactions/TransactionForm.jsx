@@ -7,6 +7,7 @@ import CategorySuggestion from "./CategorySuggestion";
 import { useCategorySuggestion } from "./useCategorySuggestion";
 import { useAuth } from "@/lib/AuthContext";
 import { useQuery } from "@tanstack/react-query";
+import { addMonths, format } from "date-fns";
 import { supabase } from "@/lib/supabase";
 
 const frequencyOptions = [
@@ -18,12 +19,20 @@ const dayOptions = Array.from({ length: 31 }, (_, i) => i + 1);
 const today    = new Date().toISOString().split("T")[0];
 const todayDay = new Date().getDate();
 
+// ✅ useIsDark robusto — observa a classe do <html> diretamente
 function useIsDark() {
-  const [dark, setDark] = useState(() => localStorage.getItem("darkMode") === "true");
+  const [dark, setDark] = useState(() =>
+    localStorage.getItem("darkMode") === "true" ||
+    document.documentElement.classList.contains("dark")
+  );
   useEffect(() => {
+    const obs = new MutationObserver(() =>
+      setDark(document.documentElement.classList.contains("dark"))
+    );
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
     const h = (e) => setDark(e.detail);
     window.addEventListener("darkModeChange", h);
-    return () => window.removeEventListener("darkModeChange", h);
+    return () => { obs.disconnect(); window.removeEventListener("darkModeChange", h); };
   }, []);
   return dark;
 }
@@ -58,6 +67,16 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
   const [recurringDay, setRecurringDay]         = useState(initialData?.recurring_day || todayDay);
   const [recurringEndDate, setRecurringEndDate] = useState(initialData?.recurring_end_date || "");
   const [showSuggestion, setShowSuggestion]     = useState(false);
+  const [creditCardId, setCreditCardId]         = useState(initialData?.credit_card_id || "");
+
+  const { data: creditCards = [] } = useQuery({
+    queryKey: ["credit_cards", user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("credit_cards").select("*").eq("user_id", user?.id).eq("is_active", true);
+      if (error) throw error; return data;
+    },
+    enabled: !!user?.id,
+  });
 
   const { suggestion, confidence, confirmCategory } = useCategorySuggestion(description, type);
   const categories = allCategories.filter(c => c.type === type).map(c => c.name);
@@ -73,10 +92,31 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
   const handleSubmit = (e) => {
     e.preventDefault();
     if (description && category) confirmCategory(category, description);
+    // Calcula invoice_month se tiver cartão vinculado
+    let invoiceMonth = null;
+    if (creditCardId) {
+      const card = creditCards.find(cc => cc.id === creditCardId);
+      if (card) {
+        const d = new Date(date + "T00:00:00");
+        if (card.expense_date_mode === "purchase_date") {
+          invoiceMonth = format(d, "yyyy-MM");
+        } else {
+          // closing_date: se passou do fechamento vai para próximo mês
+          invoiceMonth = d.getDate() > card.closing_day
+            ? format(addMonths(d, 1), "yyyy-MM")
+            : format(d, "yyyy-MM");
+        }
+      }
+    }
+
     onSubmit({
       description, amount: parseFloat(amount) || 0, category,
       account_id: accountId || null, date,
-      is_realized: isRecurring ? false : isRealized,
+      is_realized: isRecurring ? false : (creditCardId ? false : isRealized),
+      credit_card_id: creditCardId || null,
+      invoice_month: invoiceMonth,
+      // Compra no cartão: account_id vai null (não debita conta agora)
+      ...(creditCardId ? { account_id: null } : {}),
       auto_realize: !isRecurring && !isRealized ? autoRealize : false,
       notes: initialData?.notes || "", type,
       is_recurring: isRecurring,
@@ -88,23 +128,18 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
 
   const showAutoRealize = !isRecurring && !isRealized;
 
-  // ── Tokens ────────────────────────────────────────────────
-  const modalBg  = dark ? "#0c0e13" : "#ffffff";
-  const headerBg = dark ? "#0c0e13" : "#ffffff";
+  // ── Tokens de cor por tema ─────────────────────────────────
+  const modalBg   = dark ? "#0c0e13" : "#ffffff";
   const headerBrd = dark ? "rgba(255,255,255,0.07)" : "rgba(17,24,39,0.06)";
-  const text     = dark ? "#e8edf5" : "#0f172a";
-  const muted    = dark ? "#6b7a96" : "#64748b";
-  const inputBg  = dark ? "#12151c" : "#f8fafc";
-  const inputBrd = dark ? "rgba(255,255,255,0.08)" : "rgba(17,24,39,0.1)";
-  const inputBrdFocus = "#1d4ed8";
-  const rowBg    = dark ? "rgba(255,255,255,0.03)" : "#f8fafc";
-  const rowBrd   = dark ? "rgba(255,255,255,0.06)" : "rgba(17,24,39,0.07)";
-  const pillBg   = dark ? "#12151c" : "#f1f4f9";
-  const pillBrd  = dark ? "rgba(255,255,255,0.08)" : "rgba(17,24,39,0.1)";
+  const text      = dark ? "#e8edf5" : "#0f172a";
+  const muted     = dark ? "#6b7a96" : "#64748b";
+  const inputBg   = dark ? "#12151c" : "#f8fafc";
+  const inputBrd  = dark ? "rgba(255,255,255,0.08)" : "rgba(17,24,39,0.1)";
+  const rowBg     = dark ? "rgba(255,255,255,0.03)" : "#f8fafc";
+  const rowBrd    = dark ? "rgba(255,255,255,0.06)" : "rgba(17,24,39,0.07)";
 
-  // Cores por tipo
-  const incomeC  = { bg: "#059669", hover: "#047857", tint: dark ? "rgba(5,150,105,0.12)" : "rgba(5,150,105,0.08)", text: dark ? "#2ecc8a" : "#059669" };
-  const expenseC = { bg: "#dc2626", hover: "#b91c1c", tint: dark ? "rgba(220,38,38,0.12)" : "rgba(220,38,38,0.08)", text: dark ? "#e85d5d" : "#dc2626" };
+  const incomeC  = { bg: "#059669", text: dark ? "#2ecc8a" : "#059669" };
+  const expenseC = { bg: "#dc2626", text: dark ? "#e85d5d" : "#dc2626" };
   const currentTypeC = type === "income" ? incomeC : expenseC;
   const submitBg = type === "income"
     ? "linear-gradient(135deg,#059669,#047857)"
@@ -115,7 +150,7 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
     background: inputBg, border: `1px solid ${inputBrd}`,
     borderRadius: 12, color: text, fontSize: "0.85rem",
     fontFamily: "'Outfit',sans-serif", outline: "none",
-    transition: "border-color .2s",
+    transition: "border-color .2s", boxSizing: "border-box",
   };
 
   const labelStyle = {
@@ -131,9 +166,7 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
       style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", backdropFilter: "blur(6px)", zIndex: 50, display: "flex", alignItems: "flex-end", justifyContent: "center", paddingBottom: 64 }}
     >
       <motion.div
-        initial={{ y: 100, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        exit={{ y: 100, opacity: 0 }}
+        initial={{ y: 100, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 100, opacity: 0 }}
         transition={{ type: "spring", damping: 28, stiffness: 280 }}
         onClick={e => e.stopPropagation()}
         style={{ background: modalBg, borderRadius: "24px 24px 0 0", width: "100%", maxWidth: 480, maxHeight: "90vh", display: "flex", flexDirection: "column", overflow: "hidden", fontFamily: "'Outfit',sans-serif" }}
@@ -143,9 +176,9 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
           <div style={{ width: 36, height: 4, borderRadius: 999, background: dark ? "rgba(255,255,255,0.1)" : "rgba(17,24,39,0.1)" }} />
         </div>
 
-        {/* Header sticky */}
-        <div style={{ position: "sticky", top: 0, background: headerBg, padding: "10px 20px 12px", borderBottom: `1px solid ${headerBrd}`, display: "flex", alignItems: "center", justifyContent: "space-between", zIndex: 10 }}>
-          <p style={{ fontFamily: "'Cabinet Grotesk',sans-serif", fontWeight: 800, fontSize: "1rem", color: text, letterSpacing: "-0.02em" }}>
+        {/* Header */}
+        <div style={{ background: modalBg, padding: "10px 20px 12px", borderBottom: `1px solid ${headerBrd}`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <p style={{ fontFamily: "'Cabinet Grotesk',sans-serif", fontWeight: 800, fontSize: "1rem", color: text, letterSpacing: "-0.02em", margin: 0 }}>
             {isEditing ? "Editar Transação" : "Nova Transação"}
           </p>
           <button type="button" onClick={onClose}
@@ -154,43 +187,39 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
           </button>
         </div>
 
-        {/* Formulário */}
+        {/* Form */}
         <form onSubmit={handleSubmit} style={{ flex: 1, overflowY: "auto", padding: "14px 20px 24px", display: "flex", flexDirection: "column", gap: 14 }}>
 
-          {/* Tipo — toggle entrada/saída */}
+          {/* Tipo */}
           <div style={{ display: "flex", gap: 6, padding: 5, background: dark ? "rgba(255,255,255,0.04)" : "#f1f4f9", borderRadius: 14, border: `1px solid ${rowBrd}` }}>
             {[
               { val: "income",  label: "Entrada", Icon: TrendingUp,   c: incomeC  },
               { val: "expense", label: "Saída",   Icon: TrendingDown, c: expenseC },
             ].map(({ val, label, Icon, c }) => (
-              <motion.button
-                key={val} type="button" whileTap={{ scale: 0.95 }}
+              <motion.button key={val} type="button" whileTap={{ scale: 0.95 }}
                 onClick={() => handleTypeChange(val)}
                 style={{
                   flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 7,
                   padding: "8px 0", borderRadius: 10, border: "none", cursor: "pointer",
                   fontFamily: "'Cabinet Grotesk',sans-serif", fontWeight: 700, fontSize: "0.88rem",
-                  transition: "all .2s",
                   background: type === val ? c.bg : "transparent",
                   color: type === val ? "#ffffff" : muted,
                   boxShadow: type === val ? `0 2px 12px ${c.bg}55` : "none",
-                }}
-              >
-                <Icon size={15} strokeWidth={2.2} />
-                {label}
+                  transition: "all .2s",
+                }}>
+                <Icon size={15} strokeWidth={2.2} /> {label}
               </motion.button>
             ))}
           </div>
 
-          {/* Valor — destaque visual */}
+          {/* Valor */}
           <div>
             <label style={labelStyle}>Valor</label>
             <div style={{ position: "relative" }}>
               <span style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", fontSize: "0.9rem", fontWeight: 600, color: muted }}>R$</span>
-              <input
-                type="number" step="0.01" placeholder="0,00"
-                value={amount} onChange={e => setAmount(e.target.value)}
-                onFocus={e => e.target.style.borderColor = inputBrdFocus}
+              <input type="number" step="0.01" placeholder="0,00" value={amount}
+                onChange={e => setAmount(e.target.value)}
+                onFocus={e => e.target.style.borderColor = "#1d4ed8"}
                 onBlur={e => e.target.style.borderColor = inputBrd}
                 required
                 style={{ ...inputStyle, height: 52, paddingLeft: 42, fontSize: "1.4rem", fontWeight: 800, fontFamily: "'Cabinet Grotesk',sans-serif", color: currentTypeC.text, letterSpacing: "-0.02em" }}
@@ -201,10 +230,9 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
           {/* Descrição */}
           <div>
             <label style={labelStyle}>Descrição</label>
-            <input
-              placeholder="Ex: Salário, Aluguel, Mercado..."
-              value={description} onChange={e => handleDescriptionChange(e.target.value)}
-              onFocus={e => e.target.style.borderColor = inputBrdFocus}
+            <input placeholder="Ex: Salário, Aluguel, Mercado..." value={description}
+              onChange={e => handleDescriptionChange(e.target.value)}
+              onFocus={e => e.target.style.borderColor = "#1d4ed8"}
               onBlur={e => e.target.style.borderColor = inputBrd}
               required style={inputStyle}
             />
@@ -226,9 +254,7 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
                   <SelectValue placeholder="Selecione" />
                 </SelectTrigger>
                 <SelectContent>
-                  {categories.map(cat => (
-                    <SelectItem key={cat} value={cat.toLowerCase()}>{cat}</SelectItem>
-                  ))}
+                  {categories.map(cat => <SelectItem key={cat} value={cat.toLowerCase()}>{cat}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -239,23 +265,35 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
                   <SelectValue placeholder="Selecione" />
                 </SelectTrigger>
                 <SelectContent>
-                  {accounts.map(acc => (
-                    <SelectItem key={acc.id} value={acc.id}>{acc.name}</SelectItem>
-                  ))}
+                  {accounts.map(acc => <SelectItem key={acc.id} value={acc.id}>{acc.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
           </div>
 
+          {/* Cartão de crédito — só para despesas */}
+          {type === "expense" && creditCards.length > 0 && (
+            <div>
+              <label style={labelStyle}>Cartão de crédito <span style={{fontWeight:400,color:muted}}>(opcional)</span></label>
+              <Select value={creditCardId} onValueChange={v => { setCreditCardId(v === "none" ? "" : v); }}>
+                <SelectTrigger style={{ height: 40, borderRadius: 12, background: inputBg, border: `1px solid ${inputBrd}`, fontSize: "0.82rem", color: text, fontFamily: "'Outfit',sans-serif" }}>
+                  <SelectValue placeholder="💳 Sem cartão (débito)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">💳 Sem cartão (débito)</SelectItem>
+                  {creditCards.map(cc => (
+                    <SelectItem key={cc.id} value={cc.id}>💳 {cc.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           {/* Data */}
           <div>
             <label style={labelStyle}>{isRecurring ? "Primeira ocorrência" : "Data"}</label>
-            <input
-              type="date" value={date}
-              onChange={e => handleDateChange(e.target.value)}
-              required
-              style={{ ...inputStyle, colorScheme: dark ? "dark" : "light" }}
-            />
+            <input type="date" value={date} onChange={e => handleDateChange(e.target.value)} required
+              style={{ ...inputStyle, colorScheme: dark ? "dark" : "light" }} />
           </div>
 
           {/* Recorrente */}
@@ -283,8 +321,6 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
                 {isRecurring && (
                   <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2 }} style={{ overflow: "hidden" }}>
                     <div style={{ padding: "12px 14px", borderTop: `1px solid ${rowBrd}`, display: "flex", flexDirection: "column", gap: 12 }}>
-
-                      {/* Frequência */}
                       <div>
                         <label style={labelStyle}>Frequência</label>
                         <div style={{ display: "flex", gap: 6 }}>
@@ -305,9 +341,7 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
                               <SelectValue placeholder="Dia" />
                             </SelectTrigger>
                             <SelectContent style={{ maxHeight: 200 }}>
-                              {dayOptions.map(d => (
-                                <SelectItem key={d} value={String(d)}>Dia {d}</SelectItem>
-                              ))}
+                              {dayOptions.map(d => <SelectItem key={d} value={String(d)}>Dia {d}</SelectItem>)}
                             </SelectContent>
                           </Select>
                           <p style={{ fontSize: "0.65rem", color: muted, marginTop: 4 }}>Gera previsão todo dia {recurringDay} por 12 meses</p>
@@ -315,13 +349,10 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
                       )}
 
                       <div>
-                        <label style={labelStyle}>
-                          Encerra em <span style={{ fontWeight: 400, color: muted }}>(opcional)</span>
-                        </label>
+                        <label style={labelStyle}>Encerra em <span style={{ fontWeight: 400, color: muted }}>(opcional)</span></label>
                         <input type="date" value={recurringEndDate} min={date}
                           onChange={e => setRecurringEndDate(e.target.value)}
-                          style={{ ...inputStyle, colorScheme: dark ? "dark" : "light" }}
-                        />
+                          style={{ ...inputStyle, colorScheme: dark ? "dark" : "light" }} />
                         <p style={{ fontSize: "0.65rem", color: muted, marginTop: 4 }}>Sem data final gera 12 meses</p>
                       </div>
                     </div>
@@ -334,7 +365,6 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
           {/* Realizada / Auto realizar */}
           {!isRecurring && (
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {/* Já realizada */}
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "11px 14px", background: rowBg, borderRadius: 14, border: `1px solid ${rowBrd}` }}>
                 <div>
                   <p style={{ fontSize: "0.85rem", fontWeight: 600, color: text, marginBottom: 1 }}>Já foi realizada?</p>
@@ -343,7 +373,6 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
                 <Switch checked={isRealized} onCheckedChange={handleIsRealizedChange} />
               </div>
 
-              {/* Auto realizar */}
               <AnimatePresence>
                 {showAutoRealize && (
                   <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.2 }} style={{ overflow: "hidden" }}>
@@ -361,9 +390,7 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
                         <div>
                           <p style={{ fontSize: "0.85rem", fontWeight: 600, color: text, marginBottom: 1 }}>Realizar automaticamente</p>
                           <p style={{ fontSize: "0.68rem", color: muted }}>
-                            {autoRealize
-                              ? `Será realizada em ${new Date(date + "T00:00:00").toLocaleDateString("pt-BR")}`
-                              : "Marcar como realizada na data de vencimento"}
+                            {autoRealize ? `Será realizada em ${new Date(date + "T00:00:00").toLocaleDateString("pt-BR")}` : "Marcar como realizada na data de vencimento"}
                           </p>
                         </div>
                       </div>
@@ -375,26 +402,17 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
             </div>
           )}
 
-          {/* Botão submit */}
-          <motion.button
-            type="submit" whileTap={{ scale: 0.97 }}
+          {/* Submit */}
+          <motion.button type="submit" whileTap={{ scale: 0.97 }}
             style={{
               width: "100%", height: 48, borderRadius: 14, border: "none", cursor: "pointer",
-              background: submitBg,
-              color: "#ffffff",
+              background: submitBg, color: "#ffffff",
               fontFamily: "'Cabinet Grotesk',sans-serif",
               fontWeight: 800, fontSize: "0.95rem", letterSpacing: "-0.01em",
-              boxShadow: type === "income"
-                ? "0 4px 16px rgba(5,150,105,0.35)"
-                : "0 4px 16px rgba(220,38,38,0.35)",
+              boxShadow: type === "income" ? "0 4px 16px rgba(5,150,105,0.35)" : "0 4px 16px rgba(220,38,38,0.35)",
               marginTop: 4,
-            }}
-          >
-            {isEditing
-              ? "Salvar alterações"
-              : isRecurring
-                ? `Criar recorrência ${type === "income" ? "de entrada" : "de saída"}`
-                : `Adicionar ${type === "income" ? "Entrada" : "Saída"}`}
+            }}>
+            {isEditing ? "Salvar alterações" : isRecurring ? `Criar recorrência ${type === "income" ? "de entrada" : "de saída"}` : `Adicionar ${type === "income" ? "Entrada" : "Saída"}`}
           </motion.button>
 
         </form>
