@@ -290,7 +290,7 @@ export default function Home() {
           <div style={{ marginBottom: 4 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
               <p style={{ fontSize: "0.62rem", fontWeight: 600, color: "rgba(255,255,255,0.55)", textTransform: "uppercase", letterSpacing: "0.12em" }}>
-                Saldo disponível
+                Saldo em conta
               </p>
               <button onClick={toggle} style={{
                 background: "rgba(255,255,255,0.1)", border: "none", borderRadius: 6,
@@ -358,8 +358,8 @@ export default function Home() {
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
           <KPICard title="Entradas"    value={kpis.totalIncome}    color="green"  hidden={hidden} dark={dark} to={`/Transactions?filter=income&month=${format(selectedDate,"yyyy-MM")}`} />
           <KPICard title="Saídas"      value={kpis.totalExpense}   color="red"    hidden={hidden} dark={dark} to={`/Transactions?filter=expense&month=${format(selectedDate,"yyyy-MM")}`} />
-          <KPICard title="Saldo Atual" value={kpis.currentBalance} color={kpis.currentBalance>=0?"blue":"red"}   subtitle="Realizado"     hidden={hidden} dark={dark} to={`/Transactions?filter=realized&month=${format(selectedDate,"yyyy-MM")}`} />
-          <KPICard title="Previsão"    value={kpis.forecastBalance} color={kpis.forecastBalance>=0?"violet":"red"} subtitle="Com planejado" hidden={hidden} dark={dark} to={`/Transactions?filter=planned&month=${format(selectedDate,"yyyy-MM")}`} />
+          <KPICard title="Resultado do Mês" value={kpis.currentBalance} color={kpis.currentBalance>=0?"blue":"red"}   subtitle="Mês atual"     hidden={hidden} dark={dark} to={`/Transactions?filter=realized&month=${format(selectedDate,"yyyy-MM")}`} />
+          <KPICard title="Projeção Final do Mês"    value={kpis.forecastBalance} color={kpis.forecastBalance>=0?"violet":"red"} subtitle="Mês completo" hidden={hidden} dark={dark} to={`/Transactions?filter=planned&month=${format(selectedDate,"yyyy-MM")}`} />
         </div>
 
         {/* Score financeiro */}
