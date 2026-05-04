@@ -220,8 +220,8 @@ export default function Home() {
 
   const kpis = useMemo(() => {
     const invIds = new Set(accounts.filter(a => a.type === "investment").map(a => a.id));
-    // Exclui compras de cartão das transações normais (aparecem nas faturas, não no fluxo de conta)
-    const tx = monthTransactions.filter(t => !invIds.has(t.account_id) && !t.credit_card_id);
+    // Inclui compras de cartão como despesa do mês (mas não afeta saldo de conta — só ao pagar fatura)
+    const tx = monthTransactions.filter(t => !invIds.has(t.account_id));
     const r  = tx.filter(t => t.is_realized !== false);
     const p  = tx.filter(t => t.is_realized === false);
     const ir = r.filter(t => t.type === "income").reduce((s,t)=>s+Number(t.amount),0);
