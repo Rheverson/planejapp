@@ -294,7 +294,7 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
             </div>
           </div>
 
-          {/* Aviso quando cartão selecionado */}
+          {/* Aviso quando cartão selecionado — substitui os toggles */}
           {selectedCard && (
             <div style={{ padding: "8px 12px", background: "rgba(139,92,246,0.08)", border: "1px solid rgba(139,92,246,0.2)", borderRadius: 10, fontSize: "0.7rem", color: "#8b5cf6" }}>
               💳 Vai para fatura de {(() => {
@@ -383,8 +383,8 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
             </div>
           )}
 
-          {/* Realizada / Auto realizar */}
-          {!isRecurring && (
+          {/* Realizada / Auto realizar — esconde quando cartão selecionado */}
+          {!isRecurring && !selectedCard && (
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "11px 14px", background: rowBg, borderRadius: 14, border: `1px solid ${rowBrd}` }}>
                 <div>
