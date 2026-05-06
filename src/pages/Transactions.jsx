@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthContext";
 import { useSharedProfile } from "@/lib/SharedProfileContext";
@@ -272,19 +272,19 @@ export default function Transactions() {
       setEditTransaction(transaction);
       setShowForm(true);
       // Salva o scope para usar no submit
-      setRecurringScope(scope);
+      recurringScopeRef.current = scope;
     } else {
       deleteMutation.mutate({ id: transaction.id, scope, transaction });
     }
     if (type === "edit") setRecurringModal(null);
   };
 
-  const [recurringScope, setRecurringScope] = useState(null);
+  const recurringScopeRef = useRef(null); // useRef evita problema de closure com useState
 
   const handleSubmit = (data) => {
     if (editTransaction) {
-      updateMutation.mutate({ id: editTransaction.id, data, scope: recurringScope, transaction: editTransaction });
-      setRecurringScope(null);
+      updateMutation.mutate({ id: editTransaction.id, data, scope: recurringScopeRef.current, transaction: editTransaction });
+      recurringScopeRef.current = null;
     } else {
       createMutation.mutate(data);
     }
