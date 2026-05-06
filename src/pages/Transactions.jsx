@@ -14,6 +14,7 @@ import TransactionItem from "@/components/transactions/TransactionItem";
 import TransactionForm from "@/components/transactions/TransactionForm";
 import MonthSelector from "@/components/common/MonthSelector";
 import EmptyState from "@/components/common/EmptyState";
+import RecurringEditModal from "@/components/transactions/RecurringEditModal";
 import CreditCardManager from "@/components/financial/CreditCardManager";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -54,6 +55,7 @@ export default function Transactions() {
   const [searchFocused, setSearchFocused]       = useState(false);
   const [deleteId, setDeleteId]                 = useState(null);
   const [realizarPrevisao, setRealizarPrevisao] = useState(null);
+  const [recurringModal, setRecurringModal] = useState(null); // { type: "edit"|"delete", transaction }
   const [showAdvanced, setShowAdvanced]         = useState(false);
   const [advFilters, setAdvFilters]             = useState({
     categories: [], accountIds: [], minAmount: "", maxAmount: "", dateFrom: "", dateTo: "",
@@ -110,10 +112,53 @@ export default function Transactions() {
 
   const createMutation = useMutation({
     mutationFn: async (data) => {
-      const { error } = await supabase.from("transactions").insert([{ ...data, user_id: activeOwnerId }]);
-      if (error) throw error;
+      if (data.is_recurring) {
+        // Gera um group_id único para toda a série
+        const groupId = crypto.randomUUID();
+        const baseDate = new Date(data.date + "T00:00:00");
+        const endDate = data.recurring_end_date ? new Date(data.recurring_end_date + "T00:00:00") : null;
+        const inserts = [];
+        let current = new Date(baseDate);
+        let count = 0;
+        const maxOccurrences = 24; // máximo 24 meses
+
+        while (count < maxOccurrences) {
+          if (endDate && current > endDate) break;
+          const dateStr = current.toISOString().split("T")[0];
+          inserts.push({
+            ...data,
+            user_id: activeOwnerId,
+            date: dateStr,
+            is_realized: false,
+            is_recurring: false, // instâncias individuais não são recorrentes
+            recurring_group_id: groupId,
+            recurring_end_date: null,
+            recurring_frequency: null,
+            recurring_day: null,
+          });
+          // Avança para próxima ocorrência
+          if (data.recurring_frequency === "monthly") {
+            current.setMonth(current.getMonth() + 1);
+          } else if (data.recurring_frequency === "weekly") {
+            current.setDate(current.getDate() + 7);
+          } else if (data.recurring_frequency === "yearly") {
+            current.setFullYear(current.getFullYear() + 1);
+          }
+          count++;
+          if (!endDate && count >= 12) break; // sem data fim = 12 meses
+        }
+        const { error } = await supabase.from("transactions").insert(inserts);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("transactions").insert([{ ...data, user_id: activeOwnerId }]);
+        if (error) throw error;
+      }
     },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["transactions", activeOwnerId] }); setShowForm(false); toast.success("Transação criada!"); },
+    onSuccess: (_, data) => {
+      queryClient.invalidateQueries({ queryKey: ["transactions", activeOwnerId] });
+      setShowForm(false);
+      toast.success(data?.is_recurring ? "Recorrência criada!" : "Transação criada!");
+    },
     onError: (err) => toast.error("Erro: " + err.message),
   });
 
@@ -127,11 +172,28 @@ export default function Transactions() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async (id) => {
-      const { error } = await supabase.from("transactions").delete().eq("id", id);
-      if (error) throw error;
+    mutationFn: async ({ id, scope, transaction }) => {
+      if (!scope || scope === "only") {
+        // Apenas este
+        const { error } = await supabase.from("transactions").delete().eq("id", id);
+        if (error) throw error;
+      } else if (scope === "future" && transaction?.recurring_group_id) {
+        // Este e os seguintes
+        const { error } = await supabase.from("transactions").delete()
+          .eq("recurring_group_id", transaction.recurring_group_id)
+          .gte("date", transaction.date);
+        if (error) throw error;
+      } else if (scope === "all" && transaction?.recurring_group_id) {
+        // Todos
+        const { error } = await supabase.from("transactions").delete()
+          .eq("recurring_group_id", transaction.recurring_group_id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("transactions").delete().eq("id", id);
+        if (error) throw error;
+      }
     },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["transactions", activeOwnerId] }); setDeleteId(null); toast.success("Transação excluída!"); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["transactions", activeOwnerId] }); setDeleteId(null); setRecurringModal(null); toast.success("Excluído!"); },
     onError: (err) => toast.error("Erro: " + err.message),
   });
 
@@ -187,10 +249,45 @@ export default function Transactions() {
     onError: (err) => toast.error("Erro: " + err.message),
   });
 
-  const handleEdit   = (t) => { setEditTransaction(t); setShowForm(true); };
+  const handleEdit = (t) => {
+    if (t.recurring_group_id) {
+      setRecurringModal({ type: "edit", transaction: t });
+    } else {
+      setEditTransaction(t); setShowForm(true);
+    }
+  };
+
+  const handleDelete = (id) => {
+    const t = transactions.find(tx => tx.id === id);
+    if (t?.recurring_group_id) {
+      setRecurringModal({ type: "delete", transaction: t });
+    } else {
+      deleteMutation.mutate({ id });
+    }
+  };
+
+  const handleRecurringSelect = (scope) => {
+    const { type, transaction } = recurringModal;
+    if (type === "edit") {
+      setEditTransaction(transaction);
+      setShowForm(true);
+      // Salva o scope para usar no submit
+      setRecurringScope(scope);
+    } else {
+      deleteMutation.mutate({ id: transaction.id, scope, transaction });
+    }
+    if (type === "edit") setRecurringModal(null);
+  };
+
+  const [recurringScope, setRecurringScope] = useState(null);
+
   const handleSubmit = (data) => {
-    if (editTransaction) updateMutation.mutate({ id: editTransaction.id, data });
-    else createMutation.mutate(data);
+    if (editTransaction) {
+      updateMutation.mutate({ id: editTransaction.id, data, scope: recurringScope, transaction: editTransaction });
+      setRecurringScope(null);
+    } else {
+      createMutation.mutate(data);
+    }
   };
 
   const monthStart = startOfMonth(selectedDate);
@@ -448,7 +545,7 @@ export default function Transactions() {
                   onRegistrar={(t) => setRealizarPrevisao(t)}
                   onDuplicar={(t, meses) => duplicarMutation.mutate({ transaction: t, meses })}
                   onEdit={canAdd ? handleEdit : null}
-                  onDelete={canDelete ? (id) => setDeleteId(id) : null}
+                  onDelete={canDelete ? handleDelete : null}
                 />
               </motion.div>
             ))}
@@ -487,6 +584,16 @@ export default function Transactions() {
             transaction={realizarPrevisao}
             onConfirm={(dados) => realizarMutation.mutate(dados)}
             onClose={() => setRealizarPrevisao(null)}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {recurringModal && (
+          <RecurringEditModal
+            mode={recurringModal.type}
+            onSelect={handleRecurringSelect}
+            onClose={() => setRecurringModal(null)}
           />
         )}
       </AnimatePresence>
