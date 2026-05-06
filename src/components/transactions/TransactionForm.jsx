@@ -119,8 +119,8 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
 
     onSubmit({
       description, amount: parseFloat(amount) || 0, category,
-      account_id: accountId || null, date,
-      is_realized: isRecurring ? false : (finalCreditCardId ? false : isRealized),
+      date,
+      is_realized: finalCreditCardId ? false : isRealized, // cartão: sempre false; outros: respeita o toggle
       credit_card_id: finalCreditCardId,
       invoice_month: invoiceMonth,
       account_id: finalAccountId || null,
