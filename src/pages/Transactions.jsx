@@ -163,11 +163,30 @@ export default function Transactions() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: async ({ id, data }) => {
-      const { error } = await supabase.from("transactions").update(data).eq("id", id);
-      if (error) throw error;
+    mutationFn: async ({ id, data, scope, transaction }) => {
+      if (!scope || scope === "only") {
+        // Apenas este — desvincula do grupo
+        const { error } = await supabase.from("transactions").update({ ...data, recurring_group_id: null }).eq("id", id);
+        if (error) throw error;
+      } else if (scope === "future" && transaction?.recurring_group_id) {
+        // Este e os seguintes — preserva as datas individuais (exclui date do update)
+        const { date: _d, ...dataWithoutDate } = data;
+        const { error } = await supabase.from("transactions").update(dataWithoutDate)
+          .eq("recurring_group_id", transaction.recurring_group_id)
+          .gte("date", transaction.date);
+        if (error) throw error;
+      } else if (scope === "all" && transaction?.recurring_group_id) {
+        // Todos — preserva as datas individuais (exclui date do update)
+        const { date: _d, ...dataWithoutDate } = data;
+        const { error } = await supabase.from("transactions").update(dataWithoutDate)
+          .eq("recurring_group_id", transaction.recurring_group_id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("transactions").update(data).eq("id", id);
+        if (error) throw error;
+      }
     },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["transactions", activeOwnerId] }); setEditTransaction(null); setShowForm(false); toast.success("Transação atualizada!"); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["transactions", activeOwnerId] }); setEditTransaction(null); setShowForm(false); setRecurringModal(null); toast.success("Atualizado!"); },
     onError: (err) => toast.error("Erro: " + err.message),
   });
 
