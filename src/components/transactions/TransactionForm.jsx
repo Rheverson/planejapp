@@ -133,7 +133,7 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
     });
   };
 
-  const showAutoRealize = !isRecurring && !isRealized;
+  const showAutoRealize = !isRealized; // aparece para normais e recorrentes quando não realizado
 
   // ── Tokens de cor por tema ─────────────────────────────────
   const modalBg   = dark ? "#0c0e13" : "#ffffff";
