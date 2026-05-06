@@ -383,8 +383,8 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
             </div>
           )}
 
-          {/* Realizada / Auto realizar — esconde quando cartão selecionado */}
-          {!isRecurring && !selectedCard && (
+          {/* Realizada / Auto realizar — esconde apenas quando cartão selecionado */}
+          {!selectedCard && (
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "11px 14px", background: rowBg, borderRadius: 14, border: `1px solid ${rowBrd}` }}>
                 <div>
