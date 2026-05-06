@@ -165,8 +165,8 @@ export default function Transactions() {
   const updateMutation = useMutation({
     mutationFn: async ({ id, data, scope, transaction }) => {
       if (!scope || scope === "only") {
-        // Apenas este — desvincula do grupo
-        const { error } = await supabase.from("transactions").update({ ...data, recurring_group_id: null }).eq("id", id);
+        // Apenas este — mantém no grupo mas atualiza só este
+        const { error } = await supabase.from("transactions").update(data).eq("id", id);
         if (error) throw error;
       } else if (scope === "future" && transaction?.recurring_group_id) {
         // Este e os seguintes — preserva as datas individuais (exclui date do update)
