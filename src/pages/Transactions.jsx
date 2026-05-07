@@ -416,12 +416,12 @@ export default function Transactions() {
   const inputBg  = dark ? "#12151c" : "#f8fafc";
   const inputBrd = dark ? "rgba(255,255,255,0.08)" : "rgba(17,24,39,0.1)";
 
-  // Fecha sort ao clicar fora
+  // Fecha sort ao clicar fora — setTimeout evita fechar no mesmo clique
   React.useEffect(() => {
     if (!showSort) return;
     const close = () => setShowSort(false);
-    window.addEventListener('click', close);
-    return () => window.removeEventListener('click', close);
+    const timer = setTimeout(() => window.addEventListener('click', close), 0);
+    return () => { clearTimeout(timer); window.removeEventListener('click', close); };
   }, [showSort]);
 
   return (
@@ -545,7 +545,7 @@ export default function Transactions() {
               </button>
             ))}
             {/* Botão sort — discreto, no final das pills */}
-            <button onClick={() => setShowSort(!showSort)}
+            <button onClick={(e) => { e.stopPropagation(); setShowSort(!showSort); }}
               style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 4, padding: "4px 10px", borderRadius: 999, fontSize: "0.73rem", fontWeight: 600, fontFamily: "'Outfit',sans-serif", background: (sortBy !== "date" || sortDir !== "desc") ? "#ffffff" : "rgba(255,255,255,0.13)", color: (sortBy !== "date" || sortDir !== "desc") ? "#1d4ed8" : "rgba(255,255,255,0.9)", border: (sortBy !== "date" || sortDir !== "desc") ? "none" : "0.5px solid rgba(255,255,255,0.18)", cursor: "pointer", transition: "all .2s" }}>
               <ArrowUpDown size={11} />
               {sortBy === "date" ? "Ordenar" : sortBy === "amount" ? "Valor" : sortBy === "category" ? "Categoria" : "Descrição"}
