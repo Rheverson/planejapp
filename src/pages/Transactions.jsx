@@ -4,7 +4,7 @@ import { useAuth } from "@/lib/AuthContext";
 import { useSharedProfile } from "@/lib/SharedProfileContext";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, TrendingUp, SlidersHorizontal, X, Search, Calendar } from "lucide-react";
+import { Plus, TrendingUp, SlidersHorizontal, X, Search, Calendar, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { startOfMonth, endOfMonth, isWithinInterval, parseISO, isAfter, isBefore, isEqual } from "date-fns";
 import { toast } from "sonner";
 import { useSearchParams } from "react-router-dom";
@@ -371,6 +371,21 @@ export default function Transactions() {
       });
   }, [transactions, monthStart, monthEnd, filter, searchQuery, advFilters, accountMap]);
 
+  // Aplica ordenação
+  const sortedTransactions = useMemo(() => {
+    return [...filteredTransactions].sort((a, b) => {
+      let valA, valB;
+      if (sortBy === "date")        { valA = a.date; valB = b.date; }
+      else if (sortBy === "amount") { valA = Number(a.amount); valB = Number(b.amount); }
+      else if (sortBy === "description") { valA = a.description?.toLowerCase(); valB = b.description?.toLowerCase(); }
+      else if (sortBy === "category")    { valA = a.category?.toLowerCase(); valB = b.category?.toLowerCase(); }
+      else { valA = a.date; valB = b.date; }
+      if (valA < valB) return sortDir === "asc" ? -1 : 1;
+      if (valA > valB) return sortDir === "asc" ? 1 : -1;
+      return 0;
+    });
+  }, [filteredTransactions, sortBy, sortDir]);
+
   const summary = useMemo(() => {
     const invIds = new Set(accounts.filter(a => a.type === "investment").map(a => a.id));
     const tx = filteredTransactions.filter(t => !invIds.has(t.account_id));
@@ -397,6 +412,14 @@ export default function Transactions() {
   const linkCol  = dark ? "#60a5fa" : "#1d4ed8";
   const inputBg  = dark ? "#12151c" : "#f8fafc";
   const inputBrd = dark ? "rgba(255,255,255,0.08)" : "rgba(17,24,39,0.1)";
+
+  // Fecha sort ao clicar fora
+  React.useEffect(() => {
+    if (!showSort) return;
+    const close = () => setShowSort(false);
+    window.addEventListener('click', close);
+    return () => window.removeEventListener('click', close);
+  }, [showSort]);
 
   return (
     <div style={{ minHeight: "100vh", background: bg, paddingBottom: 96, fontFamily: "'Outfit',sans-serif" }}>
@@ -465,13 +488,65 @@ export default function Transactions() {
           </div>
 
           {/* Pills filtro */}
-          <div style={{ display: "flex", gap: 6, padding: "8px 0 14px", overflowX: "auto" }}>
+          {/* Sort popover */}
+          <div style={{ position: "relative" }}>
+            <AnimatePresence>
+              {showSort && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95, y: -4 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95, y: -4 }}
+                  transition={{ duration: 0.15 }}
+                  onClick={e => e.stopPropagation()}
+                  style={{
+                    position: "absolute", top: "calc(100% + 6px)", right: 0, zIndex: 50,
+                    background: dark ? "#0c0e13" : "#ffffff",
+                    border: `1px solid ${dark ? "rgba(255,255,255,0.1)" : "rgba(17,24,39,0.08)"}`,
+                    borderRadius: 14, overflow: "hidden",
+                    boxShadow: "0 8px 32px rgba(0,0,0,0.3)",
+                    minWidth: 200,
+                  }}
+                >
+                  {/* Direção */}
+                  <div style={{ display: "flex", padding: "8px", gap: 6, borderBottom: `0.5px solid ${dark ? "rgba(255,255,255,0.06)" : "rgba(17,24,39,0.06)"}` }}>
+                    {[{ key: "desc", Icon: ArrowDown, label: "Maior primeiro" }, { key: "asc", Icon: ArrowUp, label: "Menor primeiro" }].map(({ key, Icon, label }) => (
+                      <button key={key} onClick={() => setSortDir(key)}
+                        style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 5, padding: "6px 8px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: "0.68rem", fontWeight: 600, fontFamily: "'Outfit',sans-serif", background: sortDir === key ? "#1d4ed8" : (dark ? "rgba(255,255,255,0.05)" : "#f1f5f9"), color: sortDir === key ? "#fff" : (dark ? "#6b7a96" : "#64748b"), transition: "all .15s" }}>
+                        <Icon size={11} />{label}
+                      </button>
+                    ))}
+                  </div>
+                  {/* Campo */}
+                  {[
+                    { key: "date",        label: "📅 Data" },
+                    { key: "amount",      label: "💰 Valor" },
+                    { key: "category",    label: "🏷️ Categoria" },
+                    { key: "description", label: "📝 Descrição" },
+                  ].map(({ key, label }) => (
+                    <button key={key} onClick={() => { setSortBy(key); setShowSort(false); }}
+                      style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", border: "none", background: sortBy === key ? (dark ? "rgba(29,78,216,0.12)" : "rgba(29,78,216,0.06)") : "transparent", color: sortBy === key ? "#60a5fa" : (dark ? "#e8edf5" : "#0f172a"), fontSize: "0.8rem", fontWeight: sortBy === key ? 700 : 500, fontFamily: "'Outfit',sans-serif", cursor: "pointer", textAlign: "left" }}>
+                      {label}
+                      {sortBy === key && <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#60a5fa" }} />}
+                    </button>
+                  ))}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          <div style={{ display: "flex", gap: 6, padding: "8px 0 14px", overflowX: "auto", alignItems: "center" }}>
             {FILTERS.map(({ value, label }) => (
               <button key={value} onClick={() => setFilter(value)}
                 style={{ flexShrink: 0, padding: "4px 13px", borderRadius: 999, fontSize: "0.73rem", fontWeight: 600, fontFamily: "'Outfit',sans-serif", background: filter === value ? "#ffffff" : "rgba(255,255,255,0.13)", color: filter === value ? "#1d4ed8" : "rgba(255,255,255,0.9)", border: filter === value ? "none" : "0.5px solid rgba(255,255,255,0.18)", cursor: "pointer", transition: "all .2s" }}>
                 {label}
               </button>
             ))}
+            {/* Botão sort — discreto, no final das pills */}
+            <button onClick={() => setShowSort(!showSort)}
+              style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 4, padding: "4px 10px", borderRadius: 999, fontSize: "0.73rem", fontWeight: 600, fontFamily: "'Outfit',sans-serif", background: (sortBy !== "date" || sortDir !== "desc") ? "#ffffff" : "rgba(255,255,255,0.13)", color: (sortBy !== "date" || sortDir !== "desc") ? "#1d4ed8" : "rgba(255,255,255,0.9)", border: (sortBy !== "date" || sortDir !== "desc") ? "none" : "0.5px solid rgba(255,255,255,0.18)", cursor: "pointer", transition: "all .2s" }}>
+              <ArrowUpDown size={11} />
+              {sortBy === "date" ? "Ordenar" : sortBy === "amount" ? "Valor" : sortBy === "category" ? "Categoria" : "Descrição"}
+            </button>
           </div>
         </div>
       </div>
@@ -558,7 +633,7 @@ export default function Transactions() {
       <div style={{ padding: "14px 14px 0" }}>
         {filteredTransactions.length > 0 ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {filteredTransactions.map((transaction) => (
+            {sortedTransactions.map((transaction) => (
               <motion.div key={transaction.id} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }}>
                 <TransactionItem
                   transaction={transaction}
