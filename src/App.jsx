@@ -17,6 +17,7 @@ import ResetPassword from "@/pages/auth/ResetPassword";
 import Subscribe from "@/pages/Subscribe";
 import SubscriptionSuccess from "@/pages/SubscriptionSuccess";
 import OnboardingTour from '@/pages/OnboardingTour';
+import PromoPage from '@/pages/PromoPage';
 import { MonthProvider } from '@/lib/MonthContext';
 import { PrivacyProvider } from '@/lib/PrivacyContext';
 import { useQuery } from '@tanstack/react-query';
@@ -121,6 +122,8 @@ const AuthenticatedApp = () => {
   if (!user) {
     return (
       <Routes>
+        {/* Página de promo acessível sem login */}
+        <Route path="/Promo" element={<PromoPage />} />
         <Route path="/login" element={<Login />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/auth/verify" element={<Verify />} />
@@ -137,6 +140,8 @@ const AuthenticatedApp = () => {
   if (!isSubscribed) {
     return (
       <Routes>
+        {/* Página de promo acessível sem assinatura */}
+        <Route path="/Promo" element={<PromoPage />} />
         <Route path="/subscribe" element={<Subscribe />} />
         <Route path="/subscription-success" element={<SubscriptionSuccess />} />
         <Route path="*" element={<Navigate to="/subscribe" replace />} />
@@ -148,6 +153,8 @@ const AuthenticatedApp = () => {
     <Suspense fallback={<PageLoader />}>
       <Routes>
         <Route path="/onboarding-tour" element={<OnboardingTour />} />
+        {/* Página de promo acessível por usuários logados também */}
+        <Route path="/Promo" element={<PromoPage />} />
         <Route path="/login" element={<Navigate to="/" replace />} />
         <Route path="/forgot-password" element={<Navigate to="/" replace />} />
         <Route path="/onboarding/*" element={<Navigate to="/" replace />} />
