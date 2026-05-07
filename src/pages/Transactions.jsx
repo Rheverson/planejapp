@@ -56,6 +56,9 @@ export default function Transactions() {
   const [realizarPrevisao, setRealizarPrevisao] = useState(null);
   const [recurringModal, setRecurringModal] = useState(null); // { type: "edit"|"delete", transaction }
   const [showAdvanced, setShowAdvanced]         = useState(false);
+  const [showSort, setShowSort]                 = useState(false);
+  const [sortBy, setSortBy]                     = useState("date");
+  const [sortDir, setSortDir]                   = useState("desc");
   const [advFilters, setAdvFilters]             = useState({
     categories: [], accountIds: [], minAmount: "", maxAmount: "", dateFrom: "", dateTo: "",
   });
