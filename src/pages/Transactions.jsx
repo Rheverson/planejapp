@@ -416,13 +416,7 @@ export default function Transactions() {
   const inputBg  = dark ? "#12151c" : "#f8fafc";
   const inputBrd = dark ? "rgba(255,255,255,0.08)" : "rgba(17,24,39,0.1)";
 
-  // Fecha sort ao clicar fora — setTimeout evita fechar no mesmo clique
-  React.useEffect(() => {
-    if (!showSort) return;
-    const close = () => setShowSort(false);
-    const timer = setTimeout(() => window.addEventListener('click', close), 0);
-    return () => { clearTimeout(timer); window.removeEventListener('click', close); };
-  }, [showSort]);
+
 
   return (
     <div style={{ minHeight: "100vh", background: bg, paddingBottom: 96, fontFamily: "'Outfit',sans-serif" }}>
@@ -491,52 +485,6 @@ export default function Transactions() {
           </div>
 
           {/* Pills filtro */}
-          {/* Sort popover */}
-          <div style={{ position: "relative" }}>
-            <AnimatePresence>
-              {showSort && (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.95, y: -4 }}
-                  animate={{ opacity: 1, scale: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.95, y: -4 }}
-                  transition={{ duration: 0.15 }}
-                  onClick={e => e.stopPropagation()}
-                  style={{
-                    position: "absolute", top: "calc(100% + 6px)", right: 0, zIndex: 50,
-                    background: dark ? "#0c0e13" : "#ffffff",
-                    border: `1px solid ${dark ? "rgba(255,255,255,0.1)" : "rgba(17,24,39,0.08)"}`,
-                    borderRadius: 14, overflow: "hidden",
-                    boxShadow: "0 8px 32px rgba(0,0,0,0.3)",
-                    minWidth: 200,
-                  }}
-                >
-                  {/* Direção */}
-                  <div style={{ display: "flex", padding: "8px", gap: 6, borderBottom: `0.5px solid ${dark ? "rgba(255,255,255,0.06)" : "rgba(17,24,39,0.06)"}` }}>
-                    {[{ key: "desc", Icon: ArrowDown, label: "Maior primeiro" }, { key: "asc", Icon: ArrowUp, label: "Menor primeiro" }].map(({ key, Icon, label }) => (
-                      <button key={key} onClick={() => setSortDir(key)}
-                        style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 5, padding: "6px 8px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: "0.68rem", fontWeight: 600, fontFamily: "'Outfit',sans-serif", background: sortDir === key ? "#1d4ed8" : (dark ? "rgba(255,255,255,0.05)" : "#f1f5f9"), color: sortDir === key ? "#fff" : (dark ? "#6b7a96" : "#64748b"), transition: "all .15s" }}>
-                        <Icon size={11} />{label}
-                      </button>
-                    ))}
-                  </div>
-                  {/* Campo */}
-                  {[
-                    { key: "date",        label: "📅 Data" },
-                    { key: "amount",      label: "💰 Valor" },
-                    { key: "category",    label: "🏷️ Categoria" },
-                    { key: "description", label: "📝 Descrição" },
-                  ].map(({ key, label }) => (
-                    <button key={key} onClick={() => { setSortBy(key); setShowSort(false); }}
-                      style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", border: "none", background: sortBy === key ? (dark ? "rgba(29,78,216,0.12)" : "rgba(29,78,216,0.06)") : "transparent", color: sortBy === key ? "#60a5fa" : (dark ? "#e8edf5" : "#0f172a"), fontSize: "0.8rem", fontWeight: sortBy === key ? 700 : 500, fontFamily: "'Outfit',sans-serif", cursor: "pointer", textAlign: "left" }}>
-                      {label}
-                      {sortBy === key && <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#60a5fa" }} />}
-                    </button>
-                  ))}
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-
           <div style={{ display: "flex", gap: 6, padding: "8px 0 14px", overflowX: "auto", alignItems: "center" }}>
             {FILTERS.map(({ value, label }) => (
               <button key={value} onClick={() => setFilter(value)}
@@ -545,7 +493,7 @@ export default function Transactions() {
               </button>
             ))}
             {/* Botão sort — discreto, no final das pills */}
-            <button onClick={(e) => { e.stopPropagation(); setShowSort(!showSort); }}
+            <button onClick={() => setShowSort(true)}
               style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 4, padding: "4px 10px", borderRadius: 999, fontSize: "0.73rem", fontWeight: 600, fontFamily: "'Outfit',sans-serif", background: (sortBy !== "date" || sortDir !== "desc") ? "#ffffff" : "rgba(255,255,255,0.13)", color: (sortBy !== "date" || sortDir !== "desc") ? "#1d4ed8" : "rgba(255,255,255,0.9)", border: (sortBy !== "date" || sortDir !== "desc") ? "none" : "0.5px solid rgba(255,255,255,0.18)", cursor: "pointer", transition: "all .2s" }}>
               <ArrowUpDown size={11} />
               {sortBy === "date" ? "Ordenar" : sortBy === "amount" ? "Valor" : sortBy === "category" ? "Categoria" : "Descrição"}
@@ -685,6 +633,70 @@ export default function Transactions() {
             onConfirm={(dados) => realizarMutation.mutate(dados)}
             onClose={() => setRealizarPrevisao(null)}
           />
+        )}
+      </AnimatePresence>
+
+      {/* ══ SORT BOTTOM SHEET ═══════════════════════════════ */}
+      <AnimatePresence>
+        {showSort && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)", zIndex: 60, display: "flex", alignItems: "flex-end", justifyContent: "center" }}
+            onClick={() => setShowSort(false)}>
+            <motion.div initial={{ y: 80, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 80, opacity: 0 }}
+              transition={{ type: "spring", stiffness: 300, damping: 30 }}
+              onClick={e => e.stopPropagation()}
+              style={{ background: dark ? "#0c0e13" : "#ffffff", border: `0.5px solid ${dark ? "rgba(255,255,255,0.08)" : "rgba(17,24,39,0.08)"}`, borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 480, boxShadow: "0 -8px 40px rgba(0,0,0,0.2)", overflow: "hidden" }}>
+
+              {/* Header */}
+              <div style={{ padding: "16px 20px 12px", borderBottom: `0.5px solid ${dark ? "rgba(255,255,255,0.06)" : "rgba(17,24,39,0.06)"}`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <h2 style={{ fontFamily: "'Cabinet Grotesk', sans-serif", fontWeight: 800, fontSize: "0.95rem", color: dark ? "#e8edf5" : "#0f172a", margin: 0 }}>
+                  Ordenar por
+                </h2>
+                <button onClick={() => setShowSort(false)} style={{ width: 28, height: 28, borderRadius: 8, border: "none", background: dark ? "rgba(255,255,255,0.06)" : "#f1f5f9", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+                  <X size={14} color={dark ? "#6b7a96" : "#64748b"} />
+                </button>
+              </div>
+
+              {/* Direção ASC / DESC */}
+              <div style={{ display: "flex", gap: 8, padding: "12px 20px", borderBottom: `0.5px solid ${dark ? "rgba(255,255,255,0.06)" : "rgba(17,24,39,0.06)"}` }}>
+                {[
+                  { key: "desc", Icon: ArrowDown, label: "Decrescente" },
+                  { key: "asc",  Icon: ArrowUp,   label: "Crescente"  },
+                ].map(({ key, Icon, label }) => (
+                  <button key={key} onClick={() => setSortDir(key)}
+                    style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, height: 38, borderRadius: 10, border: `1.5px solid ${sortDir === key ? "#1d4ed8" : (dark ? "rgba(255,255,255,0.08)" : "#e2e8f0")}`, background: sortDir === key ? "rgba(29,78,216,0.1)" : "transparent", color: sortDir === key ? "#60a5fa" : (dark ? "#6b7a96" : "#64748b"), fontSize: "0.78rem", fontWeight: 700, fontFamily: "'Outfit',sans-serif", cursor: "pointer", transition: "all .15s" }}>
+                    <Icon size={13} />{label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Campos */}
+              <div style={{ padding: "8px 0 12px" }}>
+                {[
+                  { key: "date",        emoji: "📅", label: "Data" },
+                  { key: "amount",      emoji: "💰", label: "Valor" },
+                  { key: "category",    emoji: "🏷️", label: "Categoria" },
+                  { key: "description", emoji: "📝", label: "Descrição" },
+                ].map(({ key, emoji, label }) => (
+                  <button key={key} onClick={() => { setSortBy(key); setShowSort(false); }}
+                    style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 20px", border: "none", background: sortBy === key ? (dark ? "rgba(29,78,216,0.08)" : "rgba(29,78,216,0.04)") : "transparent", cursor: "pointer" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <span style={{ fontSize: "1rem" }}>{emoji}</span>
+                      <span style={{ fontFamily: "'Cabinet Grotesk', sans-serif", fontWeight: sortBy === key ? 700 : 500, fontSize: "0.88rem", color: sortBy === key ? "#60a5fa" : (dark ? "#e8edf5" : "#0f172a") }}>{label}</span>
+                    </div>
+                    {sortBy === key && <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#60a5fa" }} />}
+                  </button>
+                ))}
+              </div>
+
+              <div style={{ padding: "0 20px 28px" }}>
+                <button onClick={() => { setSortBy("date"); setSortDir("desc"); setShowSort(false); }}
+                  style={{ width: "100%", height: 40, borderRadius: 10, border: `1px solid ${dark ? "rgba(255,255,255,0.08)" : "#e2e8f0"}`, background: "transparent", color: dark ? "#6b7a96" : "#64748b", fontFamily: "'Cabinet Grotesk',sans-serif", fontWeight: 600, fontSize: "0.82rem", cursor: "pointer" }}>
+                  Restaurar padrão
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
         )}
       </AnimatePresence>
 
