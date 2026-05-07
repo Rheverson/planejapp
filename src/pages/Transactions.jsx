@@ -611,6 +611,8 @@ export default function Transactions() {
         {recurringModal && (
           <RecurringEditModal
             mode={recurringModal.type}
+            transaction={recurringModal.transaction}
+            transactions={transactions}
             onSelect={handleRecurringSelect}
             onClose={() => setRecurringModal(null)}
           />
