@@ -99,14 +99,14 @@ export default function PromoPage() {
       await supabase.from("subscriptions").update({
         status: "trialing",
         trial_end: trialEnd.toISOString(),
-        plan: "pro",
+        current_period_end: trialEnd.toISOString(),
       }).eq("user_id", userId);
     } else {
       await supabase.from("subscriptions").insert([{
         user_id: userId,
         status: "trialing",
         trial_end: trialEnd.toISOString(),
-        plan: "pro",
+        current_period_end: trialEnd.toISOString(),
       }]);
     }
 
