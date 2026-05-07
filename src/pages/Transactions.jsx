@@ -15,7 +15,6 @@ import TransactionForm from "@/components/transactions/TransactionForm";
 import MonthSelector from "@/components/common/MonthSelector";
 import EmptyState from "@/components/common/EmptyState";
 import RecurringEditModal from "@/components/transactions/RecurringEditModal";
-import CreditCardManager from "@/components/financial/CreditCardManager";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -96,6 +95,15 @@ export default function Transactions() {
     queryKey: ["accounts", activeOwnerId],
     queryFn: async () => {
       const { data, error } = await supabase.from("accounts").select("*").eq("user_id", activeOwnerId);
+      if (error) throw error; return data;
+    },
+    enabled: !!activeOwnerId,
+  });
+
+  const { data: creditCards = [] } = useQuery({
+    queryKey: ["credit_cards", activeOwnerId],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("credit_cards").select("*").eq("user_id", activeOwnerId).eq("is_active", true);
       if (error) throw error; return data;
     },
     enabled: !!activeOwnerId,
@@ -328,6 +336,7 @@ export default function Transactions() {
         if (filter === "transfer") return t.type === "transfer";
         if (filter === "realized") return t.is_realized !== false;
         if (filter === "planned")  return t.is_realized === false;
+        if (filter === "cards")    return !!t.credit_card_id; // só transações de cartão
         return true;
       })
       .filter(t => {
@@ -545,15 +554,8 @@ export default function Transactions() {
         )}
       </AnimatePresence>
 
-      {/* ══ FATURAS ════════════════════════════════════════════ */}
-      {filter === "cards" && (
-        <div style={{ padding: "14px 14px 0" }}>
-          <CreditCardManager selectedDate={selectedDate} />
-        </div>
-      )}
-
       {/* ══ LISTA ═══════════════════════════════════════════════ */}
-      {filter !== "cards" && <div style={{ padding: "14px 14px 0" }}>
+      <div style={{ padding: "14px 14px 0" }}>
         {filteredTransactions.length > 0 ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {filteredTransactions.map((transaction) => (
@@ -561,6 +563,7 @@ export default function Transactions() {
                 <TransactionItem
                   transaction={transaction}
                   accounts={accounts}
+                  creditCards={creditCards}
                   onRegistrar={(t) => setRealizarPrevisao(t)}
                   onDuplicar={(t, meses) => duplicarMutation.mutate({ transaction: t, meses })}
                   onEdit={canAdd ? handleEdit : null}
@@ -578,7 +581,7 @@ export default function Transactions() {
             onAction={() => canAdd && setShowForm(true)}
           />
         )}
-      </div>}
+      </div>
 
       {/* FAB */}
       {canAdd && (

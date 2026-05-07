@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -13,133 +13,126 @@ const categoryIcons = {
   alimentacao: Utensils, moradia: Home, transporte: Car,
   saude: Heart, trabalho: Briefcase, educacao: GraduationCap,
   lazer: Plane, compras: ShoppingCart, presentes: Gift,
-  salario: DollarSign, outros: DollarSign,
+  salario: DollarSign, outros: DollarSign
 };
 
-const fmt = (v) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
+const fmt = (v) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
 
+// ✅ Corrige o bug de timezone: "2026-04-12" interpretado como UTC meia-noite
+// vira 11/04 às 21h em Brasília. Adicionar T12:00:00 evita isso.
 function parseDate(dateStr) {
   return new Date(dateStr + "T12:00:00");
 }
 
-function useIsDark() {
-  const [dark, setDark] = useState(() => localStorage.getItem("darkMode") === "true");
-  useEffect(() => {
-    const h = (e) => setDark(e.detail);
-    window.addEventListener("darkModeChange", h);
-    return () => window.removeEventListener("darkModeChange", h);
-  }, []);
-  return dark;
-}
-
-export default function TransactionItem({ transaction, accounts = [], delay = 0, onRegistrar, onDuplicar, onEdit, onDelete }) {
-  const dark = useIsDark();
+export default function TransactionItem({ transaction, accounts = [], creditCards = [], delay = 0, onRegistrar, onDuplicar, onEdit, onDelete }) {
   const [showDuplicar, setShowDuplicar] = useState(false);
 
-  const isTransfer = transaction.type === "transfer";
-  const isIncome   = transaction.type === "income";
+  const isTransfer = transaction.type === 'transfer';
+  const isIncome   = transaction.type === 'income';
   const isRealized = transaction.is_realized !== false;
 
   const Icon = isTransfer
     ? ArrowLeftRight
     : categoryIcons[transaction.category?.toLowerCase()] || DollarSign;
 
-  const account         = accounts.find(a => a.id === transaction.account_id);
+  const account = accounts.find(a => a.id === transaction.account_id);
   const transferAccount = accounts.find(a => a.id === transaction.transfer_account_id);
-  const accountLabel    = isTransfer && account && transferAccount
+  const accountLabel = isTransfer && account && transferAccount
     ? `${account.name} → ${transferAccount.name}`
     : account?.name || null;
 
-  // ── Tokens idênticos ao Accounts.jsx ─────────────────────
-  // dark:  cardBg #0c0e13, borda rgba(255,255,255,0.07)
-  // light: cardBg #ffffff,  borda rgba(17,24,39,0.07)
-  const cardBg   = dark ? "#0c0e13" : "#ffffff";
-  const cardBrd  = dark ? "rgba(255,255,255,0.07)" : "rgba(17,24,39,0.07)";
-  const divider  = dark ? "rgba(255,255,255,0.05)" : "rgba(17,24,39,0.05)";
-  const textC    = dark ? "#e8edf5" : "#0f172a";
-  const mutedC   = dark ? "#6b7a96" : "#64748b";
-  const actionBg = dark ? "rgba(255,255,255,0.04)" : "#f8fafc";
-  const actionBrd = dark ? "rgba(255,255,255,0.06)" : "rgba(17,24,39,0.07)";
-  const shadow   = dark ? "none" : "0 1px 3px rgba(17,24,39,0.04), 0 2px 8px rgba(17,24,39,0.04)";
+  // Cartão de crédito vinculado
+  const creditCard = creditCards.find(cc => cc.id === transaction.credit_card_id);
+  const walletLabel = creditCard ? `💳 ${creditCard.name}` : accountLabel;
 
-  // ── Cores por tipo ───────────────────────────────────────
-  const tc = isTransfer
-    ? { iconBg: dark ? "rgba(37,99,235,0.12)"  : "rgba(37,99,235,0.08)",  iconC: dark ? "#60a5fa" : "#2563eb", amtC: dark ? "#60a5fa" : "#2563eb", prefix: "⇄" }
+  const iconBg = isTransfer
+    ? 'bg-blue-50 dark:bg-blue-900/30'
     : isIncome
-      ? { iconBg: dark ? "rgba(5,150,105,0.12)"  : "rgba(5,150,105,0.08)",  iconC: dark ? "#2ecc8a" : "#059669", amtC: dark ? "#2ecc8a" : "#059669", prefix: "+" }
-      : { iconBg: dark ? "rgba(220,38,38,0.12)"  : "rgba(220,38,38,0.08)",  iconC: dark ? "#e85d5d" : "#dc2626", amtC: dark ? "#e85d5d" : "#dc2626", prefix: "-" };
+      ? 'bg-emerald-50 dark:bg-emerald-900/30'
+      : 'bg-red-50 dark:bg-red-900/30';
+
+  const iconColor = isTransfer
+    ? 'text-blue-500'
+    : isIncome
+      ? 'text-emerald-600'
+      : 'text-red-600';
+
+  const amountColor = isTransfer
+    ? 'text-blue-500'
+    : isIncome
+      ? 'text-emerald-600'
+      : 'text-red-600';
+
+  const amountPrefix = isTransfer ? '⇄' : isIncome ? '+' : '-';
+
+  const handleDuplicarConfirm = (meses) => {
+    onDuplicar?.(transaction, meses);
+    setShowDuplicar(false);
+  };
 
   const hasActions = onRegistrar || onDuplicar || onEdit || onDelete;
 
   return (
     <>
       <motion.div
-        initial={{ opacity: 0, y: 6 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.22, delay }}
-        style={{
-          background: cardBg,
-          border: `1px solid ${cardBrd}`,
-          borderRadius: 14,
-          overflow: "hidden",
-          boxShadow: shadow,
-          opacity: isRealized ? 1 : 0.72,
-          fontFamily: "'Outfit',sans-serif",
-        }}
+        initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }}
+        transition={{ duration: 0.3, delay }}
+        className={`rounded-xl bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 hover:shadow-sm transition-all duration-200 overflow-hidden ${!isRealized ? 'opacity-80' : ''}`}
       >
-        {/* Linha principal */}
-        <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px" }}>
-          <div style={{ width: 36, height: 36, borderRadius: 11, flexShrink: 0, background: tc.iconBg, display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <Icon size={16} color={tc.iconC} strokeWidth={2} />
+        <div className="flex items-center gap-3 p-3">
+          <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${iconBg}`}>
+            <Icon className={`w-4 h-4 ${iconColor}`} />
           </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 2 }}>
-              <p style={{ fontWeight: 600, fontSize: "0.85rem", color: textC, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-1.5">
+              <p className="font-medium text-gray-900 dark:text-white text-sm truncate">
                 {transaction.description}
               </p>
               {!isRealized
-                ? <Clock size={11} color="#f59e0b" style={{ flexShrink: 0 }} />
-                : <CheckCircle2 size={11} color={dark ? "#2ecc8a" : "#059669"} style={{ flexShrink: 0 }} />
+                ? <Clock className="w-3 h-3 text-amber-500 flex-shrink-0" />
+                : <CheckCircle2 className="w-3 h-3 text-emerald-500 flex-shrink-0" />
               }
             </div>
-            <p style={{ fontSize: "0.7rem", color: mutedC, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            <p className="text-xs text-gray-400 truncate">
+              {/* ✅ usa parseDate para evitar bug de timezone UTC→Brasília */}
               {format(parseDate(transaction.date), "dd 'de' MMM", { locale: ptBR })}
               {!isTransfer && transaction.category && ` · ${transaction.category}`}
-              {accountLabel && ` · ${accountLabel}`}
+              {walletLabel && ` · `}<span style={{ color: creditCard ? "#8b5cf6" : "inherit" }}>{walletLabel}</span>
             </p>
           </div>
-          <span style={{ fontFamily: "'Cabinet Grotesk',sans-serif", fontWeight: 700, fontSize: "0.9rem", color: tc.amtC, flexShrink: 0, letterSpacing: "-0.02em" }}>
-            {tc.prefix} {fmt(transaction.amount)}
+
+          <span className={`font-semibold text-sm flex-shrink-0 ${amountColor}`}>
+            {amountPrefix} {fmt(transaction.amount)}
           </span>
         </div>
 
-        {/* Barra de ações */}
         {hasActions && (
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 6, padding: "5px 12px 8px", borderTop: `1px solid ${divider}` }}>
+          <div className="flex items-center justify-end gap-1 px-3 pb-2 border-t border-gray-50 dark:border-gray-700 pt-1.5">
             {!isRealized && onRegistrar && (
-              <motion.button whileTap={{ scale: 0.92 }} onClick={() => onRegistrar(transaction)}
-                style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 10px", borderRadius: 9, border: "none", cursor: "pointer", background: dark ? "rgba(37,99,235,0.12)" : "rgba(37,99,235,0.08)" }}>
-                <CheckCheck size={13} color={dark ? "#60a5fa" : "#2563eb"} />
-                <span style={{ fontSize: "0.72rem", fontWeight: 600, color: dark ? "#60a5fa" : "#2563eb" }}>Registrar</span>
-              </motion.button>
+              <button type="button" onClick={() => onRegistrar(transaction)} title="Registrar"
+                className="flex items-center gap-1 px-2 py-1 rounded-lg bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 transition-colors">
+                <CheckCheck className="w-3.5 h-3.5 text-blue-600" />
+                <span className="text-xs text-blue-600 font-medium">Registrar</span>
+              </button>
             )}
             {onDuplicar && !isTransfer && (
-              <motion.button whileTap={{ scale: 0.9 }} onClick={() => setShowDuplicar(true)}
-                style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${actionBrd}`, background: actionBg, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
-                <Copy size={13} color={mutedC} />
-              </motion.button>
+              <button type="button" onClick={() => setShowDuplicar(true)} title="Duplicar"
+                className="w-7 h-7 rounded-lg bg-gray-50 dark:bg-gray-700 flex items-center justify-center hover:bg-gray-100 transition-colors">
+                <Copy className="w-3.5 h-3.5 text-gray-500" />
+              </button>
             )}
             {onEdit && !isTransfer && (
-              <motion.button whileTap={{ scale: 0.9 }} onClick={() => onEdit(transaction)}
-                style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${actionBrd}`, background: actionBg, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
-                <Pencil size={13} color={mutedC} />
-              </motion.button>
+              <button type="button" onClick={() => onEdit(transaction)} title="Editar"
+                className="w-7 h-7 rounded-lg bg-gray-50 dark:bg-gray-700 flex items-center justify-center hover:bg-gray-100 transition-colors">
+                <Pencil className="w-3.5 h-3.5 text-gray-500" />
+              </button>
             )}
             {onDelete && (
-              <motion.button whileTap={{ scale: 0.9 }} onClick={() => onDelete(transaction.id)}
-                style={{ width: 28, height: 28, borderRadius: 8, border: "none", background: dark ? "rgba(220,38,38,0.1)" : "rgba(220,38,38,0.07)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
-                <Trash2 size={13} color={dark ? "#e85d5d" : "#dc2626"} />
-              </motion.button>
+              <button type="button" onClick={() => onDelete(transaction.id)} title="Excluir"
+                className="w-7 h-7 rounded-lg bg-red-50 dark:bg-red-900/20 flex items-center justify-center hover:bg-red-100 transition-colors">
+                <Trash2 className="w-3.5 h-3.5 text-red-500" />
+              </button>
             )}
           </div>
         )}
@@ -149,7 +142,7 @@ export default function TransactionItem({ transaction, accounts = [], delay = 0,
         {showDuplicar && (
           <DuplicarModal
             subtitulo={`${transaction.description} · ${fmt(transaction.amount)}`}
-            onConfirm={(meses) => { onDuplicar?.(transaction, meses); setShowDuplicar(false); }}
+            onConfirm={handleDuplicarConfirm}
             onClose={() => setShowDuplicar(false)}
           />
         )}
