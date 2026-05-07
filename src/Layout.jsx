@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Home, ArrowLeftRight, Wallet, Target, Sparkles, User } from "lucide-react";
 import { usePhoneVerification } from "@/hooks/usePhoneVerification";
 import PhoneVerificationModal from "@/components/profile/PhoneVerificationModal";
+import { useNotificationListener } from "@/hooks/useNotificationListener";
 
 const navItems = [
   { name: "Home",       icon: Home,          page: "Home"         },
@@ -23,6 +24,10 @@ export default function Layout({ children, currentPageName }) {
   const showProfileIcon = !HIDE_PROFILE_ICON.includes(currentPageName);
 
   const { showPhoneModal, setShowPhoneModal } = usePhoneVerification();
+  const { permissionGranted, requestPermission, isAvailable } = useNotificationListener();
+
+  const [showCaptureBanner, setShowCaptureBanner] = useState(false);
+  const [captureInfo, setCaptureInfo] = useState(null);
 
   useEffect(() => {
     const savedDarkMode = localStorage.getItem("darkMode") === "true";
@@ -40,6 +45,17 @@ export default function Layout({ children, currentPageName }) {
     return () => window.removeEventListener("darkModeChange", handleDarkModeChange);
   }, []);
 
+  // Banner quando captura uma transação automaticamente
+  useEffect(() => {
+    const handler = (e) => {
+      setCaptureInfo(e.detail);
+      setShowCaptureBanner(true);
+      setTimeout(() => setShowCaptureBanner(false), 4000);
+    };
+    window.addEventListener("transactionCaptured", handler);
+    return () => window.removeEventListener("transactionCaptured", handler);
+  }, []);
+
   const leftItems  = navItems.slice(0, 2);
   const rightItems = navItems.slice(2);
 
@@ -51,16 +67,58 @@ export default function Layout({ children, currentPageName }) {
         body { font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
         .hide-scrollbar::-webkit-scrollbar { display: none; }
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        /* Finn button — azul landing */
         .finn-glow        { box-shadow: 0 0 22px rgba(29,78,216,0.5), 0 4px 20px rgba(55,48,163,0.4); }
         .finn-glow-active { box-shadow: 0 0 32px rgba(29,78,216,0.75), 0 4px 28px rgba(55,48,163,0.6); }
-        /* Dark mode — fundo preto estilo landing */
         .dark body { background: #060709; }
         .dark .dark\:bg-gray-900 { background: #060709 !important; }
         .dark .dark\:bg-gray-800 { background: #0c0e13 !important; }
         .dark .dark\:bg-gray-700\/60 { background: rgba(12,14,19,0.8) !important; }
         .dark .dark\:border-gray-700 { border-color: rgba(255,255,255,0.07) !important; }
       `}</style>
+
+      {/* Banner: pede permissão de notificações (só no APK Android) */}
+      <AnimatePresence>
+        {isAvailable && !permissionGranted && (
+          <motion.div
+            initial={{ y: -60 }} animate={{ y: 0 }} exit={{ y: -60 }}
+            onClick={requestPermission}
+            style={{
+              position: "fixed", top: 0, left: 0, right: 0, zIndex: 100,
+              background: "linear-gradient(135deg,#1d4ed8,#3730a3)",
+              padding: "10px 16px",
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+              cursor: "pointer", boxShadow: "0 4px 20px rgba(29,78,216,0.4)",
+            }}>
+            <Sparkles size={14} color="#fff" />
+            <span style={{ color: "#fff", fontSize: "0.78rem", fontWeight: 600, fontFamily: "'Cabinet Grotesk',sans-serif" }}>
+              ⚡ Toque para ativar captura automática de transações
+            </span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Banner: transação capturada automaticamente */}
+      <AnimatePresence>
+        {showCaptureBanner && captureInfo && (
+          <motion.div
+            initial={{ y: -60, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -60, opacity: 0 }}
+            style={{
+              position: "fixed", top: 0, left: 0, right: 0, zIndex: 100,
+              background: captureInfo.type === "income"
+                ? "linear-gradient(135deg,#059669,#047857)"
+                : "linear-gradient(135deg,#dc2626,#b91c1c)",
+              padding: "12px 16px",
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+              boxShadow: "0 4px 20px rgba(0,0,0,0.3)",
+            }}>
+            <span style={{ fontSize: "1rem" }}>{captureInfo.type === "income" ? "⬆️" : "⬇️"}</span>
+            <span style={{ color: "#fff", fontSize: "0.82rem", fontWeight: 700, fontFamily: "'Cabinet Grotesk',sans-serif" }}>
+              {captureInfo.type === "income" ? "Entrada" : "Saída"} de R$ {captureInfo.amount.toFixed(2).replace(".", ",")} capturada!
+            </span>
+            <span style={{ color: "rgba(255,255,255,0.7)", fontSize: "0.7rem" }}>· {captureInfo.description}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Ícone de perfil flutuante */}
       {showProfileIcon && (
@@ -116,8 +174,6 @@ export default function Layout({ children, currentPageName }) {
         >
           {leftItems.map((item) => {
             const isActive = currentPageName === item.page;
-            const activeColor = darkMode ? "#60a5fa" : "text-blue-600";
-            const inactiveColor = darkMode ? "#3a4259" : "#9ca3af";
             return (
               <Link key={item.page} to={createPageUrl(item.page)}
                 className="flex flex-col items-center justify-center h-full relative no-underline">
@@ -127,49 +183,42 @@ export default function Layout({ children, currentPageName }) {
                     style={{ background: "linear-gradient(90deg, #1d4ed8, #3730a3)" }}
                     transition={{ type: "spring", stiffness: 380, damping: 30 }} />
                 )}
-                <div className={`p-1.5 rounded-xl transition-all duration-300`}
+                <div className="p-1.5 rounded-xl transition-all duration-300"
                   style={{ background: isActive ? (darkMode ? "rgba(29,78,216,0.15)" : "rgba(29,78,216,0.08)") : "transparent" }}>
                   <item.icon
                     className="w-5 h-5 transition-colors duration-300"
                     style={{ color: isActive ? (darkMode ? "#60a5fa" : "#1d4ed8") : (darkMode ? "#3a4259" : "#9ca3af") }}
                   />
                 </div>
-                <span
-                  className="text-[10px] mt-0.5 transition-all duration-300"
-                  style={{
-                    color: isActive ? (darkMode ? "#60a5fa" : "#1d4ed8") : (darkMode ? "#3a4259" : "#9ca3af"),
-                    fontWeight: isActive ? 700 : 400,
-                  }}
-                >{item.name}</span>
+                <span className="text-[10px] mt-0.5 transition-all duration-300"
+                  style={{ color: isActive ? (darkMode ? "#60a5fa" : "#1d4ed8") : (darkMode ? "#3a4259" : "#9ca3af"), fontWeight: isActive ? 700 : 400 }}>
+                  {item.name}
+                </span>
               </Link>
             );
           })}
 
-          {/* Finn — botão azul landing */}
+          {/* Finn */}
           <div className="flex flex-col items-center justify-end pb-1 relative">
-            <span
-              className="text-[10px] font-bold mb-0.5 transition-colors duration-300"
-              style={{ color: isAIActive ? "#60a5fa" : (darkMode ? "#3a4259" : "#9ca3af") }}
-            >Finn</span>
+            <span className="text-[10px] font-bold mb-0.5 transition-colors duration-300"
+              style={{ color: isAIActive ? "#60a5fa" : (darkMode ? "#3a4259" : "#9ca3af") }}>
+              Finn
+            </span>
             <motion.button
-              whileTap={{ scale: 0.92 }}
-              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.92 }} whileHover={{ scale: 1.05 }}
               onClick={() => navigate(createPageUrl("AIInsights"))}
               className={`absolute bottom-6 w-14 h-14 rounded-2xl flex items-center justify-center border-none cursor-pointer ${isAIActive ? "finn-glow-active" : "finn-glow"}`}
               style={{ background: "linear-gradient(135deg, #1d4ed8 0%, #3730a3 60%, #4c1d95 100%)" }}
             >
               {isAIActive && (
-                <motion.div
-                  className="absolute inset-0 rounded-2xl"
+                <motion.div className="absolute inset-0 rounded-2xl"
                   style={{ background: "rgba(96,165,250,0.3)" }}
                   animate={{ scale: [1, 1.15, 1], opacity: [0.4, 0, 0.4] }}
-                  transition={{ duration: 2, repeat: Infinity }}
-                />
+                  transition={{ duration: 2, repeat: Infinity }} />
               )}
               <motion.div
                 animate={{ rotate: isAIActive ? [0, 10, -10, 0] : 0 }}
-                transition={{ duration: 2, repeat: isAIActive ? Infinity : 0, repeatDelay: 3 }}
-              >
+                transition={{ duration: 2, repeat: isAIActive ? Infinity : 0, repeatDelay: 3 }}>
                 <Sparkles className="w-6 h-6 text-white relative z-10" />
               </motion.div>
             </motion.button>
@@ -188,18 +237,13 @@ export default function Layout({ children, currentPageName }) {
                 )}
                 <div className="p-1.5 rounded-xl transition-all duration-300"
                   style={{ background: isActive ? (darkMode ? "rgba(29,78,216,0.15)" : "rgba(29,78,216,0.08)") : "transparent" }}>
-                  <item.icon
-                    className="w-5 h-5 transition-colors duration-300"
-                    style={{ color: isActive ? (darkMode ? "#60a5fa" : "#1d4ed8") : (darkMode ? "#3a4259" : "#9ca3af") }}
-                  />
+                  <item.icon className="w-5 h-5 transition-colors duration-300"
+                    style={{ color: isActive ? (darkMode ? "#60a5fa" : "#1d4ed8") : (darkMode ? "#3a4259" : "#9ca3af") }} />
                 </div>
-                <span
-                  className="text-[10px] mt-0.5 transition-all duration-300"
-                  style={{
-                    color: isActive ? (darkMode ? "#60a5fa" : "#1d4ed8") : (darkMode ? "#3a4259" : "#9ca3af"),
-                    fontWeight: isActive ? 700 : 400,
-                  }}
-                >{item.name}</span>
+                <span className="text-[10px] mt-0.5 transition-all duration-300"
+                  style={{ color: isActive ? (darkMode ? "#60a5fa" : "#1d4ed8") : (darkMode ? "#3a4259" : "#9ca3af"), fontWeight: isActive ? 700 : 400 }}>
+                  {item.name}
+                </span>
               </Link>
             );
           })}
