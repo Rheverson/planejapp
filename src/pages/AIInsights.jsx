@@ -883,7 +883,6 @@ export default function AIInsights() {
                 color: activeTab === tab.id ? "#ffffff" : "rgba(255,255,255,0.45)",
                 borderBottom: activeTab === tab.id ? "2px solid #ffffff" : "2px solid transparent",
                 background: "none", border: "none",
-                borderBottom: activeTab === tab.id ? "2px solid #ffffff" : "2px solid transparent",
                 cursor: "pointer", transition: "all .2s",
                 fontFamily: "'Outfit',sans-serif",
               }}>
