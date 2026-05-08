@@ -18,6 +18,7 @@ import Subscribe from "@/pages/Subscribe";
 import SubscriptionSuccess from "@/pages/SubscriptionSuccess";
 import OnboardingTour from '@/pages/OnboardingTour';
 import PromoPage from '@/pages/PromoPage';
+import PaymentFailed from '@/pages/PaymentFailed';
 import { MonthProvider } from '@/lib/MonthContext';
 import { PrivacyProvider } from '@/lib/PrivacyContext';
 import { useQuery } from '@tanstack/react-query';
@@ -92,13 +93,24 @@ function hasActiveAccess(subscription) {
   return false;
 }
 
+function isPaymentFailed(subscription) {
+  if (!subscription) return false;
+  return (
+    subscription.status === 'past_due' ||
+    (subscription.status === 'cancelled' &&
+      (!subscription.current_period_end ||
+        new Date(subscription.current_period_end) < new Date()))
+  );
+}
+
 const AuthenticatedApp = () => {
   const { loading, user } = useAuth();
   const { data: subscription, isLoading: subLoading } = useSubscription(user?.id);
   const { data: profile, isLoading: profileLoading } = useProfile(user?.id);
   const navigate = useNavigate();
 
-  const isSubscribed = hasActiveAccess(subscription);
+  const isSubscribed    = hasActiveAccess(subscription);
+  const paymentFailed   = isPaymentFailed(subscription);
 
   useEffect(() => {
     if (user) initPushNotifications();
@@ -128,6 +140,7 @@ const AuthenticatedApp = () => {
     return <PageLoader />;
   }
 
+  // ── Sem login ────────────────────────────────────────────
   if (!user) {
     return (
       <Routes>
@@ -143,18 +156,29 @@ const AuthenticatedApp = () => {
     );
   }
 
+  // ── Pagamento falhou ─────────────────────────────────────
+  if (paymentFailed) {
+    return (
+      <Routes>
+        <Route path="*" element={<PaymentFailed />} />
+      </Routes>
+    );
+  }
+
+  // ── Sem assinatura ───────────────────────────────────────
   if (!isSubscribed) {
     return (
       <Routes>
         <Route path="/Promo" element={<PromoPage />} />
         <Route path="/subscribe" element={<Subscribe />} />
         <Route path="/subscription-success" element={<SubscriptionSuccess />} />
-        <Route path="/onboarding-tour" element={<OnboardingTour />} />  {/* ← ADD */}
+        <Route path="/onboarding-tour" element={<OnboardingTour />} />
         <Route path="*" element={<Navigate to="/subscribe" replace />} />
       </Routes>
     );
   }
 
+  // ── Assinatura ativa ─────────────────────────────────────
   return (
     <Suspense fallback={<PageLoader />}>
       <Routes>

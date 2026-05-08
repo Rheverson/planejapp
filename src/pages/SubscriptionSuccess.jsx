@@ -90,7 +90,7 @@ export default function SubscriptionSuccess() {
 
           {/* Botão */}
           <motion.button initial={{ opacity:0,y:10 }} animate={{ opacity:1,y:0 }} transition={{ delay:.7 }}
-            onClick={() => navigate("/")}
+            onClick={() => navigate("/onboarding-tour")}
             style={{ width:"100%",background:"#16a34a",border:"none",borderRadius:12,padding:"14px",color:"#fff",fontSize:"1rem",fontWeight:700,fontFamily:"'Cabinet Grotesk',sans-serif",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:8,boxShadow:"0 0 30px rgba(22,163,74,0.35)",transition:"all .2s",letterSpacing:"-0.01em" }}
             onMouseEnter={e => e.currentTarget.style.background="#15803d"}
             onMouseLeave={e => e.currentTarget.style.background="#16a34a"}>
