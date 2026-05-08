@@ -98,15 +98,12 @@ const AuthenticatedApp = () => {
   const { data: profile, isLoading: profileLoading } = useProfile(user?.id);
   const navigate = useNavigate();
 
-  // Calcula ANTES dos useEffects para evitar temporal dead zone
   const isSubscribed = hasActiveAccess(subscription);
 
-  // Push notifications
   useEffect(() => {
     if (user) initPushNotifications();
   }, [user?.id]);
 
-  // Promo: redireciona para ativação se tiver código pendente
   useEffect(() => {
     if (!user || isSubscribed || subLoading) return;
     const pendingCode = localStorage.getItem("pending_promo_code")
@@ -116,7 +113,6 @@ const AuthenticatedApp = () => {
     }
   }, [user?.id, isSubscribed, subLoading]);
 
-  // Onboarding
   useEffect(() => {
     if (!user || profileLoading) return;
     if (!isSubscribed) return;

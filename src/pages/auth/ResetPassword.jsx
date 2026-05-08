@@ -1,296 +1,174 @@
-// src/pages/ResetPassword.jsx - PÁGINA DE REDEFINIÇÃO DE SENHA
-// Essa página é acessada pelo link no email
-// Fluxo: Link no email → Esta página → Nova Senha → Login
-
 import React, { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { ArrowLeft, Loader2, Eye, EyeOff, CheckCircle2, X, AlertCircle } from "lucide-react";
+import { ArrowLeft, Loader2, Eye, EyeOff, CheckCircle2, X, AlertCircle, Lock } from "lucide-react";
+
+const Req = ({ met, label }) => (
+  <div style={{ display:"flex",alignItems:"center",gap:8 }}>
+    {met ? <CheckCircle2 size={13} color="#2ecc8a"/> : <X size={13} color="rgba(255,255,255,0.15)"/>}
+    <span style={{ fontSize:"0.78rem",color:met?"#2ecc8a":"#3a4259" }}>{label}</span>
+  </div>
+);
 
 export default function ResetPassword() {
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [linkValid, setLinkValid] = useState(null); // null = verificando, true = válido, false = inválido
-  const [tokenVerified, setTokenVerified] = useState(false);
-
+  const [newPass, setNewPass]   = useState("");
+  const [confirm, setConfirm]   = useState("");
+  const [showNew, setShowNew]   = useState(false);
+  const [showCon, setShowCon]   = useState(false);
+  const [loading, setLoading]   = useState(false);
+  const [linkValid, setLinkValid] = useState(null);
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
 
-  // Validação de senha
-  const passwordValidation = useMemo(() => {
-    return {
-      hasMinLength: newPassword.length >= 8,
-      hasUpperCase: /[A-Z]/.test(newPassword),
-      hasLowerCase: /[a-z]/.test(newPassword),
-      hasNumber: /[0-9]/.test(newPassword),
-      hasSymbol: /[!@#$%^&*(),.?":{}|<>]/.test(newPassword),
-      isValid: newPassword.length >= 8 && 
-               /[A-Z]/.test(newPassword) && 
-               /[a-z]/.test(newPassword) && 
-               /[0-9]/.test(newPassword) && 
-               /[!@#$%^&*(),.?":{}|<>]/.test(newPassword)
-    };
-  }, [newPassword]);
+  const v = useMemo(() => ({
+    len:    newPass.length >= 8,
+    upper:  /[A-Z]/.test(newPass),
+    lower:  /[a-z]/.test(newPass),
+    number: /[0-9]/.test(newPass),
+    symbol: /[!@#$%^&*(),.?":{}|<>]/.test(newPass),
+  }), [newPass]);
+  const valid = Object.values(v).every(Boolean);
+  const match = newPass && confirm && newPass === confirm;
 
-  // ✅ Verificar se o link é válido quando a página carrega
   useEffect(() => {
-    const verifyLink = async () => {
-      try {
-        // ✅ Verificar se há uma sessão válida (criada pelo link no email)
-        const { data: { session }, error } = await supabase.auth.getSession();
-
-        if (error || !session) {
-          // Link inválido ou expirado
-          setLinkValid(false);
-          toast.error("Link inválido ou expirado", {
-            description: "Por favor, solicite um novo link de recuperação."
-          });
-          return;
-        }
-
-        // ✅ Link válido! Usuário tem sessão de recuperação
-        setLinkValid(true);
-        setTokenVerified(true);
-      } catch (err) {
-        console.error("Erro ao verificar link:", err);
-        setLinkValid(false);
-      }
+    const check = async () => {
+      const { data: { session }, error } = await supabase.auth.getSession();
+      setLinkValid(!error && !!session);
     };
-
-    verifyLink();
+    check();
   }, []);
 
-  // Redefinir senha
-  const handleResetPassword = async (e) => {
+  const handleReset = async (e) => {
     e.preventDefault();
-
-    if (newPassword !== confirmPassword) {
-      toast.error("Senhas não conferem", {
-        description: "Verifique se as senhas são iguais."
-      });
-      return;
-    }
-
-    if (!passwordValidation.isValid) {
-      toast.error("Senha fraca", {
-        description: "A senha não atende aos requisitos de segurança."
-      });
-      return;
-    }
-
+    if (!valid || !match) return;
     setLoading(true);
     try {
-      // ✅ Atualizar a senha usando a sessão de recuperação
-      const { error } = await supabase.auth.updateUser({ 
-        password: newPassword 
-      });
-
+      const { error } = await supabase.auth.updateUser({ password: newPass });
       if (error) throw error;
-
-      toast.success("Sucesso!", {
-        description: "Sua senha foi alterada com sucesso."
-      });
-
-      // ✅ Fazer logout
+      toast.success("Senha alterada com sucesso!");
       await supabase.auth.signOut();
-
-      // ✅ Redirecionar para login
-      setTimeout(() => {
-        navigate("/login", { 
-          replace: true,
-          state: { message: "Senha redefinida com sucesso. Faça login com sua nova senha." }
-        });
-      }, 1500);
+      setTimeout(() => navigate("/login", { replace:true }), 1200);
     } catch (err) {
-      toast.error("Erro ao redefinir senha", {
-        description: err.message || "Tente novamente mais tarde."
-      });
-      console.error("Erro:", err);
-    } finally {
-      setLoading(false);
-    }
+      toast.error("Erro ao redefinir", { description: err.message });
+    } finally { setLoading(false); }
   };
 
-  const PasswordRequirement = ({ met, label }) => (
-    <div className="flex items-center gap-2 text-sm">
-      {met ? (
-        <CheckCircle2 size={14} className="text-green-500" />
-      ) : (
-        <X size={14} className="text-gray-300" />
-      )}
-      <span className={met ? "text-green-600" : "text-gray-500"}>{label}</span>
+  const Shell = ({ children }) => (
+    <div className="min-h-screen flex flex-col justify-center items-center p-4 relative overflow-hidden"
+      style={{ background:"linear-gradient(170deg,#0d1829 0%,#060709 50%)" }}>
+      <div className="absolute pointer-events-none" style={{ width:500,height:300,borderRadius:"50%",background:"rgba(29,78,216,0.18)",top:-80,left:"50%",transform:"translateX(-50%)",filter:"blur(80px)" }}/>
+      <div className="absolute pointer-events-none" style={{ width:200,height:200,borderRadius:"50%",background:"rgba(55,48,163,0.1)",bottom:"10%",right:"-30px",filter:"blur(60px)" }}/>
+      <motion.div initial={{ opacity:0,y:-16 }} animate={{ opacity:1,y:0 }} transition={{ duration:.5 }}
+        className="flex items-center gap-2 mb-8 relative z-10">
+        <div style={{ width:9,height:9,borderRadius:"50%",background:"#60a5fa",marginTop:2 }}/>
+        <span style={{ fontFamily:"'Cabinet Grotesk',sans-serif",fontWeight:900,fontSize:"1.6rem",color:"#e8edf5",letterSpacing:"-0.04em" }}>PlanejeApp</span>
+      </motion.div>
+      <motion.div initial={{ opacity:0,y:24 }} animate={{ opacity:1,y:0 }} transition={{ duration:.5,delay:.1 }}
+        className="relative z-10 w-full" style={{ maxWidth:420 }}>
+        <div style={{ background:"#0c0e13",border:"0.5px solid rgba(255,255,255,0.08)",borderRadius:20,padding:"28px 28px 24px" }}>
+          {children}
+        </div>
+      </motion.div>
     </div>
   );
 
-  // ✅ Verificando link
-  if (linkValid === null) {
-    return (
-      <div className="min-h-screen bg-gradient-to-b from-blue-600 to-blue-700 flex flex-col justify-center items-center p-4">
-        <motion.div 
-          initial={{ y: 50, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          className="bg-white w-full max-w-md rounded-3xl p-8 shadow-2xl text-center"
-        >
-          <Loader2 size={48} className="animate-spin text-blue-600 mx-auto mb-4" />
-          <p className="text-gray-600">Verificando link de recuperação...</p>
-        </motion.div>
+  if (linkValid === null) return (
+    <Shell>
+      <div style={{ textAlign:"center",padding:"20px 0" }}>
+        <Loader2 size={36} color="#1d4ed8" className="animate-spin" style={{ margin:"0 auto 12px" }}/>
+        <p style={{ fontSize:"0.82rem",color:"#6b7a96" }}>Verificando link de recuperação...</p>
       </div>
-    );
-  }
+    </Shell>
+  );
 
-  // ❌ Link inválido ou expirado
-  if (!linkValid) {
-    return (
-      <div className="min-h-screen bg-gradient-to-b from-blue-600 to-blue-700 flex flex-col justify-center items-center p-4">
-        <motion.div 
-          initial={{ y: 50, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          className="bg-white w-full max-w-md rounded-3xl p-8 shadow-2xl"
-        >
-          <div className="text-center space-y-4">
-            <div className="bg-red-100 p-4 rounded-full w-fit mx-auto">
-              <AlertCircle size={48} className="text-red-600" />
-            </div>
-
-            <div>
-              <h2 className="text-2xl font-bold text-gray-900">Link Expirado</h2>
-              <p className="text-gray-600 text-sm mt-2">
-                O link de recuperação expirou ou é inválido. Por favor, solicite um novo link.
-              </p>
-            </div>
-
-            <Button 
-              onClick={() => navigate("/forgot-password")}
-              className="w-full h-12 bg-blue-600 hover:bg-blue-700 rounded-xl text-lg font-semibold"
-            >
-              Solicitar Novo Link
-            </Button>
-          </div>
-        </motion.div>
+  if (!linkValid) return (
+    <Shell>
+      <div style={{ textAlign:"center" }}>
+        <div style={{ width:64,height:64,borderRadius:"50%",background:"rgba(232,93,93,0.1)",border:"1px solid rgba(232,93,93,0.2)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px" }}>
+          <AlertCircle size={30} color="#e85d5d"/>
+        </div>
+        <h2 style={{ fontFamily:"'Cabinet Grotesk',sans-serif",fontWeight:900,fontSize:"1.3rem",color:"#e8edf5",letterSpacing:"-0.03em",marginBottom:8 }}>Link expirado</h2>
+        <p style={{ fontSize:"0.82rem",color:"#6b7a96",lineHeight:1.6,marginBottom:20 }}>
+          O link de recuperação expirou ou é inválido. Solicite um novo.
+        </p>
+        <button onClick={() => navigate("/forgot-password")}
+          style={{ width:"100%",background:"#1d4ed8",border:"none",borderRadius:12,padding:13,color:"#fff",fontSize:"1rem",fontWeight:700,fontFamily:"'Cabinet Grotesk',sans-serif",cursor:"pointer",boxShadow:"0 0 30px rgba(29,78,216,0.35)",letterSpacing:"-0.01em" }}>
+          Solicitar novo link
+        </button>
       </div>
-    );
-  }
+    </Shell>
+  );
 
-  // ✅ Link válido - Mostrar formulário de nova senha
   return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-600 to-blue-700 flex flex-col justify-center items-center p-4">
-      <motion.div 
-        initial={{ y: 50, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        className="bg-white w-full max-w-md rounded-3xl p-8 shadow-2xl"
-      >
-        <motion.div
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          className="space-y-6"
-        >
-          <button 
-            onClick={() => navigate("/login")}
-            className="flex items-center gap-2 text-sm text-blue-600 font-medium hover:text-blue-700 transition-colors"
-          >
-            <ArrowLeft size={16} /> Voltar para Login
-          </button>
+    <Shell>
+      <button onClick={() => navigate("/login")}
+        style={{ display:"flex",alignItems:"center",gap:6,color:"#60a5fa",fontSize:"0.82rem",fontWeight:600,background:"none",border:"none",cursor:"pointer",marginBottom:20,fontFamily:"'Outfit',sans-serif" }}>
+        <ArrowLeft size={16}/> Voltar para o login
+      </button>
 
-          <div>
-            <h2 className="text-2xl font-bold text-gray-900">Defina uma Nova Senha</h2>
-            <p className="text-gray-600 text-sm mt-2">
-              Crie uma senha forte para sua conta.
-            </p>
+      <h2 style={{ fontFamily:"'Cabinet Grotesk',sans-serif",fontWeight:900,fontSize:"1.4rem",color:"#e8edf5",letterSpacing:"-0.03em",marginBottom:6 }}>
+        Nova senha
+      </h2>
+      <p style={{ fontSize:"0.82rem",color:"#6b7a96",marginBottom:22,lineHeight:1.6 }}>
+        Crie uma senha forte para sua conta.
+      </p>
+
+      <form onSubmit={handleReset} style={{ display:"flex",flexDirection:"column",gap:14 }}>
+        <div>
+          <label style={{ fontSize:"0.72rem",fontWeight:600,color:"#6b7a96",textTransform:"uppercase",letterSpacing:"0.1em",display:"block",marginBottom:6 }}>Nova senha</label>
+          <div style={{ position:"relative" }}>
+            <Lock size={15} style={{ position:"absolute",left:14,top:"50%",transform:"translateY(-50%)",color:"#3a4259" }}/>
+            <input type={showNew?"text":"password"} placeholder="••••••••" value={newPass}
+              onChange={e => setNewPass(e.target.value)} autoFocus
+              style={{ width:"100%",background:"#12151c",border:"0.5px solid rgba(255,255,255,0.08)",borderRadius:10,padding:"12px 44px",color:"#e8edf5",fontSize:"0.95rem",outline:"none",fontFamily:"'Outfit',sans-serif",boxSizing:"border-box" }}
+              onFocus={e => e.target.style.borderColor="rgba(37,99,235,0.5)"}
+              onBlur={e => e.target.style.borderColor="rgba(255,255,255,0.08)"}
+            />
+            <button type="button" onClick={() => setShowNew(!showNew)}
+              style={{ position:"absolute",right:14,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#6b7a96",cursor:"pointer" }}>
+              {showNew?<EyeOff size={17}/>:<Eye size={17}/>}
+            </button>
           </div>
+        </div>
 
-          <form onSubmit={handleResetPassword} className="space-y-4">
-            {/* Nova Senha */}
-            <div className="space-y-2">
-              <Label htmlFor="newPassword" className="font-semibold text-gray-800">Nova Senha</Label>
-              <div className="relative">
-                <Input 
-                  id="newPassword"
-                  type={showPassword ? "text" : "password"} 
-                  value={newPassword} 
-                  onChange={(e) => setNewPassword(e.target.value)} 
-                  placeholder="••••••••"
-                  className="h-12 pr-10 rounded-xl border-gray-200 focus:ring-blue-500"
-                  disabled={loading}
-                  autoFocus
-                />
-                <button 
-                  type="button" 
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                >
-                  {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-                </button>
-              </div>
-            </div>
-
-            {/* Requisitos de Senha */}
-            <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 space-y-2">
-              <p className="text-xs font-semibold text-gray-700">Requisitos da senha:</p>
-              <PasswordRequirement met={passwordValidation.hasMinLength} label="8+ caracteres" />
-              <PasswordRequirement met={passwordValidation.hasUpperCase} label="Letra maiúscula" />
-              <PasswordRequirement met={passwordValidation.hasLowerCase} label="Letra minúscula" />
-              <PasswordRequirement met={passwordValidation.hasNumber} label="Número" />
-              <PasswordRequirement met={passwordValidation.hasSymbol} label="Símbolo (!@#$%)" />
-            </div>
-
-            {/* Confirmar Senha */}
-            <div className="space-y-2">
-              <Label htmlFor="confirmPassword" className="font-semibold text-gray-800">Confirmar Senha</Label>
-              <div className="relative">
-                <Input 
-                  id="confirmPassword"
-                  type={showConfirmPassword ? "text" : "password"} 
-                  value={confirmPassword} 
-                  onChange={(e) => setConfirmPassword(e.target.value)} 
-                  placeholder="••••••••"
-                  className="h-12 pr-10 rounded-xl border-gray-200 focus:ring-blue-500"
-                  disabled={loading}
-                />
-                <button 
-                  type="button" 
-                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                >
-                  {showConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-                </button>
-              </div>
-              {newPassword && confirmPassword && newPassword !== confirmPassword && (
-                <p className="text-xs text-red-600 font-medium">As senhas não conferem</p>
-              )}
-            </div>
-
-            {/* Botão de Envio */}
-            <Button 
-              type="submit" 
-              disabled={loading || !passwordValidation.isValid || newPassword !== confirmPassword} 
-              className="w-full h-14 bg-green-600 hover:bg-green-700 rounded-xl text-lg font-semibold text-white flex items-center justify-center gap-2"
-            >
-              {loading ? (
-                <>
-                  <Loader2 size={20} className="animate-spin" />
-                  Alterando...
-                </>
-              ) : (
-                "Redefinir Senha"
-              )}
-            </Button>
-          </form>
-
-          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-            <p className="text-sm text-blue-900">
-              <strong>Segurança:</strong> Nunca compartilhe este link com ninguém.
-            </p>
+        {newPass && (
+          <div style={{ background:"#12151c",border:"0.5px solid rgba(255,255,255,0.06)",borderRadius:12,padding:"12px 14px",display:"grid",gridTemplateColumns:"1fr 1fr",gap:"6px 12px" }}>
+            <Req met={v.len}    label="8+ caracteres"/>
+            <Req met={v.upper}  label="Maiúscula"/>
+            <Req met={v.lower}  label="Minúscula"/>
+            <Req met={v.number} label="Número"/>
+            <Req met={v.symbol} label="Símbolo (!@#)"/>
           </div>
-        </motion.div>
-      </motion.div>
-    </div>
+        )}
+
+        <div>
+          <label style={{ fontSize:"0.72rem",fontWeight:600,color:"#6b7a96",textTransform:"uppercase",letterSpacing:"0.1em",display:"block",marginBottom:6 }}>Confirmar senha</label>
+          <div style={{ position:"relative" }}>
+            <Lock size={15} style={{ position:"absolute",left:14,top:"50%",transform:"translateY(-50%)",color:"#3a4259" }}/>
+            <input type={showCon?"text":"password"} placeholder="••••••••" value={confirm}
+              onChange={e => setConfirm(e.target.value)}
+              style={{ width:"100%",background:"#12151c",border:`0.5px solid ${confirm&&!match?"#e85d5d":"rgba(255,255,255,0.08)"}`,borderRadius:10,padding:"12px 44px",color:"#e8edf5",fontSize:"0.95rem",outline:"none",fontFamily:"'Outfit',sans-serif",boxSizing:"border-box" }}
+              onFocus={e => { if(!confirm||match) e.target.style.borderColor="rgba(37,99,235,0.5)"; }}
+              onBlur={e => { if(!confirm||match) e.target.style.borderColor="rgba(255,255,255,0.08)"; }}
+            />
+            <button type="button" onClick={() => setShowCon(!showCon)}
+              style={{ position:"absolute",right:14,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#6b7a96",cursor:"pointer" }}>
+              {showCon?<EyeOff size={17}/>:<Eye size={17}/>}
+            </button>
+          </div>
+          {confirm && !match && <p style={{ fontSize:"0.75rem",color:"#e85d5d",marginTop:5,fontWeight:500 }}>As senhas não conferem</p>}
+        </div>
+
+        <button type="submit" disabled={loading||!valid||!match}
+          style={{ width:"100%",background:loading||!valid||!match?"#1a2e5a":"#1d4ed8",border:"none",borderRadius:12,padding:13,color:"#fff",fontSize:"1rem",fontWeight:700,fontFamily:"'Cabinet Grotesk',sans-serif",cursor:loading||!valid||!match?"not-allowed":"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:8,boxShadow:loading||!valid||!match?"none":"0 0 30px rgba(29,78,216,0.35)",transition:"all .2s",letterSpacing:"-0.01em" }}>
+          {loading?<><Loader2 size={18} className="animate-spin"/> Alterando...</>:"Redefinir senha"}
+        </button>
+      </form>
+
+      <div style={{ marginTop:16,background:"rgba(37,99,235,0.06)",border:"0.5px solid rgba(37,99,235,0.15)",borderRadius:12,padding:"10px 14px" }}>
+        <p style={{ fontSize:"0.75rem",color:"#3a4259",lineHeight:1.6 }}>🔒 Nunca compartilhe este link com ninguém.</p>
+      </div>
+    </Shell>
   );
 }

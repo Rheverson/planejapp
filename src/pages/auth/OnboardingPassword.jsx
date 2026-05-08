@@ -1,183 +1,159 @@
-// src/pages/auth/OnboardingPassword.jsx - ETAPA 3 DO CADASTRO
-// Coleta a senha e cria a conta no Supabase
-
 import React, { useState, useMemo } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { supabase } from "@/lib/supabase";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Lock, Eye, EyeOff, ArrowLeft, Loader2, AlertCircle, CheckCircle2, X } from "lucide-react";
+import { Lock, Eye, EyeOff, ArrowLeft, Loader2, CheckCircle2, X } from "lucide-react";
+
+const Req = ({ met, label }) => (
+  <div style={{ display:"flex",alignItems:"center",gap:8 }}>
+    {met
+      ? <CheckCircle2 size={13} color="#2ecc8a" />
+      : <X size={13} color="rgba(255,255,255,0.15)" />}
+    <span style={{ fontSize:"0.78rem",color:met?"#2ecc8a":"#3a4259" }}>{label}</span>
+  </div>
+);
 
 export default function OnboardingPassword() {
   const location = useLocation();
-  const navigate = useNavigate();
-  
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const navigate  = useNavigate();
 
-  const { email, name, goal } = location.state || {};
+  const [password, setPassword]         = useState("");
+  const [confirm, setConfirm]           = useState("");
+  const [showPass, setShowPass]         = useState(false);
+  const [showConf, setShowConf]         = useState(false);
+  const [loading, setLoading]           = useState(false);
 
-  if (!email || !name || !goal) {
-    navigate("/login");
-    return null;
-  }
+  const { email="", name="", goal="" } = location.state || {};
+  if (!email || !name || !goal) { navigate("/login"); return null; }
 
-  const passwordValidation = useMemo(() => {
-    return {
-      hasMinLength: password.length >= 8,
-      hasUpperCase: /[A-Z]/.test(password),
-      hasLowerCase: /[a-z]/.test(password),
-      hasNumber: /[0-9]/.test(password),
-      hasSymbol: /[!@#$%^&*(),.?":{}|<>]/.test(password),
-      isValid: password.length >= 8 && /[A-Z]/.test(password) && /[a-z]/.test(password) && /[0-9]/.test(password) && /[!@#$%^&*(),.?":{}|<>]/.test(password)
-    };
-  }, [password]);
-
-  const passwordsMatch = password && confirmPassword && password === confirmPassword;
-  const canSubmit = passwordValidation.isValid && passwordsMatch && !loading;
+  const v = useMemo(() => ({
+    len:     password.length >= 8,
+    upper:   /[A-Z]/.test(password),
+    lower:   /[a-z]/.test(password),
+    number:  /[0-9]/.test(password),
+    symbol:  /[!@#$%^&*(),.?":{}|<>]/.test(password),
+  }), [password]);
+  const valid   = Object.values(v).every(Boolean);
+  const match   = password && confirm && password === confirm;
+  const canSend = valid && match && !loading;
 
   const handleSignUp = async (e) => {
     e.preventDefault();
-    if (!canSubmit) return;
-
+    if (!canSend) return;
     setLoading(true);
     try {
-      // 1. Criar conta no Supabase
-      const { data, error: authError } = await supabase.auth.signUp({
+      const { error } = await supabase.auth.signUp({
         email: email.trim().toLowerCase(),
         password,
-        options: {
-          data: { full_name: name, onboarding_goal: goal }
-        }
+        options: { data: { full_name: name, onboarding_goal: goal } }
       });
-
-      if (authError) throw authError;
-
-      toast.success("Código enviado!", {
-        description: "Verifique seu e-mail para confirmar o cadastro."
-      });
-
-      // 2. Vai para a tela de verificação de código
+      if (error) throw error;
+      toast.success("Código enviado! Verifique seu e-mail.");
       navigate("/auth/verify", { state: { email, password } });
-
     } catch (err) {
-      toast.error("Erro no Cadastro", {
-        description: err.message 
-      });
-      console.error("Erro no cadastro:", err);
-    } finally {
-      setLoading(false);
-    }
+      toast.error("Erro no cadastro", { description: err.message });
+    } finally { setLoading(false); }
   };
 
-  const PasswordRequirement = ({ met, label }) => (
-    <div className="flex items-center gap-2 text-sm">
-      {met ? <CheckCircle2 size={14} className="text-green-500" /> : <X size={14} className="text-gray-300" />}
-      <span className={met ? "text-green-600" : "text-gray-500"}>{label}</span>
-    </div>
-  );
-
-  const handleBack = () => {
-    navigate("/onboarding/goals", { state: { email, name } });
-  };
+  const inputStyle = (err) => ({
+    width:"100%",background:"#12151c",border:`0.5px solid ${err?"#e85d5d":"rgba(255,255,255,0.08)"}`,borderRadius:10,padding:"12px 44px 12px 44px",color:"#e8edf5",fontSize:"0.95rem",outline:"none",fontFamily:"'Outfit',sans-serif",boxSizing:"border-box"
+  });
 
   return (
-    <div className="min-h-screen bg-blue-600 flex flex-col justify-center items-center p-4">
-      <motion.div 
-        initial={{ opacity: 0, scale: 0.95 }} 
-        animate={{ opacity: 1, scale: 1 }} 
-        className="bg-white w-full max-w-md rounded-3xl p-8 shadow-2xl"
-      >
-        <button 
-          onClick={handleBack}
-          className="flex items-center gap-2 text-blue-600 hover:text-blue-700 font-medium text-sm mb-6"
-        >
-          <ArrowLeft size={18} />
-          Voltar
-        </button>
+    <div className="min-h-screen flex flex-col justify-center items-center p-4 relative overflow-hidden"
+      style={{ background:"linear-gradient(170deg,#0d1829 0%,#060709 50%)" }}>
 
-        <h2 className="text-2xl font-bold mb-2 text-gray-900">Segurança da conta</h2>
-        <p className="text-gray-600 mb-6 text-sm">Crie uma senha forte para seu acesso.</p>
-        
-        <form onSubmit={handleSignUp} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="password" className="font-semibold text-gray-800">Senha</Label>
-            <div className="relative">
-              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-              <Input 
-                id="password"
-                type={showPassword ? "text" : "password"} 
-                value={password} 
-                onChange={(e) => setPassword(e.target.value)} 
-                placeholder="••••••••"
-                className="pl-10 pr-10 h-12 rounded-xl border-gray-200 focus:ring-blue-500"
-              />
-              <button 
-                type="button" 
-                onClick={() => setShowPassword(!showPassword)} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-              >
-                {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-              </button>
+      <div className="absolute pointer-events-none" style={{ width:500,height:300,borderRadius:"50%",background:"rgba(29,78,216,0.18)",top:-80,left:"50%",transform:"translateX(-50%)",filter:"blur(80px)" }} />
+      <div className="absolute pointer-events-none" style={{ width:200,height:200,borderRadius:"50%",background:"rgba(55,48,163,0.1)",bottom:"10%",right:"-30px",filter:"blur(60px)" }} />
+
+      <motion.div initial={{ opacity:0,y:-16 }} animate={{ opacity:1,y:0 }} transition={{ duration:.5 }}
+        className="flex items-center gap-2 mb-8 relative z-10">
+        <div style={{ width:9,height:9,borderRadius:"50%",background:"#60a5fa",marginTop:2 }} />
+        <span style={{ fontFamily:"'Cabinet Grotesk',sans-serif",fontWeight:900,fontSize:"1.6rem",color:"#e8edf5",letterSpacing:"-0.04em" }}>PlanejeApp</span>
+      </motion.div>
+
+      <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }} transition={{ delay:.15 }}
+        className="flex items-center gap-2 mb-5 relative z-10">
+        {[0,1,2].map(i => (
+          <div key={i} style={{ height:5,borderRadius:3,width:i===2?18:5,background:i===2?"#1d4ed8":"rgba(255,255,255,0.12)",transition:"all .3s" }} />
+        ))}
+      </motion.div>
+
+      <motion.div initial={{ opacity:0,y:24 }} animate={{ opacity:1,y:0 }} transition={{ duration:.5,delay:.18 }}
+        className="relative z-10 w-full" style={{ maxWidth:420 }}>
+        <div style={{ background:"#0c0e13",border:"0.5px solid rgba(255,255,255,0.08)",borderRadius:20,padding:"28px 28px 24px" }}>
+
+          <button onClick={() => navigate("/onboarding/goals",{ state:{ email, name } })}
+            style={{ display:"flex",alignItems:"center",gap:6,color:"#60a5fa",fontSize:"0.82rem",fontWeight:600,background:"none",border:"none",cursor:"pointer",marginBottom:20,fontFamily:"'Outfit',sans-serif" }}>
+            <ArrowLeft size={16} /> Voltar
+          </button>
+
+          <h2 style={{ fontFamily:"'Cabinet Grotesk',sans-serif",fontWeight:900,fontSize:"1.4rem",color:"#e8edf5",letterSpacing:"-0.03em",marginBottom:6 }}>
+            Crie sua senha
+          </h2>
+          <p style={{ fontSize:"0.82rem",color:"#6b7a96",marginBottom:22,lineHeight:1.6 }}>
+            Escolha uma senha forte para proteger sua conta.
+          </p>
+
+          <form onSubmit={handleSignUp} style={{ display:"flex",flexDirection:"column",gap:14 }}>
+            {/* Senha */}
+            <div>
+              <label style={{ fontSize:"0.72rem",fontWeight:600,color:"#6b7a96",textTransform:"uppercase",letterSpacing:"0.1em",display:"block",marginBottom:6 }}>Senha</label>
+              <div style={{ position:"relative" }}>
+                <Lock size={15} style={{ position:"absolute",left:14,top:"50%",transform:"translateY(-50%)",color:"#3a4259" }} />
+                <input type={showPass?"text":"password"} placeholder="••••••••" value={password}
+                  onChange={e => setPassword(e.target.value)} autoFocus style={inputStyle(false)}
+                  onFocus={e => e.target.style.borderColor="rgba(37,99,235,0.5)"}
+                  onBlur={e => e.target.style.borderColor="rgba(255,255,255,0.08)"}
+                />
+                <button type="button" onClick={() => setShowPass(!showPass)}
+                  style={{ position:"absolute",right:14,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#6b7a96",cursor:"pointer" }}>
+                  {showPass ? <EyeOff size={17}/> : <Eye size={17}/>}
+                </button>
+              </div>
             </div>
-          </div>
 
-          <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 space-y-2">
-            <p className="text-xs font-semibold text-gray-700 mb-2">Requisitos da senha:</p>
-            <PasswordRequirement met={passwordValidation.hasMinLength} label="8+ caracteres" />
-            <PasswordRequirement met={passwordValidation.hasUpperCase} label="Letra maiúscula" />
-            <PasswordRequirement met={passwordValidation.hasLowerCase} label="Letra minúscula" />
-            <PasswordRequirement met={passwordValidation.hasNumber} label="Número" />
-            <PasswordRequirement met={passwordValidation.hasSymbol} label="Símbolo (!@#$%)" />
-          </div>
+            {/* Requisitos */}
+            {password && (
+              <div style={{ background:"#12151c",border:"0.5px solid rgba(255,255,255,0.06)",borderRadius:12,padding:"12px 14px",display:"grid",gridTemplateColumns:"1fr 1fr",gap:"6px 12px" }}>
+                <Req met={v.len}    label="8+ caracteres" />
+                <Req met={v.upper}  label="Maiúscula" />
+                <Req met={v.lower}  label="Minúscula" />
+                <Req met={v.number} label="Número" />
+                <Req met={v.symbol} label="Símbolo (!@#)" />
+              </div>
+            )}
 
-          <div className="space-y-2">
-            <Label htmlFor="confirmPassword" className="font-semibold text-gray-800">Confirmar Senha</Label>
-            <div className="relative">
-              <Input 
-                id="confirmPassword"
-                type={showConfirmPassword ? "text" : "password"} 
-                value={confirmPassword} 
-                onChange={(e) => setConfirmPassword(e.target.value)} 
-                placeholder="••••••••"
-                className="pr-10 h-12 rounded-xl border-gray-200 focus:ring-blue-500"
-              />
-              <button 
-                type="button" 
-                onClick={() => setShowConfirmPassword(!showConfirmPassword)} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-              >
-                {showConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-              </button>
+            {/* Confirmar */}
+            <div>
+              <label style={{ fontSize:"0.72rem",fontWeight:600,color:"#6b7a96",textTransform:"uppercase",letterSpacing:"0.1em",display:"block",marginBottom:6 }}>Confirmar senha</label>
+              <div style={{ position:"relative" }}>
+                <Lock size={15} style={{ position:"absolute",left:14,top:"50%",transform:"translateY(-50%)",color:"#3a4259" }} />
+                <input type={showConf?"text":"password"} placeholder="••••••••" value={confirm}
+                  onChange={e => setConfirm(e.target.value)}
+                  style={{ ...inputStyle(confirm && !match),borderColor:confirm&&!match?"#e85d5d":undefined }}
+                  onFocus={e => { if(!confirm||match) e.target.style.borderColor="rgba(37,99,235,0.5)"; }}
+                  onBlur={e => { if(!confirm||match) e.target.style.borderColor="rgba(255,255,255,0.08)"; }}
+                />
+                <button type="button" onClick={() => setShowConf(!showConf)}
+                  style={{ position:"absolute",right:14,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#6b7a96",cursor:"pointer" }}>
+                  {showConf ? <EyeOff size={17}/> : <Eye size={17}/>}
+                </button>
+              </div>
+              {confirm && !match && (
+                <p style={{ fontSize:"0.75rem",color:"#e85d5d",marginTop:5,fontWeight:500 }}>As senhas não conferem</p>
+              )}
             </div>
-            {password && confirmPassword && !passwordsMatch && (
-              <p className="text-xs text-red-600 font-medium">As senhas não conferem</p>
-            )}
-          </div>
 
-          <Button 
-            type="submit" 
-            disabled={!canSubmit} 
-            className="w-full h-14 bg-blue-600 hover:bg-blue-700 rounded-xl text-lg font-bold flex items-center justify-center gap-2"
-          >
-            {loading ? (
-              <>
-                <Loader2 size={20} className="animate-spin" />
-                Criando conta...
-              </>
-            ) : (
-              "Finalizar Cadastro"
-            )}
-          </Button>
-        </form>
+            <button type="submit" disabled={!canSend}
+              style={{ width:"100%",background:!canSend?"#1a2e5a":"#1d4ed8",border:"none",borderRadius:12,padding:13,color:"#fff",fontSize:"1rem",fontWeight:700,fontFamily:"'Cabinet Grotesk',sans-serif",cursor:!canSend?"not-allowed":"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:8,boxShadow:!canSend?"none":"0 0 30px rgba(29,78,216,0.35)",transition:"all .2s",letterSpacing:"-0.01em" }}>
+              {loading ? <><Loader2 size={18} className="animate-spin"/> Criando conta...</> : "Finalizar cadastro"}
+            </button>
+          </form>
 
-        <p className="text-center text-xs text-gray-400 mt-4 italic">Etapa 3 de 3</p>
+          <p style={{ textAlign:"center",fontSize:"0.7rem",color:"#3a4259",marginTop:14 }}>Etapa 3 de 3</p>
+        </div>
       </motion.div>
     </div>
   );

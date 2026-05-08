@@ -1,193 +1,124 @@
-// src/pages/ForgotPassword.jsx - VERSÃO PROFISSIONAL
-// Fluxo: Email → Link no email → Nova Senha → Login
-// Padrão usado por Google, Microsoft, GitHub, etc.
-
 import React, { useState } from "react";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { ArrowLeft, Mail, Loader2, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, Mail, Loader2, CheckCircle2, ChevronRight } from "lucide-react";
 
 export default function ForgotPassword() {
-  const [email, setEmail] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [email, setEmail]       = useState("");
+  const [loading, setLoading]   = useState(false);
   const [emailSent, setEmailSent] = useState(false);
-  
   const navigate = useNavigate();
 
-  // Validação de email
-  const isValidEmail = (emailStr) => {
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailStr);
-  };
+  const isValidEmail = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
 
-  // Enviar email de recuperação com link
-  const handleSendRecoveryEmail = async (e) => {
+  const handleSend = async (e) => {
     e.preventDefault();
-    
-    if (!isValidEmail(email)) {
-      toast.error("Email inválido", {
-        description: "Por favor, digite um email válido."
-      });
-      return;
-    }
-
+    if (!isValidEmail(email)) { toast.error("Digite um email válido."); return; }
     setLoading(true);
     try {
-      // ✅ Usar redirectTo para enviar link profissional
-      // O link vai incluir o token automaticamente
       const { error } = await supabase.auth.resetPasswordForEmail(
         email.toLowerCase().trim(),
-        {
-          redirectTo: `${window.location.origin}/reset-password`
-        }
+        { redirectTo: `${window.location.origin}/reset-password` }
       );
-
       if (error) throw error;
-
       setEmailSent(true);
-      toast.success("Email enviado!", {
-        description: "Verifique seu e-mail para o link de recuperação."
-      });
     } catch (err) {
-      toast.error("Erro ao enviar email", {
-        description: err.message || "Tente novamente mais tarde."
-      });
-      console.error("Erro:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Voltar
-  const handleBack = () => {
-    if (emailSent) {
-      setEmailSent(false);
-      setEmail("");
-    } else {
-      navigate("/login");
-    }
+      toast.error("Erro ao enviar email", { description: err.message });
+    } finally { setLoading(false); }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-600 to-blue-700 flex flex-col justify-center items-center p-4">
-      <motion.div 
-        initial={{ y: 50, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        className="bg-white w-full max-w-md rounded-3xl p-8 shadow-2xl"
-      >
-        {!emailSent ? (
-          // STEP 1: SOLICITAR EMAIL
-          <motion.div
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            className="space-y-6"
-          >
-            <button 
-              onClick={handleBack}
-              className="flex items-center gap-2 text-sm text-blue-600 font-medium hover:text-blue-700 transition-colors"
-            >
-              <ArrowLeft size={16} /> Voltar
-            </button>
+    <div className="min-h-screen flex flex-col justify-center items-center p-4 relative overflow-hidden"
+      style={{ background: "linear-gradient(170deg,#0d1829 0%,#060709 50%)" }}>
 
-            <div>
-              <h2 className="text-2xl font-bold text-gray-900">Recuperar Senha</h2>
-              <p className="text-gray-600 text-sm mt-2">
-                Digite o email da sua conta e enviaremos um link para redefinir sua senha.
+      {/* Orbs */}
+      <div className="absolute pointer-events-none" style={{ width:500,height:300,borderRadius:"50%",background:"rgba(29,78,216,0.18)",top:-80,left:"50%",transform:"translateX(-50%)",filter:"blur(80px)" }} />
+      <div className="absolute pointer-events-none" style={{ width:250,height:250,borderRadius:"50%",background:"rgba(55,48,163,0.1)",bottom:"15%",right:"-40px",filter:"blur(60px)" }} />
+
+      {/* Logo */}
+      <motion.div initial={{ opacity:0,y:-16 }} animate={{ opacity:1,y:0 }} transition={{ duration:.5 }}
+        className="flex items-center gap-2 mb-8 relative z-10">
+        <div style={{ width:9,height:9,borderRadius:"50%",background:"#60a5fa",marginTop:2 }} />
+        <span style={{ fontFamily:"'Cabinet Grotesk',sans-serif",fontWeight:900,fontSize:"1.6rem",color:"#e8edf5",letterSpacing:"-0.04em" }}>PlanejeApp</span>
+      </motion.div>
+
+      <motion.div initial={{ opacity:0,y:24 }} animate={{ opacity:1,y:0 }} transition={{ duration:.5,delay:.1 }}
+        className="relative z-10 w-full" style={{ maxWidth:420 }}>
+        <div style={{ background:"#0c0e13",border:"0.5px solid rgba(255,255,255,0.08)",borderRadius:20,padding:"28px 28px 24px" }}>
+
+          {!emailSent ? (
+            <motion.div key="form" initial={{ opacity:0,x:20 }} animate={{ opacity:1,x:0 }} transition={{ duration:.25 }}>
+              <button onClick={() => navigate("/login")}
+                style={{ display:"flex",alignItems:"center",gap:6,color:"#60a5fa",fontSize:"0.82rem",fontWeight:600,background:"none",border:"none",cursor:"pointer",marginBottom:20,fontFamily:"'Outfit',sans-serif" }}>
+                <ArrowLeft size={16} /> Voltar para o login
+              </button>
+
+              <h2 style={{ fontFamily:"'Cabinet Grotesk',sans-serif",fontWeight:900,fontSize:"1.4rem",color:"#e8edf5",letterSpacing:"-0.03em",marginBottom:6 }}>
+                Recuperar senha
+              </h2>
+              <p style={{ fontSize:"0.82rem",color:"#6b7a96",marginBottom:22,lineHeight:1.6 }}>
+                Digite seu email e enviaremos um link para redefinir sua senha.
               </p>
-            </div>
 
-            <form onSubmit={handleSendRecoveryEmail} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="email" className="font-semibold text-gray-800">E-mail</Label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-                  <Input 
-                    id="email"
-                    type="email" 
-                    placeholder="seu@email.com" 
-                    value={email} 
-                    onChange={(e) => setEmail(e.target.value)} 
-                    className="h-12 pl-10 rounded-xl border-gray-200 focus:ring-blue-500"
-                    disabled={loading}
-                    autoFocus
-                  />
+              <form onSubmit={handleSend} style={{ display:"flex",flexDirection:"column",gap:12 }}>
+                <div>
+                  <label style={{ fontSize:"0.72rem",fontWeight:600,color:"#6b7a96",textTransform:"uppercase",letterSpacing:"0.1em",display:"block",marginBottom:6 }}>E-mail</label>
+                  <div style={{ position:"relative" }}>
+                    <Mail size={16} style={{ position:"absolute",left:14,top:"50%",transform:"translateY(-50%)",color:"#3a4259" }} />
+                    <input type="email" placeholder="seu@email.com" value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      disabled={loading} autoFocus
+                      style={{ width:"100%",background:"#12151c",border:"0.5px solid rgba(255,255,255,0.08)",borderRadius:10,padding:"12px 14px 12px 40px",color:"#e8edf5",fontSize:"0.95rem",outline:"none",fontFamily:"'Outfit',sans-serif",boxSizing:"border-box" }}
+                      onFocus={e => e.target.style.borderColor="rgba(37,99,235,0.5)"}
+                      onBlur={e => e.target.style.borderColor="rgba(255,255,255,0.08)"}
+                    />
+                  </div>
                 </div>
+
+                <button type="submit" disabled={loading || !email || !isValidEmail(email)}
+                  style={{ width:"100%",background:loading||!email||!isValidEmail(email)?"#1a2e5a":"#1d4ed8",border:"none",borderRadius:12,padding:13,color:"#fff",fontSize:"1rem",fontWeight:700,fontFamily:"'Cabinet Grotesk',sans-serif",cursor:loading||!email?"not-allowed":"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:8,boxShadow:loading||!email?"none":"0 0 30px rgba(29,78,216,0.35)",transition:"all .2s",letterSpacing:"-0.01em" }}>
+                  {loading ? <><Loader2 size={18} className="animate-spin" /> Enviando...</> : <>Enviar link <ChevronRight size={18} /></>}
+                </button>
+              </form>
+
+              <div style={{ marginTop:16,background:"rgba(37,99,235,0.08)",border:"0.5px solid rgba(37,99,235,0.2)",borderRadius:12,padding:"10px 14px" }}>
+                <p style={{ fontSize:"0.78rem",color:"#6b7a96",lineHeight:1.6 }}>
+                  💡 Verifique também a pasta de spam se não receber em alguns minutos.
+                </p>
+              </div>
+            </motion.div>
+          ) : (
+            <motion.div key="sent" initial={{ opacity:0,x:20 }} animate={{ opacity:1,x:0 }} transition={{ duration:.25 }} style={{ textAlign:"center" }}>
+              <div style={{ width:64,height:64,borderRadius:"50%",background:"rgba(46,204,138,0.12)",border:"1px solid rgba(46,204,138,0.25)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 16px" }}>
+                <CheckCircle2 size={32} color="#2ecc8a" />
+              </div>
+              <h2 style={{ fontFamily:"'Cabinet Grotesk',sans-serif",fontWeight:900,fontSize:"1.3rem",color:"#e8edf5",letterSpacing:"-0.03em",marginBottom:8 }}>Email enviado!</h2>
+              <p style={{ fontSize:"0.82rem",color:"#6b7a96",lineHeight:1.6,marginBottom:6 }}>Enviamos o link para:</p>
+              <div style={{ background:"rgba(37,99,235,0.1)",border:"0.5px solid rgba(37,99,235,0.25)",borderRadius:999,padding:"4px 14px",fontSize:"0.82rem",color:"#60a5fa",fontWeight:600,display:"inline-block",marginBottom:20 }}>
+                {email}
               </div>
 
-              <Button 
-                type="submit" 
-                disabled={loading || !email || !isValidEmail(email)} 
-                className="w-full h-14 bg-blue-600 hover:bg-blue-700 rounded-xl text-lg font-semibold flex items-center justify-center gap-2"
-              >
-                {loading ? (
-                  <>
-                    <Loader2 size={20} className="animate-spin" />
-                    Enviando...
-                  </>
-                ) : (
-                  "Enviar Link de Recuperação"
-                )}
-              </Button>
-            </form>
-
-            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-              <p className="text-sm text-blue-900">
-                <strong>Dica:</strong> Verifique sua pasta de spam se não receber o email em alguns minutos.
-              </p>
-            </div>
-          </motion.div>
-        ) : (
-          // STEP 2: EMAIL ENVIADO
-          <motion.div
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            className="space-y-6 text-center"
-          >
-            <div className="flex justify-center">
-              <div className="bg-green-100 p-4 rounded-full">
-                <CheckCircle2 size={48} className="text-green-600" />
+              <div style={{ background:"#12151c",border:"0.5px solid rgba(255,255,255,0.06)",borderRadius:12,padding:"14px 16px",textAlign:"left",marginBottom:20 }}>
+                <p style={{ fontSize:"0.72rem",fontWeight:700,color:"#6b7a96",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:10 }}>O que fazer agora:</p>
+                {["Abra seu email","Clique em 'Redefinir Senha'","Crie uma nova senha","Faça login com ela"].map((s,i)=>(
+                  <div key={i} style={{ display:"flex",alignItems:"center",gap:10,marginBottom:8 }}>
+                    <div style={{ width:20,height:20,borderRadius:6,background:"rgba(37,99,235,0.15)",border:"0.5px solid rgba(37,99,235,0.3)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"0.65rem",color:"#60a5fa",fontWeight:700,flexShrink:0 }}>{i+1}</div>
+                    <span style={{ fontSize:"0.8rem",color:"#6b7a96" }}>{s}</span>
+                  </div>
+                ))}
               </div>
-            </div>
 
-            <div>
-              <h2 className="text-2xl font-bold text-gray-900">Email enviado!</h2>
-              <p className="text-gray-600 text-sm mt-2">
-                Enviamos um link de recuperação para:
-              </p>
-              <p className="font-semibold text-gray-900 mt-1">{email}</p>
-            </div>
-
-            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-left space-y-2">
-              <p className="text-sm font-semibold text-blue-900">O que fazer agora:</p>
-              <ol className="text-sm text-blue-800 space-y-1 list-decimal list-inside">
-                <li>Abra seu email</li>
-                <li>Clique no link "Redefinir Senha"</li>
-                <li>Defina uma nova senha</li>
-                <li>Faça login com a nova senha</li>
-              </ol>
-            </div>
-
-            <div className="space-y-3">
-              <p className="text-sm text-gray-600">
-                O link expira em <strong>24 horas</strong>
-              </p>
-
-              <button
-                onClick={() => {
-                  setEmailSent(false);
-                  setEmail("");
-                }}
-                className="w-full text-sm text-blue-600 hover:text-blue-700 font-medium transition-colors"
-              >
+              <button onClick={() => { setEmailSent(false); setEmail(""); }}
+                style={{ width:"100%",background:"transparent",border:"0.5px solid rgba(255,255,255,0.1)",borderRadius:12,padding:"11px",color:"#6b7a96",fontSize:"0.88rem",fontWeight:600,fontFamily:"'Outfit',sans-serif",cursor:"pointer",transition:"all .2s" }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor="rgba(37,99,235,0.4)"; e.currentTarget.style.color="#60a5fa"; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor="rgba(255,255,255,0.1)"; e.currentTarget.style.color="#6b7a96"; }}>
                 Usar outro email
               </button>
-            </div>
-          </motion.div>
-        )}
+            </motion.div>
+          )}
+        </div>
       </motion.div>
     </div>
   );
