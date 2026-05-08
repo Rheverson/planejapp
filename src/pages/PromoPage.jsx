@@ -71,7 +71,8 @@ export default function PromoPage() {
     if (user?.id) {
       await activateForUser(promo, user.id);
     } else {
-      // Salva código no session storage e redireciona para login/cadastro
+      // Salva em localStorage E sessionStorage para garantir persistência entre navegações
+      localStorage.setItem("pending_promo_code", codeToCheck);
       sessionStorage.setItem("pending_promo_code", codeToCheck);
       setStatus("success");
     }
@@ -110,6 +111,8 @@ export default function PromoPage() {
       }]);
     }
 
+    localStorage.removeItem("pending_promo_code");
+    sessionStorage.removeItem("pending_promo_code");
     setStatus("activated");
   };
 

@@ -137,6 +137,16 @@ const AuthenticatedApp = () => {
 
   const isSubscribed = hasActiveAccess(subscription);
 
+  // Se tem código promo pendente, redireciona para ativação ANTES do subscribe
+  useEffect(() => {
+    if (!user || isSubscribed || subLoading) return;
+    const pendingCode = localStorage.getItem("pending_promo_code") 
+                     || sessionStorage.getItem("pending_promo_code");
+    if (pendingCode) {
+      navigate(`/Promo?code=${pendingCode}`, { replace: true });
+    }
+  }, [user?.id, isSubscribed, subLoading]);
+
   if (!isSubscribed) {
     return (
       <Routes>
