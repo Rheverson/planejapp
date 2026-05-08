@@ -103,6 +103,16 @@ const AuthenticatedApp = () => {
     if (user) initPushNotifications();
   }, [user?.id]);
 
+  // Promo: deve estar ANTES dos early returns (Rules of Hooks)
+  useEffect(() => {
+    if (!user || isSubscribed || subLoading) return;
+    const pendingCode = localStorage.getItem("pending_promo_code")
+                     || sessionStorage.getItem("pending_promo_code");
+    if (pendingCode) {
+      navigate(`/Promo?code=${pendingCode}`, { replace: true });
+    }
+  }, [user?.id, isSubscribed, subLoading]);
+
   useEffect(() => {
     if (!user || profileLoading) return;
     const isSubscribed = hasActiveAccess(subscription);
@@ -136,16 +146,6 @@ const AuthenticatedApp = () => {
   }
 
   const isSubscribed = hasActiveAccess(subscription);
-
-  // Se tem código promo pendente, redireciona para ativação ANTES do subscribe
-  useEffect(() => {
-    if (!user || isSubscribed || subLoading) return;
-    const pendingCode = localStorage.getItem("pending_promo_code") 
-                     || sessionStorage.getItem("pending_promo_code");
-    if (pendingCode) {
-      navigate(`/Promo?code=${pendingCode}`, { replace: true });
-    }
-  }, [user?.id, isSubscribed, subLoading]);
 
   if (!isSubscribed) {
     return (
