@@ -10,7 +10,6 @@ import {
   ArrowLeftRight, PiggyBank, BarChart2, Eye, EyeOff
 } from "lucide-react";
 import { startOfMonth, endOfMonth, isWithinInterval, parseISO, format } from "date-fns";
-import { createPageUrl } from "@/utils";
 import { toast } from "sonner";
 import { useMonth } from "@/lib/MonthContext";
 import { usePrivacy } from "@/lib/PrivacyContext";
@@ -385,7 +384,7 @@ export default function Home() {
 
         {/* Relatórios */}
         <motion.div initial={{ opacity:0,y:8 }} animate={{ opacity:1,y:0 }} transition={{ delay:0.1 }}>
-          <Link to={createPageUrl("Reports")} style={{ textDecoration:"none" }}>
+          <Link to={"/Reports"} style={{ textDecoration:"none" }}>
             <div style={{
               background: cardBg, border: `1px solid ${cardBrd}`,
               borderRadius: 16, padding: "13px 16px",
@@ -416,7 +415,7 @@ export default function Home() {
             style={{ background: cardBg, border: `1px solid ${cardBrd}`, borderRadius: 16, padding: "14px 16px", boxShadow: shadow }}>
             <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom: 12 }}>
               <p style={{ fontFamily:"'Cabinet Grotesk',sans-serif", fontSize:"0.88rem", fontWeight:700, color:text }}>Minhas contas</p>
-              <Link to={createPageUrl("Accounts")} style={{ fontSize:"0.7rem", color:linkCol, fontWeight:600, textDecoration:"none", display:"flex", alignItems:"center", gap:2 }}>
+              <Link to={"/Accounts"} style={{ fontSize:"0.7rem", color:linkCol, fontWeight:600, textDecoration:"none", display:"flex", alignItems:"center", gap:2 }}>
                 Ver todas <ChevronRight size={12} />
               </Link>
             </div>
@@ -441,7 +440,7 @@ export default function Home() {
           style={{ background: cardBg, border: `1px solid ${cardBrd}`, borderRadius: 16, padding: "14px 16px", boxShadow: shadow }}>
           <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12 }}>
             <p style={{ fontFamily:"'Cabinet Grotesk',sans-serif", fontSize:"0.88rem", fontWeight:700, color:text }}>Transações recentes</p>
-            <Link to={createPageUrl("Transactions")} style={{ fontSize:"0.7rem", color:linkCol, fontWeight:600, textDecoration:"none", display:"flex", alignItems:"center", gap:2 }}>
+            <Link to={"/Transactions"} style={{ fontSize:"0.7rem", color:linkCol, fontWeight:600, textDecoration:"none", display:"flex", alignItems:"center", gap:2 }}>
               Ver todas <ChevronRight size={12} />
             </Link>
           </div>

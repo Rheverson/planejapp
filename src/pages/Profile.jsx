@@ -4,7 +4,6 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/lib/supabase";
 import { useNavigate } from "react-router-dom";
-import { createPageUrl } from "@/utils";
 import {
   LogOut, ChevronRight, Moon, Bell, Shield,
   HelpCircle, Star, FileText, Wallet, Users, Clock, Gift, Tag, Crown, Zap
