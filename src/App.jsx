@@ -149,6 +149,7 @@ const AuthenticatedApp = () => {
         <Route path="/Promo" element={<PromoPage />} />
         <Route path="/subscribe" element={<Subscribe />} />
         <Route path="/subscription-success" element={<SubscriptionSuccess />} />
+        <Route path="/onboarding-tour" element={<OnboardingTour />} />  {/* ← ADD */}
         <Route path="*" element={<Navigate to="/subscribe" replace />} />
       </Routes>
     );
