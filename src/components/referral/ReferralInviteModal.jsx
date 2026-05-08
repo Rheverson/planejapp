@@ -5,7 +5,6 @@ import { supabase } from "@/lib/supabase";
 import { useQuery } from "@tanstack/react-query";
 import { X, Gift, Copy, Share2, ChevronRight, Users } from "lucide-react";
 import { Link } from "react-router-dom";
-import { createPageUrl } from "@/utils";
 import { toast } from "sonner";
 
 export default function ReferralInviteModal({ onClose }) {
@@ -124,12 +123,7 @@ export default function ReferralInviteModal({ onClose }) {
 
           {/* Tabela rápida */}
           <div className="grid grid-cols-4 gap-2">
-            {[
-              { n: 1, p: 25 },
-              { n: 2, p: 50 },
-              { n: 3, p: 75 },
-              { n: 4, p: 100 },
-            ].map(({ n, p }) => (
+            {[{ n: 1, p: 25 }, { n: 2, p: 50 }, { n: 3, p: 75 }, { n: 4, p: 100 }].map(({ n, p }) => (
               <div key={n} className={`rounded-xl p-2.5 text-center ${activeCount >= n ? 'bg-emerald-50 dark:bg-emerald-900/20' : 'bg-gray-50 dark:bg-gray-700'}`}>
                 <p className={`text-sm font-bold ${activeCount >= n ? 'text-emerald-600' : 'text-gray-400'}`}>{p}%</p>
                 <p className="text-xs text-gray-400 mt-0.5">{n} amigo{n > 1 ? 's' : ''}</p>
@@ -148,7 +142,7 @@ export default function ReferralInviteModal({ onClose }) {
             Compartilhar convite
           </button>
 
-          <Link to={createPageUrl("Referrals")} onClick={onClose}
+          <Link to="/Referrals" onClick={onClose}
             className="w-full flex items-center justify-center gap-2 py-3 border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 rounded-2xl font-medium text-sm">
             <Users className="w-4 h-4" />
             Ver todos os meus indicados
