@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { createPageUrl } from "./utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { Home, ArrowLeftRight, Wallet, Target, Sparkles, User } from "lucide-react";
 import { usePhoneVerification } from "@/hooks/usePhoneVerification";
@@ -128,7 +127,7 @@ export default function Layout({ children, currentPageName }) {
           className="fixed z-40"
           style={{ top: "44px", right: "16px" }}
         >
-          <Link to={createPageUrl("Profile")}>
+          <Link to={"/Profile"}>
             <motion.div
               whileTap={{ scale: 0.9 }}
               className="w-9 h-9 rounded-full flex items-center justify-center bg-white/20 border border-white/30"
@@ -175,7 +174,7 @@ export default function Layout({ children, currentPageName }) {
           {leftItems.map((item) => {
             const isActive = currentPageName === item.page;
             return (
-              <Link key={item.page} to={createPageUrl(item.page)}
+              <Link key={item.page} to={"/" + item.page}
                 className="flex flex-col items-center justify-center h-full relative no-underline">
                 {isActive && (
                   <motion.div layoutId="activeIndicator"
@@ -206,7 +205,7 @@ export default function Layout({ children, currentPageName }) {
             </span>
             <motion.button
               whileTap={{ scale: 0.92 }} whileHover={{ scale: 1.05 }}
-              onClick={() => navigate(createPageUrl("AIInsights"))}
+              onClick={() => navigate("/AIInsights")}
               className={`absolute bottom-6 w-14 h-14 rounded-2xl flex items-center justify-center border-none cursor-pointer ${isAIActive ? "finn-glow-active" : "finn-glow"}`}
               style={{ background: "linear-gradient(135deg, #1d4ed8 0%, #3730a3 60%, #4c1d95 100%)" }}
             >
@@ -227,7 +226,7 @@ export default function Layout({ children, currentPageName }) {
           {rightItems.map((item) => {
             const isActive = currentPageName === item.page;
             return (
-              <Link key={item.page} to={createPageUrl(item.page)}
+              <Link key={item.page} to={"/" + item.page}
                 className="flex flex-col items-center justify-center h-full relative no-underline">
                 {isActive && (
                   <motion.div layoutId="activeIndicator"
