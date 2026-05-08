@@ -2,20 +2,31 @@ import React, { useState, useEffect } from "react";
 import { useAuth } from "@/lib/AuthContext";
 import { supabase } from "@/lib/supabase";
 import { motion } from "framer-motion";
-import { Check, Users, Zap, LogOut, CheckCircle2, Lock, XCircle, Loader2 } from "lucide-react";
+import { Check, Users, Zap, LogOut, CheckCircle2, Lock, XCircle, Loader2, Gift, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
+import { useNavigate } from "react-router-dom";
 
 export default function Subscribe() {
   const { user, signOut } = useAuth();
+  const navigate = useNavigate();
   const [referralCode, setReferralCode] = useState('');
   const [referralLocked, setReferralLocked] = useState(false);
-  const [referralValid, setReferralValid] = useState(null); // null=não verificado, true=válido, false=inválido
+  const [referralValid, setReferralValid] = useState(null);
   const [validating, setValidating] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  // Verifica se veio via promo — redireciona direto
   useEffect(() => {
+    const pendingCode = localStorage.getItem("pending_promo_code")
+                     || sessionStorage.getItem("pending_promo_code");
+    if (pendingCode) {
+      navigate(`/Promo?code=${pendingCode}`, { replace: true });
+      return;
+    }
+
+    // Código de indicação normal
     const saved = localStorage.getItem('referral_code');
     if (saved) {
       setReferralCode(saved.toUpperCase());
@@ -28,28 +39,20 @@ export default function Subscribe() {
     if (!code || code.length < 8) { setReferralValid(null); return; }
     setValidating(true);
     try {
-        const { data, error } = await supabase
+      const { data, error } = await supabase
         .rpc('validate_referral_code', { code: code.toUpperCase().trim() });
-
-
-        if (error || !data) {
-        setReferralValid(false);
-        setReferralLocked(false);
+      if (error || !data) {
+        setReferralValid(false); setReferralLocked(false);
         localStorage.removeItem('referral_code');
-        } else if (data === user?.id) {
-        // Auto-indicação
-        setReferralValid(false);
-        setReferralLocked(false);
+      } else if (data === user?.id) {
+        setReferralValid(false); setReferralLocked(false);
         localStorage.removeItem('referral_code');
-        } else {
+      } else {
         setReferralValid(true);
-        }
-    } catch {
-        setReferralValid(false);
-    } finally {
-        setValidating(false);
-    }
-    };
+      }
+    } catch { setReferralValid(false); }
+    finally { setValidating(false); }
+  };
 
   const handleSubscribe = async () => {
     setLoading(true);
@@ -59,38 +62,23 @@ export default function Subscribe() {
 
       if (referralCode && referralCode.trim() !== '') {
         if (referralValid === false) {
-          toast.error("Código de indicação inválido. Verifique com quem te indicou.");
-          setReferralCode('');
-          setReferralLocked(false);
+          toast.error("Código de indicação inválido.");
+          setReferralCode(''); setReferralLocked(false);
           localStorage.removeItem('referral_code');
-          setLoading(false);
-          return;
+          setLoading(false); return;
         }
-
         if (referralValid === null) {
-          // Ainda não validou — valida agora
           const { data: referrer } = await supabase
-            .from('profiles')
-            .select('id')
+            .from('profiles').select('id')
             .eq('referral_code', referralCode.toUpperCase().trim())
             .maybeSingle();
-
           if (!referrer) {
-            toast.error("Código de indicação inválido. Verifique com quem te indicou.");
-            setReferralCode('');
-            setReferralLocked(false);
-            localStorage.removeItem('referral_code');
-            setLoading(false);
-            return;
+            toast.error("Código inválido."); setReferralCode('');
+            setLoading(false); return;
           }
-
           if (referrer.id === session.user.id) {
-            toast.error("Você não pode usar seu próprio código.");
-            setReferralCode('');
-            setReferralLocked(false);
-            localStorage.removeItem('referral_code');
-            setLoading(false);
-            return;
+            toast.error("Não pode usar seu próprio código.");
+            setLoading(false); return;
           }
         }
       }
@@ -106,14 +94,7 @@ export default function Subscribe() {
 
     } catch (err) {
       toast.error("Erro: " + err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleLogout = async () => {
-    await signOut();
-    toast.success("Sessão encerrada");
+    } finally { setLoading(false); }
   };
 
   const handleCodeChange = (e) => {
@@ -128,40 +109,32 @@ export default function Subscribe() {
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
         className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl">
 
+        {/* Header */}
         <div className="bg-gradient-to-br from-blue-600 to-indigo-700 px-6 pt-6 pb-6 text-white">
           <div className="flex items-center justify-between mb-4">
             <div className="text-left">
               <p className="text-blue-200 text-xs">Logado como</p>
               <p className="text-white text-sm font-medium truncate max-w-[180px]">{user?.email}</p>
             </div>
-            <button onClick={handleLogout}
+            <button onClick={async () => { await signOut(); }}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-white/20 hover:bg-white/30 rounded-xl text-white text-xs font-medium transition-colors">
-              <LogOut className="w-3.5 h-3.5" />
-              Sair
+              <LogOut className="w-3.5 h-3.5" /> Sair
             </button>
           </div>
 
+          {/* Progress */}
           <div className="flex items-center justify-center gap-2 mb-4">
-            <div className="flex items-center gap-1.5">
-              <div className="w-6 h-6 rounded-full bg-white/30 flex items-center justify-center">
-                <Check className="w-3.5 h-3.5 text-white" />
-              </div>
-              <span className="text-white/70 text-xs">Cadastro</span>
-            </div>
-            <div className="w-8 h-px bg-white/30" />
-            <div className="flex items-center gap-1.5">
-              <div className="w-6 h-6 rounded-full bg-white flex items-center justify-center">
-                <span className="text-blue-600 text-xs font-bold">2</span>
-              </div>
-              <span className="text-white text-xs font-semibold">Plano</span>
-            </div>
-            <div className="w-8 h-px bg-white/30" />
-            <div className="flex items-center gap-1.5">
-              <div className="w-6 h-6 rounded-full bg-white/30 flex items-center justify-center">
-                <span className="text-white/70 text-xs font-bold">3</span>
-              </div>
-              <span className="text-white/70 text-xs">Pagamento</span>
-            </div>
+            {[{ label: "Cadastro", done: true }, { label: "Plano", active: true }, { label: "Pagamento" }].map((s, i) => (
+              <React.Fragment key={i}>
+                <div className="flex items-center gap-1.5">
+                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${s.done ? "bg-white text-blue-600" : s.active ? "bg-white text-blue-600" : "bg-white/30 text-white/70"}`}>
+                    {s.done ? <Check className="w-3.5 h-3.5" /> : i + 1}
+                  </div>
+                  <span className={`text-xs ${s.active || s.done ? "text-white font-semibold" : "text-white/70"}`}>{s.label}</span>
+                </div>
+                {i < 2 && <div className="w-6 h-px bg-white/30" />}
+              </React.Fragment>
+            ))}
           </div>
 
           <div className="text-center">
@@ -174,6 +147,7 @@ export default function Subscribe() {
         </div>
 
         <div className="px-6 py-6 space-y-5">
+          {/* Preço */}
           <div className="text-center">
             <div className="flex items-end justify-center gap-1">
               <span className="text-gray-400 text-sm mb-1">R$</span>
@@ -181,9 +155,10 @@ export default function Subscribe() {
               <span className="text-2xl font-bold text-gray-900">,90</span>
               <span className="text-gray-400 text-sm mb-1">/mês</span>
             </div>
-            <p className="text-xs text-emerald-600 font-medium mt-1">✓ Primeiro mês grátis</p>
+            <p className="text-xs text-emerald-600 font-medium mt-1">✓ Primeiro mês grátis · Cancele quando quiser</p>
           </div>
 
+          {/* Features */}
           <div className="space-y-2">
             {["Transações ilimitadas", "Compartilhamento de finanças", "Relatórios completos", "Metas e investimentos", "Suporte prioritário"].map(item => (
               <div key={item} className="flex items-center gap-2">
@@ -195,6 +170,7 @@ export default function Subscribe() {
             ))}
           </div>
 
+          {/* Indicação */}
           <div className="bg-amber-50 rounded-2xl p-4">
             <div className="flex items-center gap-2 mb-2">
               <Users className="w-4 h-4 text-amber-600" />
@@ -233,19 +209,19 @@ export default function Subscribe() {
             </div>
             {!validating && referralValid === true && (
               <p className="text-xs text-emerald-600 mt-1.5 flex items-center gap-1 font-medium">
-                <CheckCircle2 className="w-3.5 h-3.5" />
-                Código válido!
+                <CheckCircle2 className="w-3.5 h-3.5" /> Código válido!
               </p>
             )}
             {!validating && referralValid === false && (
               <p className="text-xs text-red-500 mt-1.5 flex items-center gap-1 font-medium">
-                <XCircle className="w-3.5 h-3.5" />
-                Código inválido. Verifique com quem te indicou.
+                <XCircle className="w-3.5 h-3.5" /> Código inválido.
               </p>
             )}
           </div>
 
-          <Button onClick={handleSubscribe} disabled={loading || validating || referralValid === false}
+          {/* Botão */}
+          <Button onClick={handleSubscribe}
+            disabled={loading || validating || referralValid === false}
             className="w-full h-14 rounded-2xl text-base font-bold bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-200 disabled:opacity-50">
             {loading ? "Aguarde..." : "Começar 30 dias grátis"}
           </Button>

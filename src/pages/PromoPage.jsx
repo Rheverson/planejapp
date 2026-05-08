@@ -27,17 +27,19 @@ export default function PromoPage() {
 
   const codeFromUrl = searchParams.get("code") || "";
   const [code, setCode] = useState(codeFromUrl.toUpperCase());
-  const [status, setStatus] = useState("idle"); // idle | loading | success | error | used | expired
+  const [status, setStatus] = useState("idle"); // idle | loading | success | activated | error | used | expired
   const [errorMsg, setErrorMsg] = useState("");
-  const [promoData, setPromoData] = useState(null);
+  const [trialEndDate, setTrialEndDate] = useState("");
 
   // Auto-verifica se veio com código na URL
   useEffect(() => {
-    if (codeFromUrl) handleActivate(codeFromUrl.toUpperCase());
-  }, []);
+    if (codeFromUrl) {
+      handleActivate(codeFromUrl.toUpperCase());
+    }
+  }, [user?.id]); // re-executa quando user logar
 
   const handleActivate = async (codeToCheck = code) => {
-    if (!codeToCheck.trim()) return;
+    if (!codeToCheck.trim() || status === "loading" || status === "activated") return;
     setStatus("loading");
 
     // 1. Verifica o código no banco
@@ -65,55 +67,80 @@ export default function PromoPage() {
       return;
     }
 
-    setPromoData(promo);
-
     // 2. Se usuário logado — ativa direto
     if (user?.id) {
       await activateForUser(promo, user.id);
     } else {
-      // Salva em localStorage E sessionStorage para garantir persistência entre navegações
-      localStorage.setItem("pending_promo_code", codeToCheck);
-      sessionStorage.setItem("pending_promo_code", codeToCheck);
+      // Salva código para usar após login/cadastro
+      localStorage.setItem("pending_promo_code", codeToCheck.toUpperCase());
+      sessionStorage.setItem("pending_promo_code", codeToCheck.toUpperCase());
       setStatus("success");
     }
   };
 
   const activateForUser = async (promo, userId) => {
-    // Marca código como usado
-    await supabase.from("promo_codes").update({
-      is_used: true,
-      used_by: userId,
-      used_at: new Date().toISOString(),
-    }).eq("id", promo.id);
+    try {
+      // 1. Marca código como usado
+      const { error: updateError } = await supabase.from("promo_codes").update({
+        is_used: true,
+        used_by: userId,
+        used_at: new Date().toISOString(),
+      }).eq("id", promo.id).eq("is_used", false); // garante idempotência
 
-    // Atualiza/cria subscription com 60 dias grátis
-    const trialEnd = new Date();
-    trialEnd.setDate(trialEnd.getDate() + promo.trial_days);
+      if (updateError) {
+        // Se já foi usado por outro usuário
+        setStatus("used");
+        setErrorMsg("Este código já foi utilizado.");
+        return;
+      }
 
-    const { data: existingSub } = await supabase
-      .from("subscriptions")
-      .select("id")
-      .eq("user_id", userId)
-      .single();
+      // 2. Calcula data de fim do trial
+      const trialEnd = new Date();
+      trialEnd.setDate(trialEnd.getDate() + promo.trial_days);
+      const trialEndStr = trialEnd.toISOString();
 
-    if (existingSub) {
-      await supabase.from("subscriptions").update({
-        status: "trialing",
-        trial_end: trialEnd.toISOString(),
-        current_period_end: trialEnd.toISOString(),
-      }).eq("user_id", userId);
-    } else {
-      await supabase.from("subscriptions").insert([{
-        user_id: userId,
-        status: "trialing",
-        trial_end: trialEnd.toISOString(),
-        current_period_end: trialEnd.toISOString(),
-      }]);
+      // 3. Atualiza ou cria subscription no Supabase
+      const { data: existingSub } = await supabase
+        .from("subscriptions")
+        .select("id, stripe_subscription_id")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      if (existingSub) {
+        await supabase.from("subscriptions").update({
+          status: "trialing",
+          trial_end: trialEndStr,
+          current_period_end: trialEndStr,
+        }).eq("user_id", userId);
+      } else {
+        await supabase.from("subscriptions").insert([{
+          user_id: userId,
+          status: "trialing",
+          trial_end: trialEndStr,
+          current_period_end: trialEndStr,
+        }]);
+      }
+
+      // 4. Limpa código pendente
+      localStorage.removeItem("pending_promo_code");
+      sessionStorage.removeItem("pending_promo_code");
+
+      // 5. Formata data para exibição
+      setTrialEndDate(trialEnd.toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" }));
+      setStatus("activated");
+
+    } catch (err) {
+      setStatus("error");
+      setErrorMsg("Erro ao ativar o código. Tente novamente.");
     }
+  };
 
-    localStorage.removeItem("pending_promo_code");
-    sessionStorage.removeItem("pending_promo_code");
-    setStatus("activated");
+  const handleCreateAccount = () => {
+    // Garante que o código está salvo antes de navegar
+    const currentCode = codeFromUrl || code;
+    localStorage.setItem("pending_promo_code", currentCode.toUpperCase());
+    sessionStorage.setItem("pending_promo_code", currentCode.toUpperCase());
+    navigate("/login");
   };
 
   const bg   = dark ? "#060709" : "#f7f8fa";
@@ -121,6 +148,7 @@ export default function PromoPage() {
   const text = dark ? "#e8edf5" : "#0f172a";
   const muted= dark ? "#6b7a96" : "#64748b";
   const brd  = dark ? "rgba(255,255,255,0.07)" : "rgba(17,24,39,0.06)";
+  const inputBg = dark ? "#12151c" : "#f8fafc";
 
   return (
     <div style={{ minHeight: "100vh", background: bg, display: "flex", alignItems: "center", justifyContent: "center", padding: 20, fontFamily: "'Outfit',sans-serif" }}>
@@ -137,14 +165,14 @@ export default function PromoPage() {
           <p style={{ color: muted, fontSize: "0.82rem", marginTop: 4 }}>Ative seu brinde exclusivo do evento</p>
         </div>
 
-        {/* Card principal */}
+        {/* Card */}
         <div style={{ background: card, border: `1px solid ${brd}`, borderRadius: 20, overflow: "hidden", boxShadow: dark ? "none" : "0 4px 24px rgba(17,24,39,0.08)" }}>
 
           {/* Banner do evento */}
           <div style={{ background: "linear-gradient(135deg,#1d4ed8,#3730a3)", padding: "16px 20px", display: "flex", alignItems: "center", gap: 10 }}>
             <Gift size={20} color="#fff" />
             <div>
-              <p style={{ fontFamily: "'Cabinet Grotesk',sans-serif", fontWeight: 800, fontSize: "0.95rem", color: "#fff", margin: 0 }}>60 dias grátis</p>
+              <p style={{ fontFamily: "'Cabinet Grotesk',sans-serif", fontWeight: 800, fontSize: "0.95rem", color: "#fff", margin: 0 }}>60 dias grátis — Sem cartão</p>
               <p style={{ fontSize: "0.7rem", color: "rgba(255,255,255,0.7)", margin: 0 }}>Evento de Empreendedorismo · Maio 2026</p>
             </div>
           </div>
@@ -156,7 +184,7 @@ export default function PromoPage() {
               {(status === "idle" || status === "loading") && (
                 <motion.div key="input" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
                   <p style={{ fontSize: "0.82rem", color: muted, marginBottom: 16, lineHeight: 1.5 }}>
-                    Digite o código que você recebeu no evento para ativar 60 dias grátis do plano Pro!
+                    Digite o código que você recebeu no evento para ativar <strong style={{ color: "#1d4ed8" }}>60 dias grátis</strong> do plano Pro — sem precisar de cartão de crédito!
                   </p>
                   <label style={{ fontSize: "0.65rem", fontWeight: 600, color: muted, textTransform: "uppercase", letterSpacing: "0.1em", display: "block", marginBottom: 6 }}>
                     Seu código
@@ -165,7 +193,7 @@ export default function PromoPage() {
                     value={code}
                     onChange={e => setCode(e.target.value.toUpperCase())}
                     placeholder="FINN-EV16-XXXX"
-                    style={{ width: "100%", height: 48, padding: "0 14px", background: dark ? "#12151c" : "#f8fafc", border: `1px solid ${brd}`, borderRadius: 12, color: text, fontSize: "1rem", fontWeight: 700, fontFamily: "'Cabinet Grotesk',sans-serif", outline: "none", letterSpacing: "0.05em", boxSizing: "border-box", marginBottom: 12 }}
+                    style={{ width: "100%", height: 48, padding: "0 14px", background: inputBg, border: `1px solid ${brd}`, borderRadius: 12, color: text, fontSize: "1rem", fontWeight: 700, fontFamily: "'Cabinet Grotesk',sans-serif", outline: "none", letterSpacing: "0.05em", boxSizing: "border-box", marginBottom: 12 }}
                   />
                   <button onClick={() => handleActivate()}
                     disabled={!code.trim() || status === "loading"}
@@ -175,18 +203,23 @@ export default function PromoPage() {
                 </motion.div>
               )}
 
-              {/* Sucesso — precisa logar */}
+              {/* Código válido — precisa criar conta */}
               {status === "success" && (
                 <motion.div key="success" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} style={{ textAlign: "center" }}>
                   <CheckCircle size={48} color="#10b981" style={{ margin: "0 auto 12px", display: "block" }} />
                   <h2 style={{ fontFamily: "'Cabinet Grotesk',sans-serif", fontWeight: 800, fontSize: "1.1rem", color: text, marginBottom: 6 }}>Código válido! 🎉</h2>
-                  <p style={{ fontSize: "0.8rem", color: muted, marginBottom: 20, lineHeight: 1.5 }}>
-                    Crie sua conta ou faça login para ativar os <strong style={{ color: "#1d4ed8" }}>60 dias grátis</strong>.
+                  <p style={{ fontSize: "0.8rem", color: muted, marginBottom: 4, lineHeight: 1.5 }}>
+                    Crie sua conta gratuita para ativar os <strong style={{ color: "#1d4ed8" }}>60 dias grátis</strong> — sem cartão de crédito!
                   </p>
-                  <button onClick={() => navigate("/login?promo=" + code)}
+                  <div style={{ background: "rgba(16,185,129,0.08)", border: "1px solid rgba(16,185,129,0.2)", borderRadius: 10, padding: "8px 12px", marginBottom: 20, display: "flex", alignItems: "center", gap: 8 }}>
+                    <Lock size={14} color="#10b981" />
+                    <span style={{ fontSize: "0.72rem", color: "#10b981", fontWeight: 600 }}>Código reservado para você por 15 minutos</span>
+                  </div>
+                  <button onClick={handleCreateAccount}
                     style={{ width: "100%", height: 48, borderRadius: 12, border: "none", background: "linear-gradient(135deg,#1d4ed8,#3730a3)", color: "#fff", fontFamily: "'Cabinet Grotesk',sans-serif", fontWeight: 800, fontSize: "0.92rem", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, boxShadow: "0 0 20px rgba(29,78,216,0.3)" }}>
-                    <ArrowRight size={16} /> Criar conta / Entrar
+                    <ArrowRight size={16} /> Criar conta grátis
                   </button>
+                  <p style={{ fontSize: "0.7rem", color: muted, marginTop: 8 }}>Já tem conta? <span onClick={handleCreateAccount} style={{ color: "#1d4ed8", cursor: "pointer", fontWeight: 600 }}>Faça login</span></p>
                 </motion.div>
               )}
 
@@ -197,11 +230,13 @@ export default function PromoPage() {
                     <CheckCircle size={36} color="#10b981" />
                   </div>
                   <h2 style={{ fontFamily: "'Cabinet Grotesk',sans-serif", fontWeight: 800, fontSize: "1.1rem", color: text, marginBottom: 6 }}>Ativado com sucesso! 🎉</h2>
-                  <p style={{ fontSize: "0.8rem", color: muted, marginBottom: 6, lineHeight: 1.5 }}>
-                    Seu plano Pro está ativo por <strong style={{ color: "#10b981" }}>60 dias</strong>!
+                  <p style={{ fontSize: "0.82rem", color: muted, marginBottom: 4, lineHeight: 1.5 }}>
+                    Seu plano Pro está ativo por <strong style={{ color: "#10b981" }}>60 dias</strong> — sem precisar de cartão!
                   </p>
-                  <p style={{ fontSize: "0.72rem", color: muted, marginBottom: 20 }}>Aproveite todos os recursos premium sem pagar nada.</p>
-                  <button onClick={() => navigate(createPageUrl("Home"))}
+                  {trialEndDate && (
+                    <p style={{ fontSize: "0.72rem", color: muted, marginBottom: 16 }}>Válido até <strong>{trialEndDate}</strong></p>
+                  )}
+                  <button onClick={() => navigate("/")}
                     style={{ width: "100%", height: 48, borderRadius: 12, border: "none", background: "linear-gradient(135deg,#10b981,#059669)", color: "#fff", fontFamily: "'Cabinet Grotesk',sans-serif", fontWeight: 800, fontSize: "0.92rem", cursor: "pointer", boxShadow: "0 0 20px rgba(16,185,129,0.3)" }}>
                     Ir para o app →
                   </button>
