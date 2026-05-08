@@ -82,7 +82,6 @@ function useProfile(userId) {
   });
 }
 
-// ✅ Verifica acesso — cancelled com período válido ainda tem acesso
 function hasActiveAccess(subscription) {
   if (!subscription) return false;
   const { status, current_period_end } = subscription;
@@ -99,11 +98,15 @@ const AuthenticatedApp = () => {
   const { data: profile, isLoading: profileLoading } = useProfile(user?.id);
   const navigate = useNavigate();
 
+  // Calcula ANTES dos useEffects para evitar temporal dead zone
+  const isSubscribed = hasActiveAccess(subscription);
+
+  // Push notifications
   useEffect(() => {
     if (user) initPushNotifications();
   }, [user?.id]);
 
-  // Promo: deve estar ANTES dos early returns (Rules of Hooks)
+  // Promo: redireciona para ativação se tiver código pendente
   useEffect(() => {
     if (!user || isSubscribed || subLoading) return;
     const pendingCode = localStorage.getItem("pending_promo_code")
@@ -113,9 +116,9 @@ const AuthenticatedApp = () => {
     }
   }, [user?.id, isSubscribed, subLoading]);
 
+  // Onboarding
   useEffect(() => {
     if (!user || profileLoading) return;
-    const isSubscribed = hasActiveAccess(subscription);
     if (!isSubscribed) return;
     const localCompleted = localStorage.getItem('onboarding_completed') === 'true';
     const dbCompleted = profile?.onboarding_completed === true;
@@ -132,7 +135,6 @@ const AuthenticatedApp = () => {
   if (!user) {
     return (
       <Routes>
-        {/* Página de promo acessível sem login */}
         <Route path="/Promo" element={<PromoPage />} />
         <Route path="/login" element={<Login />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
@@ -145,12 +147,9 @@ const AuthenticatedApp = () => {
     );
   }
 
-  const isSubscribed = hasActiveAccess(subscription);
-
   if (!isSubscribed) {
     return (
       <Routes>
-        {/* Página de promo acessível sem assinatura */}
         <Route path="/Promo" element={<PromoPage />} />
         <Route path="/subscribe" element={<Subscribe />} />
         <Route path="/subscription-success" element={<SubscriptionSuccess />} />
@@ -163,7 +162,6 @@ const AuthenticatedApp = () => {
     <Suspense fallback={<PageLoader />}>
       <Routes>
         <Route path="/onboarding-tour" element={<OnboardingTour />} />
-        {/* Página de promo acessível por usuários logados também */}
         <Route path="/Promo" element={<PromoPage />} />
         <Route path="/login" element={<Navigate to="/" replace />} />
         <Route path="/forgot-password" element={<Navigate to="/" replace />} />
