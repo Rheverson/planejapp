@@ -125,7 +125,11 @@ export default function PaymentFailed() {
         </div>
 
         <p style={{ textAlign:"center",fontSize:"0.7rem",color:"#3a4259",marginTop:14 }}>
-          Dúvidas? Fale com o suporte: contato@planejapp.com.br
+          Dúvidas?{" "}
+          <a href="https://wa.me/5541999322187" target="_blank" rel="noreferrer"
+            style={{ color:"#2ecc8a",fontWeight:600,textDecoration:"none" }}>
+            Falar no WhatsApp
+          </a>
         </p>
       </motion.div>
     </div>
