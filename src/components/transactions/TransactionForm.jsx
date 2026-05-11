@@ -19,7 +19,6 @@ const dayOptions = Array.from({ length: 31 }, (_, i) => i + 1);
 const today    = new Date().toISOString().split("T")[0];
 const todayDay = new Date().getDate();
 
-// ✅ useIsDark robusto — observa a classe do <html> diretamente
 function useIsDark() {
   const [dark, setDark] = useState(() =>
     localStorage.getItem("darkMode") === "true" ||
@@ -77,7 +76,6 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
     enabled: !!user?.id,
   });
 
-  // walletId pode ser account_id ou credit_card_id prefixado com "cc_"
   const [walletId, setWalletId] = useState(() => {
     if (initialData?.credit_card_id) return "cc_" + initialData.credit_card_id;
     return initialData?.account_id || "";
@@ -101,14 +99,13 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
   const handleSubmit = (e) => {
     e.preventDefault();
     if (description && category) confirmCategory(category, description);
-    // Calcula invoice_month se cartão selecionado
     let invoiceMonth = null;
     let finalCreditCardId = null;
     let finalAccountId = accountId;
 
     if (selectedCard) {
       finalCreditCardId = selectedCard.id;
-      finalAccountId = null; // não debita conta agora
+      finalAccountId = null;
       const d = new Date(date + "T00:00:00");
       invoiceMonth = selectedCard.expense_date_mode === "purchase_date"
         ? format(d, "yyyy-MM")
@@ -120,7 +117,7 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
     onSubmit({
       description, amount: parseFloat(amount) || 0, category,
       date,
-      is_realized: finalCreditCardId ? false : isRealized, // cartão: sempre false; outros: respeita o toggle
+      is_realized: finalCreditCardId ? false : (isRecurring ? false : isRealized),
       credit_card_id: finalCreditCardId,
       invoice_month: invoiceMonth,
       account_id: finalAccountId || null,
@@ -133,9 +130,7 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
     });
   };
 
-  const showAutoRealize = !isRealized; // aparece para normais e recorrentes quando não realizado
-
-  // ── Tokens de cor por tema ─────────────────────────────────
+  // ── Tokens ────────────────────────────────────────────────
   const modalBg   = dark ? "#0c0e13" : "#ffffff";
   const headerBrd = dark ? "rgba(255,255,255,0.07)" : "rgba(17,24,39,0.06)";
   const text      = dark ? "#e8edf5" : "#0f172a";
@@ -170,21 +165,32 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
     <motion.div
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       onClick={onClose}
-      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", backdropFilter: "blur(6px)", zIndex: 50, display: "flex", alignItems: "flex-end", justifyContent: "center", paddingBottom: 64 }}
+      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", backdropFilter: "blur(6px)", zIndex: 50, display: "flex", alignItems: "flex-end", justifyContent: "center" }}
     >
       <motion.div
         initial={{ y: 100, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 100, opacity: 0 }}
         transition={{ type: "spring", damping: 28, stiffness: 280 }}
         onClick={e => e.stopPropagation()}
-        style={{ background: modalBg, borderRadius: "24px 24px 0 0", width: "100%", maxWidth: 480, maxHeight: "90vh", display: "flex", flexDirection: "column", overflow: "hidden", fontFamily: "'Outfit',sans-serif" }}
+        style={{
+          background: modalBg,
+          borderRadius: "24px 24px 0 0",
+          width: "100%", maxWidth: 480,
+          /* ✅ altura máxima maior para não comprimir quando recorrente expandir */
+          maxHeight: "92dvh",
+          display: "flex", flexDirection: "column",
+          overflow: "hidden",
+          fontFamily: "'Outfit',sans-serif",
+          /* ✅ padding bottom para não sumir atrás do nav */
+          paddingBottom: "env(safe-area-inset-bottom, 0px)",
+        }}
       >
         {/* Handle */}
-        <div style={{ display: "flex", justifyContent: "center", paddingTop: 10, paddingBottom: 2 }}>
+        <div style={{ display: "flex", justifyContent: "center", paddingTop: 10, paddingBottom: 2, flexShrink: 0 }}>
           <div style={{ width: 36, height: 4, borderRadius: 999, background: dark ? "rgba(255,255,255,0.1)" : "rgba(17,24,39,0.1)" }} />
         </div>
 
         {/* Header */}
-        <div style={{ background: modalBg, padding: "10px 20px 12px", borderBottom: `1px solid ${headerBrd}`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ background: modalBg, padding: "10px 20px 12px", borderBottom: `1px solid ${headerBrd}`, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
           <p style={{ fontFamily: "'Cabinet Grotesk',sans-serif", fontWeight: 800, fontSize: "1rem", color: text, letterSpacing: "-0.02em", margin: 0 }}>
             {isEditing ? "Editar Transação" : "Nova Transação"}
           </p>
@@ -194,8 +200,21 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
           </button>
         </div>
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} style={{ flex: 1, overflowY: "auto", padding: "14px 20px 24px", display: "flex", flexDirection: "column", gap: 14 }}>
+        {/* ✅ Form com scroll próprio — flex:1 + overflow:auto */}
+        <form
+          onSubmit={handleSubmit}
+          style={{
+            flex: 1,
+            overflowY: "auto",
+            overflowX: "hidden",
+            padding: "14px 20px",
+            display: "flex",
+            flexDirection: "column",
+            gap: 14,
+            /* ✅ padding bottom garante que o botão não fique escondido */
+            paddingBottom: 32,
+          }}
+        >
 
           {/* Tipo */}
           <div style={{ display: "flex", gap: 6, padding: 5, background: dark ? "rgba(255,255,255,0.04)" : "#f1f4f9", borderRadius: 14, border: `1px solid ${rowBrd}` }}>
@@ -207,7 +226,7 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
                 onClick={() => handleTypeChange(val)}
                 style={{
                   flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 7,
-                  padding: "8px 0", borderRadius: 10, border: "none", cursor: "pointer",
+                  padding: "10px 0", borderRadius: 10, border: "none", cursor: "pointer",
                   fontFamily: "'Cabinet Grotesk',sans-serif", fontWeight: 700, fontSize: "0.88rem",
                   background: type === val ? c.bg : "transparent",
                   color: type === val ? "#ffffff" : muted,
@@ -269,7 +288,6 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
               <label style={labelStyle}>Carteira</label>
               <Select value={walletId} onValueChange={v => {
                 setWalletId(v);
-                // Sincroniza accountId para contas normais
                 if (!v.startsWith("cc_")) setAccountId(v);
                 else setAccountId("");
               }}>
@@ -294,7 +312,7 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
             </div>
           </div>
 
-          {/* Aviso quando cartão selecionado — substitui os toggles */}
+          {/* Aviso cartão */}
           {selectedCard && (
             <div style={{ padding: "8px 12px", background: "rgba(139,92,246,0.08)", border: "1px solid rgba(139,92,246,0.2)", borderRadius: 10, fontSize: "0.7rem", color: "#8b5cf6" }}>
               💳 Vai para fatura de {(() => {
@@ -317,76 +335,81 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
               style={{ ...inputStyle, colorScheme: dark ? "dark" : "light" }} />
           </div>
 
-          {/* Recorrente */}
+          {/* ✅ Recorrente — sem animação de height, usa display condicional */}
           {!isEditing && (
-            <div style={{ borderRadius: 14, border: `1px solid ${rowBrd}`, overflow: "hidden" }}>
-              <button type="button" onClick={() => setIsRecurring(!isRecurring)}
-                style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "11px 14px", background: isRecurring ? (dark ? "rgba(29,78,216,0.08)" : "rgba(29,78,216,0.04)") : rowBg, border: "none", cursor: "pointer", gap: 12 }}>
+            <div style={{ borderRadius: 14, border: `1px solid ${isRecurring ? "rgba(29,78,216,0.35)" : rowBrd}`, overflow: "hidden", background: isRecurring ? (dark ? "rgba(29,78,216,0.06)" : "rgba(29,78,216,0.03)") : "transparent" }}>
+
+              {/* Toggle header */}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 14px", gap: 12 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <div style={{ width: 32, height: 32, borderRadius: 10, background: isRecurring ? "rgba(29,78,216,0.12)" : (dark ? "rgba(255,255,255,0.05)" : "#f1f4f9"), display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <div style={{ width: 34, height: 34, borderRadius: 10, background: isRecurring ? "rgba(29,78,216,0.12)" : (dark ? "rgba(255,255,255,0.05)" : "#f1f4f9"), display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                     <Repeat size={15} color={isRecurring ? "#1d4ed8" : muted} />
                   </div>
-                  <div style={{ textAlign: "left" }}>
+                  <div>
                     <p style={{ fontSize: "0.85rem", fontWeight: 600, color: text, marginBottom: 1 }}>Recorrente</p>
                     <p style={{ fontSize: "0.68rem", color: muted }}>
-                      {isRecurring ? "Ocorrências viram previsão automaticamente" : "Repetir todo mês, semana ou ano"}
+                      {isRecurring ? "Gera previsões automaticamente" : "Repetir todo mês, semana ou ano"}
                     </p>
                   </div>
                 </div>
-                <div onClick={e => e.stopPropagation()}>
-                  <Switch checked={isRecurring} onCheckedChange={setIsRecurring} />
-                </div>
-              </button>
+                <Switch checked={isRecurring} onCheckedChange={setIsRecurring} />
+              </div>
 
-              <AnimatePresence>
-                {isRecurring && (
-                  <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2 }} style={{ overflow: "hidden" }}>
-                    <div style={{ padding: "12px 14px", borderTop: `1px solid ${rowBrd}`, display: "flex", flexDirection: "column", gap: 12 }}>
-                      <div>
-                        <label style={labelStyle}>Frequência</label>
-                        <div style={{ display: "flex", gap: 6 }}>
-                          {frequencyOptions.map(({ value, label }) => (
-                            <button key={value} type="button" onClick={() => setRecurringFreq(value)}
-                              style={{ flex: 1, padding: "6px 0", fontSize: "0.72rem", fontWeight: 600, borderRadius: 10, border: `1px solid ${recurringFreq === value ? "#1d4ed8" : inputBrd}`, background: recurringFreq === value ? "#1d4ed8" : inputBg, color: recurringFreq === value ? "#fff" : muted, cursor: "pointer", fontFamily: "'Outfit',sans-serif", transition: "all .15s" }}>
-                              {label}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
+              {/* ✅ Detalhes da recorrência — renderiza condicionalmente, sem animação de height */}
+              {isRecurring && (
+                <div style={{ padding: "0 14px 14px", borderTop: `1px solid ${rowBrd}`, display: "flex", flexDirection: "column", gap: 14 }}>
 
-                      {recurringFreq === "monthly" && (
-                        <div>
-                          <label style={labelStyle}>Todo dia</label>
-                          <Select value={String(recurringDay)} onValueChange={v => setRecurringDay(parseInt(v))}>
-                            <SelectTrigger style={{ height: 40, borderRadius: 12, background: inputBg, border: `1px solid ${inputBrd}`, fontSize: "0.82rem", color: text }}>
-                              <SelectValue placeholder="Dia" />
-                            </SelectTrigger>
-                            <SelectContent style={{ maxHeight: 200 }}>
-                              {dayOptions.map(d => <SelectItem key={d} value={String(d)}>Dia {d}</SelectItem>)}
-                            </SelectContent>
-                          </Select>
-                          <p style={{ fontSize: "0.65rem", color: muted, marginTop: 4 }}>Gera previsão todo dia {recurringDay} por 12 meses</p>
-                        </div>
-                      )}
-
-                      <div>
-                        <label style={labelStyle}>Encerra em <span style={{ fontWeight: 400, color: muted }}>(opcional)</span></label>
-                        <input type="date" value={recurringEndDate} min={date}
-                          onChange={e => setRecurringEndDate(e.target.value)}
-                          style={{ ...inputStyle, colorScheme: dark ? "dark" : "light" }} />
-                        <p style={{ fontSize: "0.65rem", color: muted, marginTop: 4 }}>Sem data final gera 12 meses</p>
-                      </div>
+                  {/* Frequência */}
+                  <div style={{ paddingTop: 12 }}>
+                    <label style={labelStyle}>Frequência</label>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      {frequencyOptions.map(({ value, label }) => (
+                        <button key={value} type="button" onClick={() => setRecurringFreq(value)}
+                          style={{ flex: 1, padding: "8px 0", fontSize: "0.78rem", fontWeight: 600, borderRadius: 10, border: `1px solid ${recurringFreq === value ? "#1d4ed8" : inputBrd}`, background: recurringFreq === value ? "#1d4ed8" : inputBg, color: recurringFreq === value ? "#fff" : muted, cursor: "pointer", fontFamily: "'Outfit',sans-serif", transition: "all .15s" }}>
+                          {label}
+                        </button>
+                      ))}
                     </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+                  </div>
+
+                  {/* Dia do mês */}
+                  {recurringFreq === "monthly" && (
+                    <div>
+                      <label style={labelStyle}>Todo dia</label>
+                      <Select value={String(recurringDay)} onValueChange={v => setRecurringDay(parseInt(v))}>
+                        <SelectTrigger style={{ height: 40, borderRadius: 12, background: inputBg, border: `1px solid ${inputBrd}`, fontSize: "0.82rem", color: text }}>
+                          <SelectValue placeholder="Dia" />
+                        </SelectTrigger>
+                        <SelectContent style={{ maxHeight: 200 }}>
+                          {dayOptions.map(d => <SelectItem key={d} value={String(d)}>Dia {d}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                      <p style={{ fontSize: "0.65rem", color: muted, marginTop: 4 }}>Gera previsão todo dia {recurringDay} por 12 meses</p>
+                    </div>
+                  )}
+
+                  {/* Data de encerramento */}
+                  <div>
+                    <label style={labelStyle}>Encerra em <span style={{ fontWeight: 400, color: muted }}>(opcional)</span></label>
+                    <input type="date" value={recurringEndDate} min={date}
+                      onChange={e => setRecurringEndDate(e.target.value)}
+                      style={{ ...inputStyle, colorScheme: dark ? "dark" : "light" }} />
+                    <p style={{ fontSize: "0.65rem", color: muted, marginTop: 4 }}>Sem data final gera 12 meses</p>
+                  </div>
+
+                  {/* Info — recorrente sempre vira previsão */}
+                  <div style={{ padding: "8px 12px", background: "rgba(29,78,216,0.08)", border: "1px solid rgba(29,78,216,0.2)", borderRadius: 10, fontSize: "0.72rem", color: "#60a5fa" }}>
+                    ℹ️ Transações recorrentes são criadas como <strong>previsão</strong> e realizadas automaticamente na data certa.
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
-          {/* Realizada / Auto realizar — esconde apenas quando cartão selecionado */}
-          {!selectedCard && (
+          {/* ✅ Realizada / Auto realizar — só aparece quando NÃO for recorrente e NÃO tiver cartão */}
+          {!selectedCard && !isRecurring && (
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "11px 14px", background: rowBg, borderRadius: 14, border: `1px solid ${rowBrd}` }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 14px", background: rowBg, borderRadius: 14, border: `1px solid ${rowBrd}` }}>
                 <div>
                   <p style={{ fontSize: "0.85rem", fontWeight: 600, color: text, marginBottom: 1 }}>Já foi realizada?</p>
                   <p style={{ fontSize: "0.68rem", color: muted }}>{isRealized ? "Transação confirmada" : "Previsão futura"}</p>
@@ -394,47 +417,60 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
                 <Switch checked={isRealized} onCheckedChange={handleIsRealizedChange} />
               </div>
 
-              <AnimatePresence>
-                {showAutoRealize && (
-                  <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.2 }} style={{ overflow: "hidden" }}>
-                    <div style={{
-                      display: "flex", alignItems: "center", justifyContent: "space-between",
-                      padding: "11px 14px", borderRadius: 14,
-                      background: autoRealize ? (dark ? "rgba(29,78,216,0.1)" : "rgba(29,78,216,0.05)") : rowBg,
-                      border: `1px solid ${autoRealize ? (dark ? "rgba(29,78,216,0.25)" : "rgba(29,78,216,0.15)") : rowBrd}`,
-                      transition: "all .2s",
-                    }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                        <div style={{ width: 32, height: 32, borderRadius: 10, background: autoRealize ? "rgba(29,78,216,0.12)" : (dark ? "rgba(255,255,255,0.05)" : "#f1f4f9"), display: "flex", alignItems: "center", justifyContent: "center" }}>
-                          <Zap size={15} color={autoRealize ? "#1d4ed8" : muted} />
-                        </div>
-                        <div>
-                          <p style={{ fontSize: "0.85rem", fontWeight: 600, color: text, marginBottom: 1 }}>Realizar automaticamente</p>
-                          <p style={{ fontSize: "0.68rem", color: muted }}>
-                            {autoRealize ? `Será realizada em ${new Date(date + "T00:00:00").toLocaleDateString("pt-BR")}` : "Marcar como realizada na data de vencimento"}
-                          </p>
-                        </div>
-                      </div>
-                      <Switch checked={autoRealize} onCheckedChange={handleAutoRealizeChange} />
+              {!isRealized && (
+                <div style={{
+                  display: "flex", alignItems: "center", justifyContent: "space-between",
+                  padding: "12px 14px", borderRadius: 14,
+                  background: autoRealize ? (dark ? "rgba(29,78,216,0.1)" : "rgba(29,78,216,0.05)") : rowBg,
+                  border: `1px solid ${autoRealize ? (dark ? "rgba(29,78,216,0.25)" : "rgba(29,78,216,0.15)") : rowBrd}`,
+                  transition: "all .2s",
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <div style={{ width: 34, height: 34, borderRadius: 10, background: autoRealize ? "rgba(29,78,216,0.12)" : (dark ? "rgba(255,255,255,0.05)" : "#f1f4f9"), display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      <Zap size={15} color={autoRealize ? "#1d4ed8" : muted} />
                     </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+                    <div>
+                      <p style={{ fontSize: "0.85rem", fontWeight: 600, color: text, marginBottom: 1 }}>Realizar automaticamente</p>
+                      <p style={{ fontSize: "0.68rem", color: muted }}>
+                        {autoRealize ? `Será realizada em ${new Date(date + "T00:00:00").toLocaleDateString("pt-BR")}` : "Marcar como realizada na data"}
+                      </p>
+                    </div>
+                  </div>
+                  <Switch checked={autoRealize} onCheckedChange={handleAutoRealizeChange} />
+                </div>
+              )}
             </div>
           )}
 
-          {/* Submit */}
-          <motion.button type="submit" whileTap={{ scale: 0.97 }}
-            style={{
-              width: "100%", height: 48, borderRadius: 14, border: "none", cursor: "pointer",
-              background: submitBg, color: "#ffffff",
-              fontFamily: "'Cabinet Grotesk',sans-serif",
-              fontWeight: 800, fontSize: "0.95rem", letterSpacing: "-0.01em",
-              boxShadow: type === "income" ? "0 4px 16px rgba(5,150,105,0.35)" : "0 4px 16px rgba(220,38,38,0.35)",
-              marginTop: 4,
-            }}>
-            {isEditing ? "Salvar alterações" : isRecurring ? `Criar recorrência ${type === "income" ? "de entrada" : "de saída"}` : `Adicionar ${type === "income" ? "Entrada" : "Saída"}`}
-          </motion.button>
+          {/* ✅ Botão submit com altura fixa e sem margin problemático */}
+          <div style={{ paddingTop: 4 }}>
+            <motion.button type="submit" whileTap={{ scale: 0.97 }}
+              style={{
+                width: "100%",
+                height: 52,
+                borderRadius: 14,
+                border: "none",
+                cursor: "pointer",
+                background: submitBg,
+                color: "#ffffff",
+                fontFamily: "'Cabinet Grotesk',sans-serif",
+                fontWeight: 800,
+                fontSize: "0.95rem",
+                letterSpacing: "-0.01em",
+                boxShadow: type === "income"
+                  ? "0 4px 20px rgba(5,150,105,0.4)"
+                  : "0 4px 20px rgba(220,38,38,0.4)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}>
+              {isEditing
+                ? "Salvar alterações"
+                : isRecurring
+                  ? `Criar recorrência ${type === "income" ? "de entrada" : "de saída"}`
+                  : `Adicionar ${type === "income" ? "Entrada" : "Saída"}`}
+            </motion.button>
+          </div>
 
         </form>
       </motion.div>
