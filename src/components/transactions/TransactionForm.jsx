@@ -131,7 +131,7 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
   };
 
   // MUDANÇA 1: showAutoRealize não aparece quando recorrente está ativo
-  const showAutoRealize = !isRealized && !isRecurring;
+  const showAutoRealize = !isRealized || isRecurring;
 
   const modalBg   = dark ? "#0c0e13" : "#ffffff";
   const headerBrd = dark ? "rgba(255,255,255,0.07)" : "rgba(17,24,39,0.06)";
@@ -375,8 +375,8 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
             </div>
           )}
 
-          {/* Realizada — esconde quando isRecurring ou cartão */}
-          {!selectedCard && !isRecurring && (
+          {/* Realizada — esconde apenas quando cartão selecionado */}
+          {!selectedCard && (
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "11px 14px", background: rowBg, borderRadius: 14, border: `1px solid ${rowBrd}` }}>
                 <div>
@@ -412,7 +412,7 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
           {/* MUDANÇA: botão com height 52 fixo */}
           <motion.button type="submit" whileTap={{ scale: 0.97 }}
             style={{
-              width: "100%", height: 52, borderRadius: 14, border: "none", cursor: "pointer",
+              width: "100%", height: 56, borderRadius: 14, border: "none", cursor: "pointer",
               background: submitBg, color: "#ffffff",
               fontFamily: "'Cabinet Grotesk',sans-serif",
               fontWeight: 800, fontSize: "0.95rem", letterSpacing: "-0.01em",
