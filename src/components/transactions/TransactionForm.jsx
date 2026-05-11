@@ -212,7 +212,7 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
             flexDirection: "column",
             gap: 14,
             /* ✅ padding bottom garante que o botão não fique escondido */
-            paddingBottom: 32,
+            paddingBottom: 96,
           }}
         >
 
