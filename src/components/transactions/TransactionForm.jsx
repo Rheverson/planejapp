@@ -192,7 +192,7 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
         </div>
 
         {/* MUDANÇA 2: paddingBottom 96 para botão não sumir atrás do nav */}
-        <form onSubmit={handleSubmit} style={{ flex: 1, overflowY: "auto", padding: "14px 20px 96px 20px", display: "flex", flexDirection: "column", gap: 14 }}>
+        <form onSubmit={handleSubmit} style={{ flex: 1, overflowY: "auto", padding: "14px 16px 96px 16px", display: "flex", flexDirection: "column", gap: 14 }}>
 
           {/* Tipo */}
           <div style={{ display: "flex", gap: 6, padding: 5, background: dark ? "rgba(255,255,255,0.04)" : "#f1f4f9", borderRadius: 14, border: `1px solid ${rowBrd}` }}>
@@ -412,10 +412,10 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
           {/* MUDANÇA: botão com height 52 fixo */}
           <motion.button type="submit" whileTap={{ scale: 0.97 }}
             style={{
-              width: "100%", height: 56, borderRadius: 14, border: "none", cursor: "pointer",
+              width: "100%", height: 56, borderRadius: 14, border: "none", cursor: "pointer", marginTop: 8,
               background: submitBg, color: "#ffffff",
               fontFamily: "'Cabinet Grotesk',sans-serif",
-              fontWeight: 800, fontSize: "0.95rem", letterSpacing: "-0.01em",
+              fontWeight: 800, fontSize: "1rem", letterSpacing: "-0.01em",
               boxShadow: type === "income" ? "0 4px 16px rgba(5,150,105,0.35)" : "0 4px 16px rgba(220,38,38,0.35)",
               display: "flex", alignItems: "center", justifyContent: "center",
             }}>
