@@ -314,7 +314,7 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
 
           {/* Recorrente */}
           {(
-            <div style={{ borderRadius: 14, border: "2px solid #1d4ed8", background: "rgba(29,78,216,0.12)" }}>
+            <div style={{ borderRadius: 14, border: `1px solid ${rowBrd}` }}>
               <button type="button" onClick={() => setIsRecurring(!isRecurring)}
                 style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "11px 14px", background: isRecurring ? (dark ? "rgba(29,78,216,0.08)" : "rgba(29,78,216,0.04)") : rowBg, border: "none", borderRadius: isRecurring ? "14px 14px 0 0" : 14, cursor: "pointer", gap: 12 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -412,7 +412,7 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
           {/* MUDANÇA: botão com height 52 fixo */}
           <motion.button type="submit" whileTap={{ scale: 0.97 }}
             style={{
-              width: "100%", height: 56, borderRadius: 14, border: "none", cursor: "pointer", marginTop: 8,
+              width: "100%", minHeight: 56, padding: "0 24px", borderRadius: 14, border: "none", cursor: "pointer", marginTop: 8, flexShrink: 0,
               background: submitBg, color: "#ffffff",
               fontFamily: "'Cabinet Grotesk',sans-serif",
               fontWeight: 800, fontSize: "1rem", letterSpacing: "-0.01em",
