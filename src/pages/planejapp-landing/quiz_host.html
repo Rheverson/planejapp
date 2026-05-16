@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PlanejeApp Quiz — Host</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrious@4.0.2/dist/qrious.min.js"></script>
+
+<link href="https://fonts.googleapis.com/css2?family=Cabinet+Grotesk:wght@700;800;900&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#060709;--card:#0c0e13;--card2:#12151c;
+  --blue:#1d4ed8;--blue2:#2563eb;--bluel:#60a5fa;
+  --green:#2ecc8a;--red:#e85d5d;--yellow:#f59e0b;--purple:#a78bfa;
+  --text:#e8edf5;--muted:#6b7a96;
+  --border:rgba(255,255,255,0.08);
+  --A:#3b82f6;--B:#ef4444;--C:#22c55e;--D:#f59e0b;
+}
+body{background:var(--bg);color:var(--text);font-family:'Outfit',sans-serif;min-height:100vh;overflow:hidden;}
+h1,h2,h3{font-family:'Cabinet Grotesk',sans-serif;letter-spacing:-0.04em;}
+
+/* LOGO */
+.logo{position:fixed;top:24px;left:32px;font-family:'Cabinet Grotesk',sans-serif;font-weight:900;font-size:1.3rem;display:flex;align-items:center;gap:7px;z-index:100;}
+.logo-dot{width:7px;height:7px;border-radius:50%;background:var(--bluel);}
+
+/* SCREENS */
+.screen{display:none;width:100vw;height:100vh;align-items:center;justify-content:center;flex-direction:column;padding:40px;}
+.screen.active{display:flex;}
+
+/* ── LOBBY ─────────────────────────────────────────────────── */
+.lobby-grid{display:grid;grid-template-columns:1fr 1fr;gap:40px;max-width:1100px;width:100%;align-items:center;}
+.lobby-left h2{font-size:2.8rem;font-weight:900;margin-bottom:12px;line-height:1.1;}
+.lobby-left h2 span{color:var(--bluel);}
+.lobby-left p{color:var(--muted);font-size:1.05rem;margin-bottom:28px;max-width:380px;line-height:1.6;}
+.qr-box{background:white;border-radius:20px;padding:16px;display:inline-block;box-shadow:0 0 60px rgba(29,78,216,.25);}
+.url-badge{display:inline-flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:10px 16px;font-size:0.9rem;color:var(--muted);margin-bottom:20px;}
+.url-badge span{color:var(--bluel);font-weight:600;}
+.players-waiting{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:28px;}
+.players-waiting h3{font-size:1rem;font-weight:700;margin-bottom:16px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;}
+.players-list{display:flex;flex-wrap:wrap;gap:10px;min-height:80px;max-height:240px;overflow-y:auto;}
+.player-chip{background:var(--card2);border:1px solid var(--border);border-radius:999px;padding:7px 16px;font-size:.85rem;font-weight:600;display:flex;align-items:center;gap:8px;animation:popIn .3s ease;}
+@keyframes popIn{from{transform:scale(0.8);opacity:0}to{transform:scale(1);opacity:1}}
+.player-chip .av{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:800;color:#fff;}
+.count-badge{font-family:'Cabinet Grotesk',sans-serif;font-size:2rem;font-weight:900;color:var(--bluel);margin-bottom:4px;}
+.btn-start{background:linear-gradient(135deg,var(--green),#16a34a);color:#fff;border:none;border-radius:14px;padding:16px 40px;font-family:'Cabinet Grotesk',sans-serif;font-weight:900;font-size:1.2rem;cursor:pointer;box-shadow:0 0 40px rgba(46,204,138,.3);transition:all .2s;margin-top:20px;}
+.btn-start:hover{transform:translateY(-3px);box-shadow:0 16px 40px rgba(46,204,138,.4);}
+.btn-start:disabled{opacity:.4;cursor:default;transform:none;}
+
+/* ── QUESTION ──────────────────────────────────────────────── */
+.q-top{width:100%;max-width:1100px;display:flex;align-items:center;justify-content:space-between;margin-bottom:28px;}
+.q-info{display:flex;align-items:center;gap:16px;}
+.q-num-badge{background:var(--blue);border-radius:10px;padding:6px 16px;font-family:'Cabinet Grotesk',sans-serif;font-weight:800;font-size:.9rem;}
+.q-players-count{color:var(--muted);font-size:.9rem;}
+.timer-wrap{position:relative;width:80px;height:80px;}
+.timer-svg{transform:rotate(-90deg);}
+.timer-circle{transition:stroke-dashoffset .5s linear;}
+.timer-num{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:'Cabinet Grotesk',sans-serif;font-weight:900;font-size:1.6rem;color:var(--text);}
+.q-box{background:var(--card);border:1px solid var(--border);border-radius:24px;padding:36px 48px;max-width:900px;width:100%;text-align:center;margin-bottom:32px;}
+.q-emoji-big{font-size:3rem;margin-bottom:16px;}
+.q-text-big{font-family:'Cabinet Grotesk',sans-serif;font-size:2rem;font-weight:900;line-height:1.2;letter-spacing:-0.03em;color:var(--text);}
+.opts-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:900px;width:100%;}
+.opt-box{border-radius:18px;padding:20px 28px;display:flex;align-items:center;gap:16px;cursor:default;}
+.opt-box.A{background:rgba(59,130,246,.15);border:2px solid rgba(59,130,246,.3);}
+.opt-box.B{background:rgba(239,68,68,.15);border:2px solid rgba(239,68,68,.3);}
+.opt-box.C{background:rgba(34,197,94,.15);border:2px solid rgba(34,197,94,.3);}
+.opt-box.D{background:rgba(245,158,11,.15);border:2px solid rgba(245,158,11,.3);}
+.opt-box.correct{filter:brightness(1.4);border-width:3px;}
+.opt-letter-big{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-family:'Cabinet Grotesk',sans-serif;font-weight:900;font-size:1.2rem;color:#fff;flex-shrink:0;}
+.opt-box.A .opt-letter-big{background:var(--A);}
+.opt-box.B .opt-letter-big{background:var(--B);}
+.opt-box.C .opt-letter-big{background:var(--C);}
+.opt-box.D .opt-letter-big{background:var(--D);}
+.opt-text-big{font-family:'Cabinet Grotesk',sans-serif;font-size:1.2rem;font-weight:700;color:var(--text);}
+
+/* ANSWER BAR */
+.answer-bar{width:100%;max-width:900px;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px 20px;display:flex;align-items:center;gap:12px;margin-top:16px;}
+.ans-count{font-size:.85rem;color:var(--muted);}
+.ans-count strong{color:var(--bluel);}
+.ans-progress{flex:1;height:6px;background:var(--border);border-radius:999px;overflow:hidden;}
+.ans-fill{height:100%;background:var(--bluel);border-radius:999px;transition:width .3s;}
+
+/* ── REVEAL ────────────────────────────────────────────────── */
+.reveal-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;max-width:1100px;width:100%;}
+.reveal-left{}
+.reveal-answer-box{background:rgba(46,204,138,.1);border:2px solid var(--green);border-radius:20px;padding:24px;margin-bottom:20px;text-align:center;}
+.reveal-answer-box .label{font-size:.72rem;color:var(--green);font-weight:700;text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px;}
+.reveal-answer-box .answer-text{font-family:'Cabinet Grotesk',sans-serif;font-size:1.4rem;font-weight:900;color:var(--text);}
+.stats-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:20px;}
+.stat-box{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;text-align:center;}
+.stat-val{font-family:'Cabinet Grotesk',sans-serif;font-size:1.8rem;font-weight:900;color:var(--bluel);}
+.stat-lbl{font-size:.65rem;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-top:2px;}
+.leaderboard{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:20px;max-height:380px;overflow-y:auto;}
+.lb-title{font-size:.72rem;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.1em;margin-bottom:14px;}
+.lb-row{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);}
+.lb-row:last-child{border-bottom:none;}
+.lb-pos{font-family:'Cabinet Grotesk',sans-serif;font-weight:900;font-size:1rem;width:28px;color:var(--muted);}
+.lb-pos.gold{color:#f59e0b;}
+.lb-pos.silver{color:#cbd5e1;}
+.lb-pos.bronze{color:#92400e;}
+.lb-name{flex:1;font-weight:600;font-size:.9rem;color:var(--text);}
+.lb-score{font-family:'Cabinet Grotesk',sans-serif;font-weight:800;font-size:1rem;color:var(--bluel);}
+.btn-next-q{background:var(--blue);color:#fff;border:none;border-radius:12px;padding:14px 32px;font-family:'Cabinet Grotesk',sans-serif;font-weight:800;font-size:1rem;cursor:pointer;transition:all .2s;width:100%;}
+.btn-next-q:hover{background:var(--blue2);}
+
+/* ── FINAL ─────────────────────────────────────────────────── */
+.podium{display:flex;align-items:flex-end;justify-content:center;gap:20px;margin:28px 0;}
+.podium-slot{display:flex;flex-direction:column;align-items:center;gap:10px;}
+.podium-name{font-weight:700;font-size:.95rem;text-align:center;}
+.podium-score{font-size:.75rem;color:var(--muted);}
+.podium-block{border-radius:12px 12px 0 0;width:120px;display:flex;align-items:center;justify-content:center;}
+.podium-block.p1{height:140px;background:linear-gradient(180deg,#f59e0b,#b45309);}
+.podium-block.p2{height:100px;background:linear-gradient(180deg,#94a3b8,#475569);}
+.podium-block.p3{height:70px;background:linear-gradient(180deg,#92400e,#78350f);}
+.podium-medal{font-size:2rem;}
+.promo-big{background:linear-gradient(135deg,rgba(29,78,216,.2),rgba(55,48,163,.15));border:1px solid rgba(37,99,235,.4);border-radius:20px;padding:24px 40px;text-align:center;margin-top:12px;}
+.promo-big .pl{font-size:.7rem;color:var(--bluel);font-weight:700;text-transform:uppercase;letter-spacing:.12em;margin-bottom:8px;}
+.promo-big .pc{font-family:'Cabinet Grotesk',sans-serif;font-size:2.2rem;font-weight:900;letter-spacing:.06em;}
+.promo-big .ps{font-size:.85rem;color:var(--muted);margin-top:6px;}
+.btn-restart{background:transparent;color:var(--muted);border:1px solid var(--border);border-radius:12px;padding:12px 28px;font-family:'Outfit',sans-serif;font-weight:500;font-size:.9rem;cursor:pointer;margin-top:16px;transition:all .2s;}
+.btn-restart:hover{border-color:rgba(255,255,255,.2);color:var(--text);}
+</style>
+</head>
+<body>
+
+<div class="logo"><div class="logo-dot"></div>PlanejeApp Quiz</div>
+
+<!-- LOBBY -->
+<div class="screen active" id="s-lobby">
+  <div class="lobby-grid">
+    <div class="lobby-left">
+      <h2>Quiz <span>Financeiro</span><br>PlanejeApp</h2>
+      <p>Escaneie o QR code com seu celular para entrar no quiz! Teste seus conhecimentos sobre finanças.</p>
+      <div class="url-badge">📱 <span id="player-url">carregando...</span></div>
+      <div class="qr-box" id="qr-lobby"></div>
+    </div>
+    <div>
+      <div class="players-waiting">
+        <h3>Jogadores conectados</h3>
+        <div class="count-badge" id="player-count">0</div>
+        <div style="color:var(--muted);font-size:.78rem;margin-bottom:14px;">pessoas aguardando</div>
+        <div class="players-list" id="players-list"></div>
+      </div>
+      <button class="btn-start" id="btn-start" onclick="startGame()" disabled>
+        🚀 Começar o Quiz!
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- QUESTION -->
+<div class="screen" id="s-question">
+  <div class="q-top">
+    <div class="q-info">
+      <div class="q-num-badge" id="q-num-badge">Pergunta 1/10</div>
+      <div class="q-players-count" id="q-p-count"></div>
+    </div>
+    <div class="timer-wrap">
+      <svg class="timer-svg" width="80" height="80" viewBox="0 0 80 80">
+        <circle cx="40" cy="40" r="34" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="6"/>
+        <circle id="timer-circle" cx="40" cy="40" r="34" fill="none" stroke="#1d4ed8" stroke-width="6"
+          stroke-dasharray="213.6" stroke-dashoffset="0" stroke-linecap="round" class="timer-circle"/>
+      </svg>
+      <div class="timer-num" id="timer-num">20</div>
+    </div>
+  </div>
+  <div class="q-box">
+    <div class="q-emoji-big" id="q-emoji"></div>
+    <div class="q-text-big" id="q-text"></div>
+  </div>
+  <div class="opts-grid" id="opts-grid"></div>
+  <div class="answer-bar">
+    <div class="ans-count">Responderam: <strong id="ans-count">0</strong>/<span id="ans-total">0</span></div>
+    <div class="ans-progress"><div class="ans-fill" id="ans-fill" style="width:0%"></div></div>
+  </div>
+</div>
+
+<!-- REVEAL -->
+<div class="screen" id="s-reveal">
+  <div class="reveal-grid">
+    <div class="reveal-left">
+      <div class="reveal-answer-box">
+        <div class="label">✅ Resposta correta</div>
+        <div class="answer-text" id="reveal-answer"></div>
+      </div>
+      <div class="stats-row">
+        <div class="stat-box"><div class="stat-val" id="rv-correct">0</div><div class="stat-lbl">Acertaram</div></div>
+        <div class="stat-box"><div class="stat-val" id="rv-wrong">0</div><div class="stat-lbl">Erraram</div></div>
+        <div class="stat-box"><div class="stat-val" id="rv-pct">0%</div><div class="stat-lbl">Acerto</div></div>
+      </div>
+      <button class="btn-next-q" id="btn-next-q" onclick="nextQuestion()">Próxima pergunta →</button>
+    </div>
+    <div>
+      <div class="leaderboard">
+        <div class="lb-title">🏆 Ranking parcial</div>
+        <div id="leaderboard-list"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- FINAL -->
+<div class="screen" id="s-final">
+  <div class="logo" style="position:relative;top:0;left:0;margin-bottom:24px;font-size:1.5rem;"><div class="logo-dot"></div>PlanejeApp</div>
+  <h2 style="font-size:2.2rem;margin-bottom:8px;">Quiz finalizado! 🎉</h2>
+  <p style="color:var(--muted);margin-bottom:12px;">Confira o pódio dos melhores!</p>
+  <div class="podium" id="podium"></div>
+  <div class="promo-big">
+    <div class="pl">🎁 Brinde para todos — 60 dias grátis</div>
+    <div class="pc">EVENTO2026</div>
+    <div class="ps">Acesse app.planejapp.com.br e use este código</div>
+  </div>
+  <button class="btn-restart" onclick="location.reload()">↩ Novo jogo</button>
+</div>
+
+<script>
+// ── CONFIG ─────────────────────────────────────────────────────
+const SUPABASE_URL = 'https://pomnecjcvpqegyeklims.supabase.co'
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBvbW5lY2pjdnBxZWd5ZWtsaW1zIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE4NTMyMjMsImV4cCI6MjA4NzQyOTIyM30.d5EEXIgrm3CLET4ONTre7x5XAcqftnu8tWY8-2rVUzMI'
+const PLAYER_URL   = 'https://planejapp.com.br/quiz'
+
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY)
+
+let sessionId = null
+let players = []
+let currentQ = 0
+let timerInterval = null
+let answers = []
+let totalTimer = 20
+
+const PERGUNTAS = [
+  {emoji:'💸',text:'O que é reserva de emergência?',opts:['Dinheiro guardado para imprevistos','Uma conta especial do banco','Seguro de vida','Dinheiro para viagens'],correct:0},
+  {emoji:'📊',text:'Orçamento negativo no mês significa:',opts:['Você gastou mais do que ganhou','Você economizou bastante','Suas dívidas zeraram','Saldo bancário zerado'],correct:0},
+  {emoji:'🏦',text:'Maior armadilha do cartão de crédito:',opts:['Pagar só o mínimo e pagar juros','Usar para compras grandes','Ter limite alto','Pagar a fatura toda mês'],correct:0},
+  {emoji:'🎯',text:'Uma meta financeira inteligente é:',opts:['Guardar R$300/mês por 12 meses','Economizar bastante','Parar de gastar com frescura','Ficar rico em 2025'],correct:0},
+  {emoji:'📱',text:'O que mais prejudica o orçamento sem perceber?',opts:['Gastos pequenos e frequentes','Comprar um carro','Pagar aluguel','Fazer academia'],correct:0},
+  {emoji:'💰',text:'A regra 50-30-20 divide o salário em:',opts:['50% necessidades, 30% desejos, 20% poupança','50% investir, 30% contas, 20% lazer','50% lazer, 30% poupança, 20% contas','Não existe essa regra'],correct:0},
+  {emoji:'📉',text:'Dinheiro parado na conta corrente:',opts:['Perde valor por causa da inflação','Cresce automaticamente','Fica igual','Gera juros automáticos'],correct:0},
+  {emoji:'🧾',text:'Melhor estratégia contra compras por impulso:',opts:['Esperar 24h antes de decidir','Comprar quando tem desconto','Comprar quando animado','No fim do mês'],correct:0},
+  {emoji:'🏠',text:'% recomendável do salário em moradia:',opts:['No máximo 30%','No máximo 60%','Depende só do conforto','Não importa'],correct:0},
+  {emoji:'🤖',text:'O Finn (IA do PlanejeApp) te ajuda a:',opts:['Identificar padrões de gasto e economizar','Investir na bolsa automaticamente','Pagar suas contas','Negociar dívidas'],correct:0},
+]
+
+const COLORS = ['A','B','C','D']
+const LETTERS = ['A','B','C','D']
+const AV_COLORS = ['#3b82f6','#ef4444','#22c55e','#f59e0b','#a78bfa','#ec4899','#06b6d4','#84cc16']
+
+// ── INIT ───────────────────────────────────────────────────────
+async function init() {
+  document.getElementById('player-url').textContent = PLAYER_URL
+
+  // Cria nova sessão
+  const {data, error} = await sb.from('quiz_sessions').insert({status:'waiting',current_question:0}).select().single()
+  if(error){console.error(error);return}
+  sessionId = data.id
+
+  // Gera QR imediato no canvas (sem API externa)
+  const qrUrl = `${PLAYER_URL}?session=${sessionId}`
+  document.getElementById('player-url').textContent = qrUrl
+
+  const canvas = document.createElement('canvas')
+  document.getElementById('qr-lobby').innerHTML = ''
+  document.getElementById('qr-lobby').appendChild(canvas)
+  new QRious({
+    element: canvas,
+    value: qrUrl,
+    size: 180,
+    foreground: '#000000',
+    background: '#ffffff',
+    level: 'M'
+  })
+
+  // Subscribe players
+  sb.channel('quiz-players')
+    .on('postgres_changes', {event:'INSERT', schema:'public', table:'quiz_players', filter:`session_id=eq.${sessionId}`}, payload => {
+      addPlayer(payload.new)
+    })
+    .subscribe()
+}
+
+function addPlayer(p) {
+  players.push(p)
+  const count = players.length
+  document.getElementById('player-count').textContent = count
+  if(count >= 1) document.getElementById('btn-start').disabled = false
+
+  const list = document.getElementById('players-list')
+  const chip = document.createElement('div')
+  chip.className = 'player-chip'
+  chip.id = `chip-${p.id}`
+  const color = AV_COLORS[count % AV_COLORS.length]
+  const initials = (p.nickname || p.phone).slice(0,2).toUpperCase()
+  chip.innerHTML = `<div class="av" style="background:${color}">${initials}</div>${p.nickname || p.phone}`
+  list.appendChild(chip)
+}
+
+// ── START GAME ─────────────────────────────────────────────────
+async function startGame() {
+  await sb.from('quiz_sessions').update({status:'question', current_question:0}).eq('id', sessionId)
+  showQuestion(0)
+}
+
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'))
+  document.getElementById(id).classList.add('active')
+}
+
+// ── QUESTION ───────────────────────────────────────────────────
+function showQuestion(idx) {
+  currentQ = idx
+  answers = []
+  showScreen('s-question')
+
+  const q = PERGUNTAS[idx]
+  document.getElementById('q-num-badge').textContent = `Pergunta ${idx+1}/${PERGUNTAS.length}`
+  document.getElementById('q-p-count').textContent = `${players.length} jogadores`
+  document.getElementById('q-emoji').textContent = q.emoji
+  document.getElementById('q-text').textContent = q.text
+  document.getElementById('ans-count').textContent = '0'
+  document.getElementById('ans-total').textContent = players.length
+  document.getElementById('ans-fill').style.width = '0%'
+
+  const grid = document.getElementById('opts-grid')
+  grid.innerHTML = ''
+  q.opts.forEach((opt, i) => {
+    const div = document.createElement('div')
+    div.className = `opt-box ${LETTERS[i]}`
+    div.innerHTML = `<div class="opt-letter-big">${LETTERS[i]}</div><div class="opt-text-big">${opt}</div>`
+    grid.appendChild(div)
+  })
+
+  // Timer
+  let t = totalTimer
+  const circle = document.getElementById('timer-circle')
+  const circumference = 213.6
+  document.getElementById('timer-num').textContent = t
+
+  clearInterval(timerInterval)
+  timerInterval = setInterval(async () => {
+    t--
+    document.getElementById('timer-num').textContent = t
+    circle.style.strokeDashoffset = circumference * (1 - t/totalTimer)
+    if(t <= 5) circle.style.stroke = '#ef4444'
+    else circle.style.stroke = '#1d4ed8'
+    if(t <= 0) {
+      clearInterval(timerInterval)
+      await revealAnswer()
+    }
+  }, 1000)
+
+  // Subscribe answers
+  sb.channel(`answers-${idx}`)
+    .on('postgres_changes', {event:'INSERT', schema:'public', table:'quiz_answers',
+      filter:`session_id=eq.${sessionId}`}, payload => {
+      if(payload.new.question_index === idx) {
+        answers.push(payload.new)
+        const cnt = answers.length
+        document.getElementById('ans-count').textContent = cnt
+        document.getElementById('ans-fill').style.width = `${(cnt/players.length)*100}%`
+        if(cnt >= players.length) {
+          clearInterval(timerInterval)
+          revealAnswer()
+        }
+      }
+    })
+    .subscribe()
+}
+
+// ── REVEAL ─────────────────────────────────────────────────────
+async function revealAnswer() {
+  clearInterval(timerInterval)
+  const q = PERGUNTAS[currentQ]
+
+  // Destaca resposta correta
+  const opts = document.querySelectorAll('.opt-box')
+  opts[q.correct].classList.add('correct')
+
+  // Atualiza sessão
+  await sb.from('quiz_sessions').update({status:'reveal'}).eq('id', sessionId)
+
+  const correct = answers.filter(a => a.is_correct).length
+  const wrong = answers.length - correct
+  const pct = answers.length > 0 ? Math.round((correct/answers.length)*100) : 0
+
+  setTimeout(() => {
+    showScreen('s-reveal')
+    document.getElementById('reveal-answer').textContent = q.opts[q.correct]
+    document.getElementById('rv-correct').textContent = correct
+    document.getElementById('rv-wrong').textContent = wrong
+    document.getElementById('rv-pct').textContent = pct + '%'
+
+    loadLeaderboard()
+
+    const isLast = currentQ >= PERGUNTAS.length - 1
+    const btn = document.getElementById('btn-next-q')
+    btn.textContent = isLast ? '🏆 Ver resultado final →' : 'Próxima pergunta →'
+  }, 800)
+}
+
+async function loadLeaderboard() {
+  const {data} = await sb.from('quiz_players')
+    .select('id, phone, nickname, score')
+    .eq('session_id', sessionId)
+    .order('score', {ascending: false})
+    .limit(8)
+
+  const list = document.getElementById('leaderboard-list')
+  list.innerHTML = ''
+  if(!data) return
+  data.forEach((p, i) => {
+    const medals = ['🥇','🥈','🥉']
+    const posClass = i===0?'gold':i===1?'silver':i===2?'bronze':''
+    list.innerHTML += `
+      <div class="lb-row">
+        <div class="lb-pos ${posClass}">${medals[i] || (i+1)}</div>
+        <div class="lb-name">${p.nickname || p.phone}</div>
+        <div class="lb-score">${p.score} pts</div>
+      </div>`
+  })
+}
+
+async function nextQuestion() {
+  const next = currentQ + 1
+  if(next >= PERGUNTAS.length) {
+    await sb.from('quiz_sessions').update({status:'finished'}).eq('id', sessionId)
+    showFinal()
+    return
+  }
+  await sb.from('quiz_sessions').update({status:'question', current_question: next}).eq('id', sessionId)
+  showQuestion(next)
+}
+
+async function showFinal() {
+  showScreen('s-final')
+  const {data} = await sb.from('quiz_players')
+    .select('phone, nickname, score')
+    .eq('session_id', sessionId)
+    .order('score', {ascending: false})
+    .limit(3)
+
+  if(!data || data.length === 0) return
+  const podium = document.getElementById('podium')
+  const order = data.length >= 3 ? [1,0,2] : data.length === 2 ? [1,0] : [0]
+  const blocks = ['p2','p1','p3']
+  const medals = ['🥈','🥇','🥉']
+
+  podium.innerHTML = ''
+  order.forEach((dataIdx, orderIdx) => {
+    const p = data[dataIdx]
+    if(!p) return
+    podium.innerHTML += `
+      <div class="podium-slot">
+        <div class="podium-name">${p.nickname || p.phone}</div>
+        <div class="podium-score">${p.score} pts</div>
+        <div class="podium-block ${blocks[orderIdx]}"><div class="podium-medal">${medals[orderIdx]}</div></div>
+      </div>`
+  })
+}
+
+init()
+</script>
+</body>
+</html>
