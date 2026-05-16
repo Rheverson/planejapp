@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>PlanejeApp Quiz</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link href="https://fonts.googleapis.com/css2?family=Cabinet+Grotesk:wght@700;800;900&family=Outfit:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#060709;--card:#0c0e13;--card2:#12151c;
+  --blue:#1d4ed8;--blue2:#2563eb;--bluel:#60a5fa;
+  --green:#2ecc8a;--red:#e85d5d;--yellow:#f59e0b;
+  --text:#e8edf5;--muted:#6b7a96;--border:rgba(255,255,255,0.08);
+  --A:#3b82f6;--B:#ef4444;--C:#22c55e;--D:#f59e0b;
+}
+body{background:var(--bg);color:var(--text);font-family:'Outfit',sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;}
+h1,h2,h3{font-family:'Cabinet Grotesk',sans-serif;letter-spacing:-0.04em;}
+
+.logo{font-family:'Cabinet Grotesk',sans-serif;font-weight:900;font-size:1.1rem;display:flex;align-items:center;gap:6px;margin-bottom:28px;}
+.logo-dot{width:7px;height:7px;border-radius:50%;background:var(--bluel);}
+
+.wrap{width:100%;max-width:420px;}
+
+.screen{display:none;flex-direction:column;align-items:center;animation:fadeUp .4s ease both;}
+.screen.active{display:flex;}
+@keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+
+/* JOIN */
+.join-card{background:var(--card);border:1px solid var(--border);border-radius:24px;padding:28px;width:100%;}
+.join-emoji{font-size:3rem;text-align:center;margin-bottom:16px;}
+.join-card h2{font-size:1.6rem;font-weight:900;text-align:center;margin-bottom:6px;}
+.join-card p{color:var(--muted);text-align:center;font-size:.88rem;margin-bottom:24px;line-height:1.6;}
+.field{margin-bottom:16px;}
+.field label{display:block;font-size:.65rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:6px;}
+.field input{width:100%;background:var(--card2);border:1px solid var(--border);border-radius:12px;padding:14px 16px;color:var(--text);font-family:'Outfit',sans-serif;font-size:1rem;outline:none;transition:border-color .2s;}
+.field input:focus{border-color:rgba(37,99,235,.4);}
+.field input::placeholder{color:var(--muted);}
+.btn-join{width:100%;padding:16px;border-radius:14px;border:none;background:linear-gradient(135deg,var(--blue),var(--blue2));color:#fff;font-family:'Cabinet Grotesk',sans-serif;font-weight:900;font-size:1.1rem;cursor:pointer;box-shadow:0 0 30px rgba(29,78,216,.3);transition:all .2s;margin-top:4px;}
+.btn-join:hover{transform:translateY(-2px);}
+.btn-join:disabled{opacity:.5;cursor:default;transform:none;}
+.err{color:var(--red);font-size:.8rem;text-align:center;margin-top:10px;min-height:18px;}
+
+/* WAITING */
+.wait-emoji{font-size:4rem;margin-bottom:20px;animation:pulse 2s infinite;}
+@keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.05)}}
+.wait-card{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:24px;width:100%;text-align:center;}
+.wait-card h2{font-size:1.5rem;margin-bottom:8px;}
+.wait-card p{color:var(--muted);font-size:.9rem;line-height:1.6;}
+.wait-dots{display:flex;justify-content:center;gap:6px;margin-top:20px;}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--blue);animation:blink 1.4s infinite;}
+.dot:nth-child(2){animation-delay:.2s}
+.dot:nth-child(3){animation-delay:.4s}
+@keyframes blink{0%,80%,100%{opacity:.2}40%{opacity:1}}
+.your-rank{background:var(--card2);border:1px solid var(--border);border-radius:12px;padding:12px 20px;margin-top:16px;display:flex;align-items:center;justify-content:space-between;font-size:.88rem;}
+.your-score{font-family:'Cabinet Grotesk',sans-serif;font-weight:900;font-size:1.2rem;color:var(--bluel);}
+
+/* QUESTION */
+.q-card{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:20px;width:100%;margin-bottom:16px;}
+.q-meta{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
+.q-badge{background:rgba(29,78,216,.15);border:1px solid rgba(37,99,235,.3);border-radius:8px;padding:4px 12px;font-size:.72rem;font-weight:700;color:var(--bluel);}
+.timer-sm{font-family:'Cabinet Grotesk',sans-serif;font-weight:900;font-size:1.3rem;color:var(--text);}
+.timer-sm.urgent{color:var(--red);}
+.q-emoji-sm{font-size:1.8rem;margin-bottom:10px;}
+.q-text-sm{font-family:'Cabinet Grotesk',sans-serif;font-size:1.15rem;font-weight:800;line-height:1.3;color:var(--text);}
+
+.opts-mobile{display:grid;grid-template-columns:1fr 1fr;gap:10px;width:100%;}
+.opt-mobile{border-radius:16px;padding:18px 14px;display:flex;flex-direction:column;align-items:center;gap:8px;border:none;cursor:pointer;transition:all .15s;font-family:'Outfit',sans-serif;}
+.opt-mobile:active{transform:scale(0.95);}
+.opt-mobile.A{background:var(--A);}
+.opt-mobile.B{background:var(--B);}
+.opt-mobile.C{background:var(--C);}
+.opt-mobile.D{background:var(--D);}
+.opt-mobile:disabled{cursor:default;filter:brightness(0.5);}
+.opt-mobile.selected{filter:brightness(1.2);box-shadow:0 0 20px rgba(255,255,255,.2);}
+.opt-mobile.correct{filter:brightness(1.3)!important;box-shadow:0 0 24px rgba(46,204,138,.5)!important;}
+.opt-mobile.wrong{filter:brightness(0.4)!important;}
+.opt-letter-sm{width:34px;height:34px;background:rgba(0,0,0,.25);border-radius:10px;display:flex;align-items:center;justify-content:center;font-family:'Cabinet Grotesk',sans-serif;font-weight:900;font-size:1rem;color:#fff;}
+.opt-text-sm{font-size:.82rem;font-weight:600;text-align:center;color:#fff;line-height:1.3;}
+
+/* FEEDBACK */
+.feedback-box{width:100%;padding:16px;border-radius:14px;text-align:center;margin-top:8px;}
+.feedback-box.ok{background:rgba(46,204,138,.12);border:1px solid rgba(46,204,138,.3);}
+.feedback-box.ko{background:rgba(232,93,93,.1);border:1px solid rgba(232,93,93,.25);}
+.feedback-box .fb-icon{font-size:1.8rem;margin-bottom:4px;}
+.feedback-box .fb-pts{font-family:'Cabinet Grotesk',sans-serif;font-size:1.4rem;font-weight:900;color:var(--green);}
+.feedback-box .fb-txt{font-size:.82rem;color:var(--muted);margin-top:2px;}
+
+/* FINAL */
+.final-card{background:var(--card);border:1px solid var(--border);border-radius:24px;padding:28px;width:100%;text-align:center;}
+.final-medal{font-size:4rem;margin-bottom:12px;}
+.final-score{font-family:'Cabinet Grotesk',sans-serif;font-size:3rem;font-weight:900;color:var(--bluel);}
+.final-score-lbl{color:var(--muted);font-size:.8rem;text-transform:uppercase;letter-spacing:.1em;margin-bottom:20px;}
+.promo-sm{background:linear-gradient(135deg,rgba(29,78,216,.18),rgba(55,48,163,.12));border:1px solid rgba(37,99,235,.35);border-radius:16px;padding:18px;margin-top:16px;}
+.promo-sm .pl{font-size:.65rem;color:var(--bluel);font-weight:700;text-transform:uppercase;letter-spacing:.12em;margin-bottom:6px;}
+.promo-sm .pc{font-family:'Cabinet Grotesk',sans-serif;font-size:1.6rem;font-weight:900;letter-spacing:.06em;}
+.promo-sm .ps{font-size:.75rem;color:var(--muted);margin-top:4px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<!-- JOIN -->
+<div class="screen active" id="s-join">
+  <div class="logo"><div class="logo-dot"></div>PlanejeApp Quiz</div>
+  <div class="join-card">
+    <div class="join-emoji">🧠</div>
+    <h2>Entrar no Quiz!</h2>
+    <p>Coloque seu número de WhatsApp para participar. É rápido!</p>
+    <div class="field">
+      <label>Seu WhatsApp (DDD + número)</label>
+      <input type="tel" id="phone-input" placeholder="41 9 9999-9999" maxlength="20">
+    </div>
+    <div class="field">
+      <label>Apelido (opcional)</label>
+      <input type="text" id="nick-input" placeholder="Como quer aparecer no ranking?">
+    </div>
+    <button class="btn-join" id="btn-join" onclick="joinGame()">Entrar no quiz →</button>
+    <div class="err" id="join-err"></div>
+  </div>
+</div>
+
+<!-- WAITING -->
+<div class="screen" id="s-wait">
+  <div class="logo"><div class="logo-dot"></div>PlanejeApp Quiz</div>
+  <div class="wait-emoji">⏳</div>
+  <div class="wait-card">
+    <h2>Você entrou! 🎉</h2>
+    <p>Aguarde o apresentador iniciar o quiz.<br>A pergunta vai aparecer aqui automaticamente.</p>
+    <div class="wait-dots"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+    <div class="your-rank">
+      <span>Sua pontuação</span>
+      <span class="your-score" id="my-score">0 pts</span>
+    </div>
+  </div>
+</div>
+
+<!-- QUESTION -->
+<div class="screen" id="s-question">
+  <div class="logo"><div class="logo-dot"></div>PlanejeApp Quiz</div>
+  <div class="q-card">
+    <div class="q-meta">
+      <div class="q-badge" id="q-badge-sm">Pergunta 1</div>
+      <div class="timer-sm" id="timer-sm">20</div>
+    </div>
+    <div class="q-emoji-sm" id="q-emoji-sm"></div>
+    <div class="q-text-sm" id="q-text-sm"></div>
+  </div>
+  <div class="opts-mobile" id="opts-mobile"></div>
+  <div class="feedback-box" id="feedback-sm" style="display:none"></div>
+</div>
+
+<!-- FINAL -->
+<div class="screen" id="s-final">
+  <div class="logo"><div class="logo-dot"></div>PlanejeApp Quiz</div>
+  <div class="final-card">
+    <div class="final-medal" id="final-medal">🎉</div>
+    <div class="final-score" id="final-score">0</div>
+    <div class="final-score-lbl">pontos totais</div>
+    <p style="color:var(--muted);font-size:.88rem;line-height:1.6;margin-bottom:4px;">Valeu por participar!<br>Seu presente está esperando:</p>
+    <div class="promo-sm">
+      <div class="pl">🎁 60 dias grátis no PlanejeApp</div>
+      <div class="pc">EVENTO2026</div>
+      <div class="ps">app.planejapp.com.br</div>
+    </div>
+  </div>
+</div>
+
+</div>
+<script>
+const SUPABASE_URL = 'https://pomnecjcvpqegyeklims.supabase.co'
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBvbW5lY2pjdnBxZWd5ZWtsaW1zIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE4NTMyMjMsImV4cCI6MjA4NzQyOTIyM30.d5EEXIgrm3CLET4ONTre7x5XAcqftnu8tWY8-2rVUzM'
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY)
+
+const PERGUNTAS = [
+  {emoji:'💸',text:'O que é reserva de emergência?',opts:['Dinheiro guardado para imprevistos','Uma conta especial do banco','Seguro de vida','Dinheiro para viagens'],correct:0},
+  {emoji:'📊',text:'Orçamento negativo no mês significa:',opts:['Você gastou mais do que ganhou','Você economizou bastante','Suas dívidas zeraram','Saldo bancário zerado'],correct:0},
+  {emoji:'🏦',text:'Maior armadilha do cartão de crédito:',opts:['Pagar só o mínimo e pagar juros','Usar para compras grandes','Ter limite alto','Pagar a fatura toda mês'],correct:0},
+  {emoji:'🎯',text:'Uma meta financeira inteligente é:',opts:['Guardar R$300/mês por 12 meses','Economizar bastante','Parar de gastar com frescura','Ficar rico em 2025'],correct:0},
+  {emoji:'📱',text:'O que mais prejudica o orçamento sem perceber?',opts:['Gastos pequenos e frequentes','Comprar um carro','Pagar aluguel','Fazer academia'],correct:0},
+  {emoji:'💰',text:'A regra 50-30-20 divide o salário em:',opts:['50% necessidades, 30% desejos, 20% poupança','50% investir, 30% contas, 20% lazer','50% lazer, 30% poupança, 20% contas','Não existe essa regra'],correct:0},
+  {emoji:'📉',text:'Dinheiro parado na conta corrente:',opts:['Perde valor por causa da inflação','Cresce automaticamente','Fica igual','Gera juros automáticos'],correct:0},
+  {emoji:'🧾',text:'Melhor estratégia contra compras por impulso:',opts:['Esperar 24h antes de decidir','Comprar quando tem desconto','Comprar quando animado','No fim do mês'],correct:0},
+  {emoji:'🏠',text:'% recomendável do salário em moradia:',opts:['No máximo 30%','No máximo 60%','Depende só do conforto','Não importa'],correct:0},
+  {emoji:'🤖',text:'O Finn (IA do PlanejeApp) te ajuda a:',opts:['Identificar padrões de gasto e economizar','Investir na bolsa automaticamente','Pagar suas contas','Negociar dívidas'],correct:0},
+]
+const LETTERS = ['A','B','C','D']
+
+const params = new URLSearchParams(location.search)
+const sessionId = params.get('session')
+let playerId = null
+let myScore = 0
+let timerInterval = null
+let answered = false
+
+function show(id){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'))
+  document.getElementById(id).classList.add('active')
+}
+
+async function joinGame(){
+  const phone = document.getElementById('phone-input').value.replace(/\D/g,'')
+  const nick  = document.getElementById('nick-input').value.trim()
+  const err   = document.getElementById('join-err')
+  err.textContent = ''
+
+  if(phone.length < 10){err.textContent='Digite um número válido com DDD.';return}
+  if(!sessionId){err.textContent='Sessão inválida. Escaneie o QR novamente.';return}
+
+  document.getElementById('btn-join').disabled = true
+
+  const {data, error} = await sb.from('quiz_players').insert({
+    session_id: sessionId,
+    phone: phone,
+    nickname: nick || null,
+    score: 0
+  }).select().single()
+
+  if(error){
+    err.textContent = 'Erro ao entrar. Tente novamente.'
+    document.getElementById('btn-join').disabled = false
+    return
+  }
+
+  playerId = data.id
+  show('s-wait')
+  subscribeSession()
+}
+
+function subscribeSession(){
+  sb.channel('session-changes')
+    .on('postgres_changes', {event:'UPDATE', schema:'public', table:'quiz_sessions',
+      filter:`id=eq.${sessionId}`}, payload => {
+      const s = payload.new
+      if(s.status === 'question'){
+        showQuestion(s.current_question)
+      } else if(s.status === 'finished'){
+        showFinal()
+      } else if(s.status === 'reveal'){
+        // aguarda próxima pergunta
+        show('s-wait')
+        document.getElementById('my-score').textContent = myScore + ' pts'
+      }
+    })
+    .subscribe()
+}
+
+function showQuestion(idx){
+  answered = false
+  show('s-question')
+  const q = PERGUNTAS[idx]
+  document.getElementById('q-badge-sm').textContent = `Pergunta ${idx+1}/10`
+  document.getElementById('q-emoji-sm').textContent = q.emoji
+  document.getElementById('q-text-sm').textContent = q.text
+  document.getElementById('feedback-sm').style.display = 'none'
+
+  const grid = document.getElementById('opts-mobile')
+  grid.innerHTML = ''
+  q.opts.forEach((opt, i) => {
+    const btn = document.createElement('button')
+    btn.className = `opt-mobile ${LETTERS[i]}`
+    btn.innerHTML = `<div class="opt-letter-sm">${LETTERS[i]}</div><div class="opt-text-sm">${opt}</div>`
+    btn.onclick = () => submitAnswer(idx, i, btn)
+    grid.appendChild(btn)
+  })
+
+  // Timer
+  let t = 20
+  document.getElementById('timer-sm').textContent = t
+  clearInterval(timerInterval)
+  timerInterval = setInterval(()=>{
+    t--
+    const el = document.getElementById('timer-sm')
+    if(!el) return
+    el.textContent = t
+    if(t<=5) el.classList.add('urgent')
+    if(t<=0){ clearInterval(timerInterval) }
+  },1000)
+}
+
+async function submitAnswer(qIdx, answerIdx, btn){
+  if(answered) return
+  answered = true
+  clearInterval(timerInterval)
+
+  const q = PERGUNTAS[qIdx]
+  const isCorrect = answerIdx === q.correct
+  const pts = isCorrect ? 100 : 0
+  if(isCorrect) myScore += pts
+
+  // Desabilita todos
+  document.querySelectorAll('.opt-mobile').forEach(b => {
+    b.disabled = true
+    if(b !== btn) b.classList.add('wrong')
+  })
+  btn.classList.add(isCorrect ? 'correct' : 'wrong')
+
+  // Salva no banco
+  await sb.from('quiz_answers').insert({
+    session_id: sessionId,
+    player_id: playerId,
+    question_index: qIdx,
+    answer: answerIdx,
+    is_correct: isCorrect,
+    points: pts
+  })
+
+  // Atualiza score
+  await sb.from('quiz_players').update({score: myScore}).eq('id', playerId)
+
+  // Feedback
+  const fb = document.getElementById('feedback-sm')
+  fb.style.display = 'block'
+  fb.className = 'feedback-box ' + (isCorrect ? 'ok' : 'ko')
+  fb.innerHTML = isCorrect
+    ? `<div class="fb-icon">✅</div><div class="fb-pts">+100 pts</div><div class="fb-txt">Resposta certa!</div>`
+    : `<div class="fb-icon">❌</div><div class="fb-txt">Resposta errada. Aguarde a próxima!</div>`
+}
+
+async function showFinal(){
+  show('s-final')
+  const {data} = await sb.from('quiz_players').select('score').eq('id', playerId).single()
+  const score = data?.score || myScore
+  document.getElementById('final-score').textContent = score
+
+  let medal = '🎉'
+  if(score >= 900) medal = '🏆'
+  else if(score >= 600) medal = '🥈'
+  else if(score >= 300) medal = '🥉'
+  document.getElementById('final-medal').textContent = medal
+}
+
+if(!sessionId){
+  document.getElementById('join-err').textContent = 'Link inválido. Escaneie o QR code novamente.'
+}
+</script>
+</body>
+</html>
