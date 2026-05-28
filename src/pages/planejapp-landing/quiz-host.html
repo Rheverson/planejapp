@@ -206,10 +206,13 @@ h1,h2,h3{font-family:'Cabinet Grotesk',sans-serif;letter-spacing:-0.04em;}
   <h2 style="font-size:2.2rem;margin-bottom:8px;">Quiz finalizado! 🎉</h2>
   <p style="color:var(--muted);margin-bottom:12px;">Confira o pódio dos melhores!</p>
   <div class="podium" id="podium"></div>
-  <div class="promo-big">
-    <div class="pl">🎁 Brinde para todos — 60 dias grátis</div>
-    <div class="pc">EVENTO2026</div>
-    <div class="ps">Acesse app.planejapp.com.br e use este código</div>
+  <div class="promo-big" style="display:flex;align-items:center;gap:28px;justify-content:center;">
+    <div id="promo-qr" style="background:#0d1f4a;border-radius:12px;padding:8px;flex-shrink:0;"></div>
+    <div>
+      <div class="pl">🎁 Brinde para todos — 60 dias grátis</div>
+      <div class="pc">EVENTO2026</div>
+      <div class="ps">Escaneie ou acesse app.planejapp.com.br</div>
+    </div>
   </div>
   <button class="btn-restart" onclick="location.reload()">↩ Novo jogo</button>
 </div>
@@ -217,8 +220,8 @@ h1,h2,h3{font-family:'Cabinet Grotesk',sans-serif;letter-spacing:-0.04em;}
 <script>
 // ── CONFIG ─────────────────────────────────────────────────────
 const SUPABASE_URL = 'https://pomnecjcvpqegyeklims.supabase.co'
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBvbW5lY2pjdnBxZWd5ZWtsaW1zIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE4NTMyMjMsImV4cCI6MjA4NzQyOTIyM30.d5EEXIgrm3CLET4ONTre7x5XAcqftnu8tWY8-2rVUzMI'
-const PLAYER_URL   = 'https://planejapp.com.br/quiz'
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBvbW5lY2pjdnBxZWd5ZWtsaW1zIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE4NTMyMjMsImV4cCI6MjA4NzQyOTIyM30.d5EEXIgrm3CLET4ONTre7x5XAcqftnu8tWY8-2rVUzM'
+const PLAYER_URL   = 'https://planejapp.com.br/quiz.html'
 
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY)
 
@@ -441,21 +444,47 @@ async function showFinal() {
 
   if(!data || data.length === 0) return
   const podium = document.getElementById('podium')
-  const order = data.length >= 3 ? [1,0,2] : data.length === 2 ? [1,0] : [0]
-  const blocks = ['p2','p1','p3']
-  const medals = ['🥈','🥇','🥉']
 
+  // Ordena pódio: 2º à esq, 1º no centro, 3º à dir (visual)
+  // Só mostra posições que existem
+  const visualOrder = data.length === 1 ? [0]
+    : data.length === 2 ? [1, 0]
+    : [1, 0, 2]  // 2º, 1º, 3º
+
+  const blockClass = ['p1','p2','p3']
+  const medals = ['🥇','🥈','🥉']
+  const heights = {p1:'140px', p2:'100px', p3:'70px'}
+
+  // Monta slots no visual order
   podium.innerHTML = ''
-  order.forEach((dataIdx, orderIdx) => {
+  visualOrder.forEach(dataIdx => {
     const p = data[dataIdx]
     if(!p) return
+    const rank = dataIdx  // 0=1st, 1=2nd, 2=3rd
+    const block = blockClass[rank]
     podium.innerHTML += `
       <div class="podium-slot">
         <div class="podium-name">${p.nickname || p.phone}</div>
         <div class="podium-score">${p.score} pts</div>
-        <div class="podium-block ${blocks[orderIdx]}"><div class="podium-medal">${medals[orderIdx]}</div></div>
+        <div class="podium-block ${block}"><div class="podium-medal">${medals[rank]}</div></div>
       </div>`
   })
+
+  // Gera QR do brinde no final
+  const qrPromoUrl = 'https://app.planejapp.com.br/Promo?code=EVENTO2026'
+  const qrContainer = document.getElementById('promo-qr')
+  if(qrContainer) {
+    const canvas = document.createElement('canvas')
+    qrContainer.appendChild(canvas)
+    new QRious({
+      element: canvas,
+      value: qrPromoUrl,
+      size: 120,
+      foreground: '#ffffff',
+      background: '#0d1f4a',
+      level: 'M'
+    })
+  }
 }
 
 init()
