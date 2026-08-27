@@ -90,32 +90,38 @@ serve(async (req) => {
     //
     // O maior gasto escondido eram os UUIDs: cada
     // "ID:c84fdf03-2102-46af-a7f7-6d556465a1da" custa cerca de 20
-    // tokens, e o prompt listava dezenas deles. Aqui eles viram um
-    // apelido de 8 caracteres, e a resposta do modelo é traduzida de
-    // volta para o UUID real antes de chegar ao app.
-    const mapaIds = new Map<string, string>()
-    const apelido = (id: string) => {
-      const completo = String(id)
-      // Dois registros do mesmo usuário podem começar com os mesmos 8
-      // caracteres. É raro, mas se acontecesse o segundo sobrescreveria
-      // o primeiro no mapa e uma exclusão apagaria o registro errado.
-      // Aqui o apelido cresce até ficar único.
-      for (let tamanho = 8; tamanho <= completo.length; tamanho++) {
-        const curto = completo.slice(0, tamanho)
-        const jaUsado = mapaIds.get(curto)
-        if (!jaUsado) { mapaIds.set(curto, completo); return curto }
-        if (jaUsado === completo) return curto
-      }
-      mapaIds.set(completo, completo)
-      return completo
+    // tokens, e o prompt listava dezenas deles.
+    // Cada registro tem um numero sequencial proprio do usuario
+    // (coluna `ref`): #1, #2, #3. Antes daqui o Finn usava um prefixo do
+    // UUID ("#f18267f0"), que nao diz nada a quem le e vazava para a tela.
+    //
+    // O numero se repete entre tabelas -- a conta #3 e a transacao #3
+    // existem ao mesmo tempo -- entao cada tipo tem o seu mapa e a
+    // expansao escolhe pelo bloco de acao que a IA gerou.
+    const mapaTx    = new Map<number, string>()
+    const mapaConta = new Map<number, string>()
+    const mapaMeta  = new Map<number, string>()
+
+    const numerar = (mapa: Map<number, string>) => (registro: any) => {
+      const n = Number(registro?.ref)
+      // Sem numero o registro nao entra na lista: melhor o Finn dizer
+      // que nao achou do que apontar para a linha errada.
+      if (!Number.isInteger(n) || n <= 0) return null
+      mapa.set(n, String(registro.id))
+      return n
     }
+    const numTx    = numerar(mapaTx)
+    const numConta = numerar(mapaConta)
+    const numMeta  = numerar(mapaMeta)
 
     const dinheiro = (v: any) => `R$${Number(v || 0).toFixed(2)}`
     const diaMes = (d: string) => `${d.slice(8, 10)}/${d.slice(5, 7)}`
 
-    const accountsSummary = accounts.map((a: any) =>
-      `#${apelido(a.id)} ${a.name} (${a.type}) ${dinheiro(accountBalances[a.id])}`
-    ).join('\n')
+    const accountsSummary = accounts
+      .map((a: any) => ({ a, n: numConta(a) }))
+      .filter(({ n }) => n !== null)
+      .map(({ a, n }) => `#${n} ${a.name} (${a.type}) ${dinheiro(accountBalances[a.id])}`)
+      .join('\n')
 
     const monthlyData: Record<string, { income: number, expense: number, planned_income: number, planned_expense: number }> = {}
     transactions.forEach((t: any) => {
@@ -150,7 +156,9 @@ serve(async (req) => {
       .filter((t: any) => t.is_realized === false && t.date >= nowStr)
       .sort((a: any, b: any) => a.date.localeCompare(b.date))
       .slice(0, 12)
-      .map((t: any) => `#${apelido(t.id)} ${diaMes(t.date)} ${t.type === 'income' ? '+' : '-'}${dinheiro(t.amount)} ${t.description}`)
+      .map((t: any) => ({ t, n: numTx(t) }))
+      .filter(({ n }) => n !== null)
+      .map(({ t, n }) => `#${n} ${diaMes(t.date)} ${t.type === 'income' ? '+' : '-'}${dinheiro(t.amount)} ${t.description}`)
       .join('\n')
 
     // Realizadas servem para "exclui o mercado de ontem"; seis cobrem
@@ -159,7 +167,9 @@ serve(async (req) => {
       .filter((t: any) => t.is_realized !== false && t.date <= nowStr)
       .sort((a: any, b: any) => b.date.localeCompare(a.date))
       .slice(0, 6)
-      .map((t: any) => `#${apelido(t.id)} ${diaMes(t.date)} ${t.type === 'income' ? '+' : '-'}${dinheiro(t.amount)} ${t.description}`)
+      .map((t: any) => ({ t, n: numTx(t) }))
+      .filter(({ n }) => n !== null)
+      .map(({ t, n }) => `#${n} ${diaMes(t.date)} ${t.type === 'income' ? '+' : '-'}${dinheiro(t.amount)} ${t.description}`)
       .join('\n')
 
     const last3Months = Object.entries(monthlyData)
@@ -169,11 +179,34 @@ serve(async (req) => {
     const avgExpense = last3Months.length > 0 ? last3Months.reduce((s, [, d]) => s + d.expense, 0) / last3Months.length : 0
 
     const goalsSummary = goals.length > 0
-      ? goals.map((g: any) => {
-          const gasto = currentMonthByCategory[g.category?.toLowerCase()] || 0
-          return `#${apelido(g.id)} ${g.name} (${g.type}) limite ${dinheiro(g.target_amount)} gasto ${dinheiro(gasto)} cat:${g.category || 'geral'}`
-        }).join('\n')
+      ? goals
+          .map((g: any) => ({ g, n: numMeta(g) }))
+          .filter(({ n }) => n !== null)
+          .map(({ g, n }) => {
+            const gasto = currentMonthByCategory[g.category?.toLowerCase()] || 0
+            return `#${n} ${g.name} (${g.type}) limite ${dinheiro(g.target_amount)} gasto ${dinheiro(gasto)} cat:${g.category || 'geral'}`
+          }).join('\n')
       : 'nenhuma'
+
+    // Razoes derivadas das medias que ja estao acima. Nao sao regra de
+    // saldo nem de KPI (essas vivem em src/domain/financas.js, no app):
+    // sao proporcoes prontas para o Finn nao precisar estimar de cabeca
+    // e poder responder com numero em vez de conselho generico.
+    const sobra = avgIncome - avgExpense
+    const taxaPoupanca = avgIncome > 0 ? (sobra / avgIncome) * 100 : 0
+    const catsOrdenadas = Object.entries(currentMonthByCategory)
+      .sort((a, b) => (b[1] as number) - (a[1] as number))
+    const topCategorias = catsOrdenadas.slice(0, 3)
+      .map(([c, v]) => `${c} ${dinheiro(v as number)}${avgIncome > 0 ? ` (${(((v as number) / avgIncome) * 100).toFixed(0)}% da renda)` : ''}`)
+      .join(', ')
+
+    const previstasEntram = transactions
+      .filter((t: any) => t.is_realized === false && t.date >= nowStr && t.type === 'income')
+      .reduce((soma: number, t: any) => soma + parseFloat(t.amount), 0)
+    const previstasSaem = transactions
+      .filter((t: any) => t.is_realized === false && t.date >= nowStr && t.type === 'expense')
+      .reduce((soma: number, t: any) => soma + parseFloat(t.amount), 0)
+    const projecaoFim = totalBalance + previstasEntram - previstasSaem
 
     // Só os nomes: o ID de cada conta já aparece na lista acima.
     const accountNames = accounts.map((a: any) => a.name).join(', ')
@@ -181,15 +214,27 @@ serve(async (req) => {
 
     // O bloco de instruções era o maior custo fixo: quase mil tokens
     // só de moldura e exemplos repetidos. Mesmas 9 ações, escrito curto.
-    const systemPrompt = `Você é Finn, consultor financeiro pessoal brasileiro. Responda em no máximo 3 frases, direto, só com os dados abaixo. Hoje: ${nowStr}.
+    const systemPrompt = `Você é Finn, consultor financeiro pessoal brasileiro. Hoje: ${nowStr}.
 
+COMO RESPONDER
+- Responda com NÚMERO, não com conselho genérico. "Corte gastos" não serve; "os R$${catsOrdenadas[0] ? (catsOrdenadas[0][1] as number).toFixed(0) : '0'} em ${catsOrdenadas[0]?.[0] || 'x'} são o maior peso do mês" serve.
+- Use os dados abaixo. Se o dado não estiver aqui, diga que não tem — nunca estime nem invente.
+- 2 a 5 frases. Diga o que está acontecendo, por quê, e qual o próximo passo concreto com valor e prazo.
+- Compare sempre com a referência: média dos 3 meses, a meta do usuário, ou o mês anterior.
+- Fale em reais e em percentual da renda. Arredonde para real inteiro.
+- Sem jargão, sem lista de dicas prontas, sem "considere avaliar". Direto, como quem olha o extrato junto.
+
+SITUAÇÃO
 CONTAS
 ${accountsSummary}
-Saldo ${dinheiro(totalBalance)} | Investido ${dinheiro(totalInvested)}
-Média 3 meses: renda ${avgIncome.toFixed(0)}, gasto ${avgExpense.toFixed(0)}
+Saldo hoje ${dinheiro(totalBalance)} | Investido ${dinheiro(totalInvested)}
+Média 3 meses: renda ${avgIncome.toFixed(0)}, gasto ${avgExpense.toFixed(0)}, sobra ${sobra.toFixed(0)} (${taxaPoupanca.toFixed(0)}% da renda)
+A receber previsto ${dinheiro(previstasEntram)} | A pagar previsto ${dinheiro(previstasSaem)}
+Projeção fim do mês ${dinheiro(projecaoFim)}
 
 MESES: ${monthlySummary || 'sem dados'}
-GASTOS DO MÊS: ${Object.entries(currentMonthByCategory).map(([c, v]) => `${c} ${(v as number).toFixed(0)}`).join(', ') || 'nenhum'}
+MAIORES GASTOS DO MÊS: ${topCategorias || 'nenhum'}
+TODAS AS CATEGORIAS: ${Object.entries(currentMonthByCategory).map(([c, v]) => `${c} ${(v as number).toFixed(0)}`).join(', ') || 'nenhum'}
 
 PREVISTAS
 ${upcomingDetailed || 'nenhuma'}
@@ -200,27 +245,36 @@ ${recentRealized || 'nenhuma'}
 METAS
 ${goalsSummary}
 
-AÇÕES — gere o bloco no fim da resposta, usando o #id da lista acima:
+COMO LER OS NÚMEROS
+- Taxa de poupança saudável: 10% a 20% da renda. Abaixo de 0 é déficit e consome reserva.
+- Moradia acima de ~30% da renda, ou uma única categoria variável acima de ~15%, é o que costuma explicar o aperto.
+- Reserva de emergência = 6x o gasto mensal (${(avgExpense * 6).toFixed(0)} para este usuário).
+- Déficit recorrente se resolve cortando a MAIOR categoria variável ou antecipando receita prevista — diga qual, com o valor.
+
+IDENTIFICAÇÃO
+Cada item das listas acima tem um número próprio (#1, #2...). Contas, transações e metas numeram separado: a conta #3 não é a transação #3. Use o número exatamente como aparece na lista. Nunca invente um número que não esteja listado.
+
+AÇÕES
+Formato: o bloco vai SOZINHO na última linha, depois do texto. Nunca no meio da frase, nunca dois blocos na mesma resposta, nunca dentro de negrito ou lista. Se o usuário pedir várias coisas, faça UMA e diga que faz a próxima em seguida.
 1 lançar: __PENDING_TX__{"type":"expense|income","amount":0,"description":"","category":"","account_name":"","date":"${nowStr}","is_realized":true}__END_TX__
-2 realizar prevista: __REALIZE_TX__{"id":"#id","date":"${nowStr}"}__END_REALIZE__
-3 realizar parte: __PARTIAL_REALIZE__{"id":"#id","paid_amount":0,"remaining_amount":0,"description":"","category":"","account_name":"","date":"${nowStr}"}__END_PARTIAL__
-4 excluir transação: __DELETE_TX__{"id":"#id"}__END_DELETE__
+2 realizar prevista: __REALIZE_TX__{"id":"#N","date":"${nowStr}"}__END_REALIZE__
+3 realizar parte: __PARTIAL_REALIZE__{"id":"#N","paid_amount":0,"remaining_amount":0,"date":"${nowStr}"}__END_PARTIAL__
+4 excluir transação: __DELETE_TX__{"id":"#N"}__END_DELETE__
 5 criar meta: __CREATE_GOAL__{"name":"","type":"expense","category":"","target_amount":0,"start_date":"${nowStr}","end_date":"AAAA-MM-DD"}__END_GOAL__
-6 excluir meta: __DELETE_GOAL__{"id":"#id"}__END_DELETE_GOAL__
+6 excluir meta: __DELETE_GOAL__{"id":"#N"}__END_DELETE_GOAL__
 7 criar conta: __CREATE_ACCOUNT__{"name":"","type":"bank|digital|wallet|investment|other","initial_balance":0}__END_ACCOUNT__
-8 excluir conta: __DELETE_ACCOUNT__{"id":"#id"}__END_DELETE_ACCOUNT__
+8 excluir conta: __DELETE_ACCOUNT__{"id":"#N"}__END_DELETE_ACCOUNT__
 9 convidar: __SEND_INVITE__{"email":"","name":""}__END_INVITE__
 Link de convite: ${referralLink}
 
-ANTES DE EXCLUIR OU CANCELAR — pare e pergunte, sem gerar bloco, se:
-- "conta" puder ser conta bancária OU conta a pagar/despesa (é ambíguo em português). Ex: "exclui a Conta 2" → pergunte qual das duas.
-- mais de um item da lista casar com o que o usuário descreveu → pergunte qual, citando os candidatos.
-- nenhum item casar → diga que não encontrou. Nunca escolha o mais parecido.
-- o pedido não disser O QUE excluir ("exclui tudo", "pode apagar", "apaga aquilo") → pergunte o que exatamente.
-Só gere bloco de exclusão quando houver UM item claramente identificado.
-
-REGRAS
-- Pergunta ("posso gastar?", "quanto gastei?") NÃO gera bloco. Só texto.
+QUANDO NÃO GERAR BLOCO
+- Pergunta ("posso gastar?", "quanto gastei?", "como resolver?") é só texto. Analisar e sugerir NÃO é executar: sugira em palavras e espere o usuário pedir.
+- "realizar parte" só com o valor pago dito pelo usuário e maior que zero. Sem valor, pergunte quanto foi pago.
+- Antes de excluir ou cancelar, pare e pergunte se:
+  · "conta" puder ser conta bancária OU conta a pagar (é ambíguo em português) — pergunte qual das duas.
+  · mais de um item casar com a descrição — pergunte qual, citando os candidatos pelo número.
+  · nenhum item casar — diga que não encontrou. Nunca escolha o mais parecido.
+  · o pedido não disser O QUE excluir ("exclui tudo", "apaga aquilo") — pergunte o quê.
 - Nunca invente outro tipo de bloco.
 - "paguei o aluguel" → ache a prevista parecida e use __REALIZE_TX__.
 - Categorias: alimentação, transporte, moradia, saúde, educação, lazer, compras, outros.
@@ -250,14 +304,29 @@ REGRAS
       )
     }
 
-    // O modelo responde com o apelido curto; o app espera o UUID real.
-    const respostaExpandida = resposta.texto.replace(
-      /"id"\s*:\s*"#?([0-9a-fA-F-]{8,36})"/g,
-      (original, curto) => {
-        const completo = mapaIds.get(String(curto).toLowerCase())
-        return completo ? `"id":"${completo}"` : original
-      },
-    )
+    // O modelo responde com o numero legivel; o app espera o UUID real.
+    //
+    // O mesmo numero existe em tabelas diferentes, entao a traducao e
+    // feita bloco a bloco: dentro de __DELETE_ACCOUNT__ o #3 so pode ser
+    // uma conta. Um numero que nao estava na lista enviada simplesmente
+    // nao vira UUID -- o app rejeita, em vez de agir no registro errado.
+    const MAPA_POR_BLOCO: Array<[RegExp, Map<number, string>]> = [
+      [/__PARTIAL_REALIZE__[\s\S]*?__END_PARTIAL__/g,          mapaTx],
+      [/__REALIZE_TX__[\s\S]*?__END_REALIZE__/g,               mapaTx],
+      [/__DELETE_TX__[\s\S]*?__END_DELETE__/g,                 mapaTx],
+      [/__DELETE_GOAL__[\s\S]*?__END_DELETE_GOAL__/g,          mapaMeta],
+      [/__DELETE_ACCOUNT__[\s\S]*?__END_DELETE_ACCOUNT__/g,    mapaConta],
+    ]
+
+    let respostaExpandida = resposta.texto
+    for (const [blocoRe, mapa] of MAPA_POR_BLOCO) {
+      respostaExpandida = respostaExpandida.replace(blocoRe, (bloco) =>
+        bloco.replace(/"id"\s*:\s*"?#?(\d{1,7})"?/g, (original, numero) => {
+          const completo = mapa.get(Number(numero))
+          return completo ? `"id":"${completo}"` : original
+        }),
+      )
+    }
 
     return new Response(JSON.stringify({ reply: respostaExpandida, uso: resposta.uso }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" }

@@ -73,49 +73,75 @@ const months = [
 const currentYear = new Date().getFullYear();
 const years = Array.from({ length: 3 }, (_, i) => currentYear - i);
 
-function parseBlock(content, tag, endTag) {
+// Aceita o marcador com ou sem os underscores e com ou sem o negrito
+// que o markdown adiciona: o modelo escreve das duas formas, e quando
+// escrevia sem os `__` a ação era perdida.
+function parseBlock(content, abre, fecha) {
   try {
-    const match = content?.match(new RegExp(`${tag}(.*?)${endTag}`, "s"));
+    const re = new RegExp(
+      `[*]*_{0,2}${abre}_{0,2}[*]*\\s*(\\{[\\s\\S]*?\\})\\s*[*]*_{0,2}${fecha}_{0,2}[*]*`,
+    );
+    const match = content?.match(re);
     if (!match) return null;
-    let json = match[1].replace(/(\d)\.(\d{3})/g, "$1$2").trim();
+    // "1.234,50" vindo do modelo: tira o ponto de milhar antes do JSON.
+    const json = match[1].replace(/(\d)\.(\d{3})\b/g, "$1$2").trim();
     return JSON.parse(json);
   } catch {}
   return null;
 }
 
-function parsePendingTx(c)      { return parseBlock(c, "__PENDING_TX__",      "__END_TX__")            }
-function parseRecurringTx(c) {
-  const m1 = c?.match(/__RECURRING_TX__([\s\S]*?)__END_RECURRING__/);
-  const m2 = c?.match(/RECURRING_TX([\s\S]*?)END_RECURRING/);
-  const m = m1 || m2;
-  if (!m) return null;
-  try { let json = m[1].replace(/(\d)\.(\d{3})/g, "$1$2").trim(); return JSON.parse(json); } catch { return null; }
-}
-function parsePartialRealize(c) { return parseBlock(c, "__PARTIAL_REALIZE__", "__END_PARTIAL__")       }
-function parseRealizeTx(c)      { return parseBlock(c, "__REALIZE_TX__",      "__END_REALIZE__")       }
-function parseDeleteTx(c)       { return parseBlock(c, "__DELETE_TX__",       "__END_DELETE__")        }
-function parseCreateGoal(c)     { return parseBlock(c, "__CREATE_GOAL__",     "__END_GOAL__")          }
-function parseDeleteGoal(c)     { return parseBlock(c, "__DELETE_GOAL__",     "__END_DELETE_GOAL__")   }
-function parseCreateAccount(c)  { return parseBlock(c, "__CREATE_ACCOUNT__",  "__END_ACCOUNT__")       }
-function parseDeleteAccount(c)  { return parseBlock(c, "__DELETE_ACCOUNT__",  "__END_DELETE_ACCOUNT__")}
-function parseSendInvite(c)     { return parseBlock(c, "__SEND_INVITE__",     "__END_INVITE__")        }
+function parsePendingTx(c)      { return parseBlock(c, "PENDING_TX",      "END_TX")            }
+function parseRecurringTx(c)    { return parseBlock(c, "RECURRING_TX",    "END_RECURRING")     }
+function parsePartialRealize(c) { return parseBlock(c, "PARTIAL_REALIZE", "END_PARTIAL")       }
+function parseRealizeTx(c)      { return parseBlock(c, "REALIZE_TX",      "END_REALIZE")       }
+function parseDeleteTx(c)       { return parseBlock(c, "DELETE_TX",       "END_DELETE")        }
+function parseCreateGoal(c)     { return parseBlock(c, "CREATE_GOAL",     "END_GOAL")          }
+function parseDeleteGoal(c)     { return parseBlock(c, "DELETE_GOAL",     "END_DELETE_GOAL")   }
+function parseCreateAccount(c)  { return parseBlock(c, "CREATE_ACCOUNT",  "END_ACCOUNT")       }
+function parseDeleteAccount(c)  { return parseBlock(c, "DELETE_ACCOUNT",  "END_DELETE_ACCOUNT")}
+function parseSendInvite(c)     { return parseBlock(c, "SEND_INVITE",     "END_INVITE")        }
 
-function cleanContent(content) {
-  return content
-    ?.replace(/__PENDING_TX__.*?__END_TX__/s, "")
-    ?.replace(/__RECURRING_TX__.*?__END_RECURRING__/s, "")
-    ?.replace(/RECURRING_TX\b.*?END_RECURRING/s, "")
-    ?.replace(/RECURRING_TX.*?END_RECURRING/s, "")
-    ?.replace(/__REALIZE_TX__.*?__END_REALIZE__/s, "")
-    ?.replace(/__DELETE_TX__.*?__END_DELETE__/s, "")
-    ?.replace(/__CREATE_GOAL__.*?__END_GOAL__/s, "")
-    ?.replace(/__DELETE_GOAL__.*?__END_DELETE_GOAL__/s, "")
-    ?.replace(/__CREATE_ACCOUNT__.*?__END_ACCOUNT__/s, "")
-    ?.replace(/__DELETE_ACCOUNT__.*?__END_DELETE_ACCOUNT__/s, "")
-    ?.replace(/__SEND_INVITE__.*?__END_INVITE__/s, "")
-    ?.replace(/__PARTIAL_REALIZE__.*?__END_PARTIAL__/s, "")
-    ?.replace(/NO_ACTION.*?END_NO_ACTION/s, "")
-    ?.trim() || "";
+// Marcadores de ação. O modelo às vezes escreve sem os underscores
+// ("REALIZE_TX{...}END_REALIZE"), e a resposta pode trazer mais de um
+// bloco — foi assim que quatro ações apareceram cruas na tela.
+const BLOCOS_DE_ACAO = [
+  ["PENDING_TX", "END_TX"],
+  ["RECURRING_TX", "END_RECURRING"],
+  ["PARTIAL_REALIZE", "END_PARTIAL"],
+  ["REALIZE_TX", "END_REALIZE"],
+  ["DELETE_TX", "END_DELETE"],
+  ["CREATE_GOAL", "END_GOAL"],
+  ["DELETE_GOAL", "END_DELETE_GOAL"],
+  ["CREATE_ACCOUNT", "END_ACCOUNT"],
+  ["DELETE_ACCOUNT", "END_DELETE_ACCOUNT"],
+  ["SEND_INVITE", "END_INVITE"],
+  ["NO_ACTION", "END_NO_ACTION"],
+];
+
+// `g` porque uma resposta pode ter vários blocos; `__` opcional porque
+// o modelo nem sempre os escreve; `\**` porque o markdown costuma
+// deixar o marcador em negrito.
+const regexBloco = ([abre, fecha]) =>
+  new RegExp(`[*]*_{0,2}${abre}_{0,2}[*]*[\\s\\S]*?[*]*_{0,2}${fecha}_{0,2}[*]*`, "g");
+
+const RECORTES = BLOCOS_DE_ACAO.map(regexBloco);
+
+// Sobra de bloco cortado pelo limite de tokens: a abertura aparece e o
+// fecha nunca chega. Sem isto o pedaco fica visivel na tela.
+const ABERTURA_ORFA = new RegExp(
+  `[*]*_{0,2}(${BLOCOS_DE_ACAO.map(([abre]) => abre).join("|")})_{0,2}[*]*\\s*\\{[\\s\\S]*$`,
+);
+
+export function cleanContent(content) {
+  if (!content) return "";
+  let texto = String(content);
+  for (const re of RECORTES) texto = texto.replace(re, "");
+  texto = texto.replace(ABERTURA_ORFA, "");
+  return texto
+    // "Ações:" costumava introduzir os blocos; sem eles fica pendurado.
+    .replace(/\n\s*(Ações|Acoes|Ação|Acao)\s*:\s*$/i, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 function buildHistory(messages) {
@@ -219,15 +245,34 @@ export function ActionCard({ action, registro, onConfirm, onCancel, confirmLoadi
   const precisaDoRegistro = !!ACOES_SOBRE_REGISTRO[action._type];
   // Registro de outra ação não serve para montar este card.
   const doAlvo = registro?.paraId === action.id ? registro : null;
+  // Número legível do registro (#12), o mesmo que o Finn cita no texto.
+  const numeroDoAlvo = Number.isInteger(doAlvo?.dados?.ref) ? doAlvo.dados.ref : null;
   // Sem a linha real em mãos não há o que confirmar.
   const registroPendente = precisaDoRegistro && doAlvo?.status !== "ok";
+
+  // O restante e o total menos o que foi pago -- conta feita aqui, sobre
+  // o valor real do lancamento. A IA chegou a mandar "pago 0, restante
+  // 429" para uma despesa de 429, que nao e pagamento parcial nenhum.
+  const pago = Number(action.paid_amount) || 0;
+  const totalReal = Number(doAlvo?.dados?.amount) || 0;
+  const restanteReal = Math.max(0, Math.round((totalReal - pago) * 100) / 100);
+  // Pagamento parcial precisa de um valor pago entre zero e o total.
+  const parcialInvalido =
+    action._type === "partial_realize" &&
+    doAlvo?.status === "ok" &&
+    (pago <= 0 || pago >= totalReal);
 
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
       <div className={`bg-white dark:bg-gray-800 rounded-2xl border ${cfg.borderColor} overflow-hidden mx-1`}>
         <div className={`bg-gradient-to-r ${cfg.headerColor} px-4 py-2.5 border-b ${cfg.borderColor} flex items-center gap-2`}>
           <Icon className={`w-4 h-4 ${cfg.color}`} />
-          <p className={`text-sm font-medium ${cfg.color}`}>{cfg.title}</p>
+          <p className={`text-sm font-medium ${cfg.color}`}>
+            {cfg.title}
+            {numeroDoAlvo !== null && (
+              <span className="ml-1.5 text-xs font-semibold text-gray-500 dark:text-gray-400">#{numeroDoAlvo}</span>
+            )}
+          </p>
         </div>
         <div className="px-4 py-3 space-y-2.5">
           {/* O bloco vindo da IA traz só o id. Enquanto a linha real não
@@ -235,6 +280,11 @@ export function ActionCard({ action, registro, onConfirm, onCancel, confirmLoadi
               "Descrição: —" e "R$ 0,00", que era o `|| 0` do fmt. */}
           {precisaDoRegistro && doAlvo?.status === "carregando" && (
             <p className="text-sm text-gray-500 dark:text-gray-400 py-2">Carregando lançamento…</p>
+          )}
+          {parcialInvalido && (
+            <p className="text-sm text-amber-700 dark:text-amber-400 py-2">
+              Não entendi quanto você pagou desse lançamento. Me diga o valor pago.
+            </p>
           )}
           {precisaDoRegistro && doAlvo?.status === "ausente" && (
             <p className="text-sm text-red-600 dark:text-red-400 py-2">
@@ -276,11 +326,13 @@ export function ActionCard({ action, registro, onConfirm, onCancel, confirmLoadi
             {doAlvo.dados.accounts?.name && <Row label="Conta" value={doAlvo.dados.accounts.name} />}
             <Row label="Realizar em" value={dataBr(action.date)} />
           </>)}
-          {action._type === "partial_realize" && (<>
-            <Row label="Descrição" value={action.description} />
+          {action._type === "partial_realize" && doAlvo?.status === "ok" && (<>
+            <Row label="Lançamento" value={doAlvo.dados.description} />
+            <Row label="Valor total" value={fmt(doAlvo.dados.amount)} />
             <Row label="Valor pago" value={<span className="text-base font-bold text-emerald-600">{fmt(action.paid_amount)}</span>} />
-            <Row label="Restante" value={<span className="text-base font-bold text-amber-600">{fmt(action.remaining_amount)}</span>} />
-            <Row label="Data" value={action.date} />
+            <Row label="Fica em aberto" value={<span className="text-base font-bold text-amber-600">{fmt(restanteReal)}</span>} />
+            {doAlvo.dados.accounts?.name && <Row label="Conta" value={doAlvo.dados.accounts.name} />}
+            <Row label="Data" value={dataBr(action.date)} />
           </>)}
           {action._type === "delete_tx" && doAlvo?.status === "ok" && (<>
             <Row label="Descrição" value={doAlvo.dados.description} />
@@ -311,7 +363,7 @@ export function ActionCard({ action, registro, onConfirm, onCancel, confirmLoadi
           <button onClick={onCancel} className="flex-1 h-11 rounded-xl border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 text-sm font-medium flex items-center justify-center gap-1.5">
             <X className="w-3.5 h-3.5" /> Cancelar
           </button>
-          <button onClick={onConfirm} disabled={confirmLoading || needsAutoRealize || registroPendente}
+          <button onClick={onConfirm} disabled={confirmLoading || needsAutoRealize || registroPendente || parcialInvalido}
             className={`flex-1 h-11 rounded-xl text-white text-sm font-medium flex items-center justify-center gap-1.5 disabled:opacity-50 ${["delete_tx","delete_goal","delete_account"].includes(action._type) ? "bg-red-500 hover:bg-red-600" : action._type === "realize" ? "bg-emerald-500 hover:bg-emerald-600" : "bg-gradient-to-r from-violet-600 to-indigo-600"}`}>
             {confirmLoading
               ? <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: "linear" }} className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full" />
@@ -400,10 +452,10 @@ function ChatTab({ user, dark }) {
         // O embed precisa dizer QUAL chave usar: transactions aponta
         // para accounts duas vezes (account_id e transfer_account_id),
         // e sem o nome da FK o PostgREST devolve PGRST201 (ambíguo).
-        ? "id, description, amount, date, category, is_realized, account_id, accounts!transactions_account_id_fkey(name)"
+        ? "id, ref, type, description, amount, date, category, is_realized, account_id, accounts!transactions_account_id_fkey(name)"
         : alvo.tabela === "goals"
-          ? "id, name, target_amount, type, category"
-          : "id, name, type, initial_balance";
+          ? "id, ref, name, target_amount, type, category"
+          : "id, ref, name, type, initial_balance";
 
       // O filtro por user_id fica, junto com a RLS: a busca do card não
       // pode virar um caminho para ler registro de outra pessoa.
@@ -631,12 +683,41 @@ function ChatTab({ user, dark }) {
         const autoMsg = action.auto_realize ? " com **registro automático** ✅" : "";
         setMessages(prev => [...prev, { role: "assistant", content: `✅ **${ocorrencias.length} lançamentos recorrentes criados!**\n\n🔄 **${fmt(action.amount)}** — ${action.description}\n📅 A partir de ${base.split("-").reverse().join("/")}${autoMsg}` }]);
       } else if (action._type === "partial_realize") {
-        await supabase.from("transactions").update({ amount: action.remaining_amount }).eq("id", action.id).eq("user_id", user.id);
-        let accountId = null;
-        if (action.account_name) { const { data: accs } = await supabase.from("accounts").select("id").eq("user_id", user.id).ilike("name", `%${action.account_name}%`).limit(1); accountId = accs?.[0]?.id || null; }
-        await supabase.from("transactions").insert({ user_id: user.id, type: "expense", amount: action.paid_amount, description: action.description, category: action.category, account_id: accountId, date: confirmDate, is_realized: true });
+        // Descricao, categoria, conta e total saem da linha real, nao do
+        // texto da IA: o parcial precisa ser o mesmo lancamento que o
+        // usuario viu no card.
+        const original = registro.dados;
+        const pago = Number(action.paid_amount) || 0;
+        const restante = Math.round((Number(original.amount) - pago) * 100) / 100;
+
+        if (pago <= 0 || restante <= 0) {
+          setPendingAction(null);
+          setMessages(prev => [...prev, { role: "assistant", content: "🤔 Esse valor não fecha com o lançamento. Quanto você pagou?" }]);
+          return;
+        }
+
+        const { data: baixadas } = await supabase.from("transactions")
+          .update({ amount: restante })
+          .eq("id", action.id).eq("user_id", user.id).select("id");
+        if (!baixadas?.length) {
+          setPendingAction(null);
+          setMessages(prev => [...prev, { role: "assistant", content: "🤔 Não encontrei esse lançamento. Pode conferir?" }]);
+          return;
+        }
+
+        await supabase.from("transactions").insert({
+          user_id: user.id,
+          type: original.type || "expense",
+          amount: pago,
+          description: `${original.description} (parcial)`,
+          category: original.category,
+          account_id: original.account_id,
+          date: confirmDate,
+          is_realized: true,
+        });
         setPendingAction(null);
-        setMessages(prev => [...prev, { role: "assistant", content: `✅ **Pagamento parcial registrado!**\n\n💸 **${fmt(action.paid_amount)}** pago — restante: **${fmt(action.remaining_amount)}**` }]);
+        setRegistro(null);
+        setMessages(prev => [...prev, { role: "assistant", content: `✅ **Pagamento parcial registrado!**\n\n💸 **${fmt(pago)}** pago em ${original.description} — fica em aberto **${fmt(restante)}**` }]);
       } else if (action._type === "realize") {
         const { data: alteradas, error } = await supabase.from("transactions")
           .update({ is_realized: true, date: confirmDate })
@@ -648,7 +729,7 @@ function ChatTab({ user, dark }) {
           return;
         }
         setPendingAction(null);
-        setMessages(prev => [...prev, { role: "assistant", content: `✅ **Pago!** ${action.description} marcado como realizado.` }]);
+        setMessages(prev => [...prev, { role: "assistant", content: `✅ **Pago!** ${registro.dados.description} marcado como realizado.` }]);
       } else if (action._type === "delete_tx") {
         // `.select()` devolve as linhas afetadas. Sem isso o app dizia
         // "excluída" mesmo quando o filtro não casava com nada — por

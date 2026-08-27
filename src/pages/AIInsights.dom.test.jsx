@@ -222,3 +222,52 @@ describe("área de toque do card", () => {
     }
   });
 });
+
+describe("pagamento parcial — o card veio do registro, não do texto da IA", () => {
+  // Caso real: a IA mandou paid_amount 0 e remaining_amount 429 para uma
+  // despesa de 429, com uma descrição que ela mesma inventou ("Adiar
+  // compra Airfryer"). O card exibia "Valor pago R$ 0,00" e a descrição
+  // fantasma, porque lia action.* em vez da linha do banco.
+  const despesa = {
+    status: "ok",
+    paraId: ID,
+    dados: {
+      id: ID, ref: 12, type: "expense", description: "Compra Airfryer",
+      amount: 429, date: "2026-08-27", category: "compras",
+      account_id: "acc1", accounts: { name: "Nubank" },
+    },
+  };
+
+  it("usa a descrição real, não a inventada pela IA", () => {
+    montar({ _type: "partial_realize", id: ID, description: "Adiar compra Airfryer", paid_amount: 200 }, despesa);
+    expect(screen.getByText("Compra Airfryer")).toBeTruthy();
+    expect(screen.queryByText("Adiar compra Airfryer")).toBeNull();
+  });
+
+  it("calcula o restante sobre o valor real", () => {
+    montar({ _type: "partial_realize", id: ID, paid_amount: 200, remaining_amount: 9999 }, despesa);
+    expect(screen.getByText("R$ 229,00")).toBeTruthy();      // 429 - 200
+    expect(screen.queryByText("R$ 9.999,00")).toBeNull();    // o que a IA mandou
+  });
+
+  it("recusa parcial de R$ 0,00", () => {
+    montar({ _type: "partial_realize", id: ID, paid_amount: 0, remaining_amount: 429 }, despesa);
+    expect(botaoConfirmar().disabled).toBe(true);
+    expect(screen.getByText(/quanto você pagou/i)).toBeTruthy();
+  });
+
+  it("recusa parcial igual ou maior que o total", () => {
+    montar({ _type: "partial_realize", id: ID, paid_amount: 429 }, despesa);
+    expect(botaoConfirmar().disabled).toBe(true);
+  });
+
+  it("libera um parcial coerente", () => {
+    montar({ _type: "partial_realize", id: ID, paid_amount: 200 }, despesa);
+    expect(botaoConfirmar().disabled).toBe(false);
+  });
+
+  it("mostra o número do registro no cabeçalho", () => {
+    montar({ _type: "partial_realize", id: ID, paid_amount: 200 }, despesa);
+    expect(screen.getByText("#12")).toBeTruthy();
+  });
+});
