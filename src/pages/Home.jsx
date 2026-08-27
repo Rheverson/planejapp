@@ -1,3 +1,4 @@
+import { useIsDark } from "@/design/useTheme";
 import { mensagemDeErro } from "@/lib/erros";
 import React, { useState, useMemo, useEffect } from "react";
 import { Link } from "react-router-dom";
@@ -30,16 +31,6 @@ import { Skeleton, SkeletonKPI, SkeletonLinha, SkeletonKeyframes } from "@/compo
 
 const fmt = (v) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
-
-function useIsDark() {
-  const [dark, setDark] = useState(() => localStorage.getItem("darkMode") === "true");
-  useEffect(() => {
-    const h = (e) => setDark(e.detail);
-    window.addEventListener("darkModeChange", h);
-    return () => window.removeEventListener("darkModeChange", h);
-  }, []);
-  return dark;
-}
 
 // ── KPI Card ─────────────────────────────────────────────────
 // Light: white card + shadow + colored accent on left

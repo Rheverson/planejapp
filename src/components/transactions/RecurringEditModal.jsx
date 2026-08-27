@@ -1,21 +1,7 @@
+import { useIsDark } from "@/design/useTheme";
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Edit2, ArrowRight, List, AlertTriangle, ChevronLeft } from "lucide-react";
-
-function useIsDark() {
-  const [dark, setDark] = React.useState(() =>
-    localStorage.getItem("darkMode") === "true" ||
-    document.documentElement.classList.contains("dark")
-  );
-  React.useEffect(() => {
-    const obs = new MutationObserver(() => setDark(document.documentElement.classList.contains("dark")));
-    obs.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
-    const h = (e) => setDark(e.detail);
-    window.addEventListener("darkModeChange", h);
-    return () => { obs.disconnect(); window.removeEventListener("darkModeChange", h); };
-  }, []);
-  return dark;
-}
 
 const fmt = (v) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v || 0);
 

@@ -1,3 +1,4 @@
+import { useIsDark } from "@/design/useTheme";
 import { mensagemDeErro } from "@/lib/erros";
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -10,21 +11,6 @@ import { toast } from "sonner";
 import { format, parseISO, startOfMonth, endOfMonth, addMonths } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { calcularMesFatura } from "@/domain/financas";
-
-function useIsDark() {
-  const [dark, setDark] = useState(() =>
-    localStorage.getItem("darkMode") === "true" ||
-    document.documentElement.classList.contains("dark")
-  );
-  useEffect(() => {
-    const obs = new MutationObserver(() => setDark(document.documentElement.classList.contains("dark")));
-    obs.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
-    const h = (e) => setDark(e.detail);
-    window.addEventListener("darkModeChange", h);
-    return () => { obs.disconnect(); window.removeEventListener("darkModeChange", h); };
-  }, []);
-  return dark;
-}
 
 const fmt = (v) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v || 0);
 

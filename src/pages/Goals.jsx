@@ -1,3 +1,4 @@
+import { useIsDark } from "@/design/useTheme";
 import { mensagemDeErro } from "@/lib/erros";
 import React, { useMemo, useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
@@ -17,16 +18,6 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { calcularProgressoMeta } from "@/domain/financas";
-
-function useIsDark() {
-  const [dark, setDark] = useState(() => localStorage.getItem("darkMode") === "true");
-  useEffect(() => {
-    const h = (e) => setDark(e.detail);
-    window.addEventListener("darkModeChange", h);
-    return () => window.removeEventListener("darkModeChange", h);
-  }, []);
-  return dark;
-}
 
 export default function Goals() {
   const dark = useIsDark();

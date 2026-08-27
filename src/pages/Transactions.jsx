@@ -1,3 +1,4 @@
+import { useIsDark } from "@/design/useTheme";
 import { mensagemDeErro } from "@/lib/erros";
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabase";
@@ -28,16 +29,6 @@ const CATEGORIES = [
 ];
 
 const fmt = (v) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
-
-function useIsDark() {
-  const [dark, setDark] = useState(() => localStorage.getItem("darkMode") === "true");
-  useEffect(() => {
-    const h = (e) => setDark(e.detail);
-    window.addEventListener("darkModeChange", h);
-    return () => window.removeEventListener("darkModeChange", h);
-  }, []);
-  return dark;
-}
 
 export default function Transactions() {
   const dark = useIsDark();

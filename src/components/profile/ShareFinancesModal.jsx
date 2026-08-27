@@ -1,3 +1,4 @@
+import { useIsDark } from "@/design/useTheme";
 import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { X, Users, Mail, Check, AlertCircle, Loader2, ChevronDown } from "lucide-react";
@@ -9,29 +10,6 @@ import { toast } from "sonner";
 const RELATIONSHIP_TYPES = [
   "Esposo(a)", "Namorado(a)", "Noivo(a)", "Irmão(ã)", "Pai/Mãe", "Filho(a)", "Outro"
 ];
-
-function useIsDark() {
-  const [dark, setDark] = useState(() => {
-    // Lê localStorage E classe do documento para garantir sincronia
-    return localStorage.getItem("darkMode") === "true" ||
-           document.documentElement.classList.contains("dark");
-  });
-  useEffect(() => {
-    // Observa mudanças de classe no <html> para pegar qualquer forma de toggle
-    const observer = new MutationObserver(() => {
-      setDark(document.documentElement.classList.contains("dark"));
-    });
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
-    // Também escuta o evento customizado
-    const h = (e) => setDark(e.detail);
-    window.addEventListener("darkModeChange", h);
-    return () => {
-      observer.disconnect();
-      window.removeEventListener("darkModeChange", h);
-    };
-  }, []);
-  return dark;
-}
 
 function PermissionRow({ title, description, checked, onChange, disabled, dark }) {
   return (

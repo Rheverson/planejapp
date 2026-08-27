@@ -1,25 +1,9 @@
+import { useIsDark } from "@/design/useTheme";
 import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthContext";
 import { TrendingUp, TrendingDown, Minus } from "lucide-react";
-
-function useIsDark() {
-  const [dark, setDark] = useState(() =>
-    localStorage.getItem("darkMode") === "true" ||
-    document.documentElement.classList.contains("dark")
-  );
-  useEffect(() => {
-    const obs = new MutationObserver(() =>
-      setDark(document.documentElement.classList.contains("dark"))
-    );
-    obs.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
-    const h = (e) => setDark(e.detail);
-    window.addEventListener("darkModeChange", h);
-    return () => { obs.disconnect(); window.removeEventListener("darkModeChange", h); };
-  }, []);
-  return dark;
-}
 
 function ScoreArc({ score }) {
   // SVG semicircle arc

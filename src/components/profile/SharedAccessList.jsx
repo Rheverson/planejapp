@@ -1,3 +1,4 @@
+import { useIsDark } from "@/design/useTheme";
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Trash2, Clock, Check, XCircle, UserPlus, Users, AlertCircle } from 'lucide-react';
@@ -6,23 +7,6 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/AuthContext';
 import { toast } from 'sonner';
 import ShareFinancesModal from './ShareFinancesModal';
-
-function useIsDark() {
-  const [dark, setDark] = useState(() =>
-    localStorage.getItem("darkMode") === "true" ||
-    document.documentElement.classList.contains("dark")
-  );
-  useEffect(() => {
-    const obs = new MutationObserver(() =>
-      setDark(document.documentElement.classList.contains("dark"))
-    );
-    obs.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
-    const h = (e) => setDark(e.detail);
-    window.addEventListener("darkModeChange", h);
-    return () => { obs.disconnect(); window.removeEventListener("darkModeChange", h); };
-  }, []);
-  return dark;
-}
 
 const relationshipLabels = {
   'Esposo(a)': 'Esposo(a)', 'Namorado(a)': 'Namorado(a)', 'Noivo(a)': 'Noivo(a)',

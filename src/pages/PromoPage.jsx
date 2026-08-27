@@ -1,22 +1,10 @@
+        import { useIsDark } from "@/design/useTheme";
         import React, { useState, useEffect } from "react";
         import { useSearchParams, useNavigate } from "react-router-dom";
         import { motion, AnimatePresence } from "framer-motion";
         import { Sparkles, CheckCircle, XCircle, Loader2, Gift, ArrowRight } from "lucide-react";
         import { supabase } from "@/lib/supabase";
         import { useAuth } from "@/lib/AuthContext";
-
-        function useIsDark() {
-        const [dark, setDark] = useState(() =>
-            localStorage.getItem("darkMode") === "true" ||
-            document.documentElement.classList.contains("dark")
-        );
-        useEffect(() => {
-            const obs = new MutationObserver(() => setDark(document.documentElement.classList.contains("dark")));
-            obs.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
-            return () => obs.disconnect();
-        }, []);
-        return dark;
-        }
 
         export default function PromoPage() {
         const dark = useIsDark();

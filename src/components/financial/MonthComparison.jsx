@@ -1,26 +1,10 @@
+import { useIsDark } from "@/design/useTheme";
 import React, { useMemo } from "react";
 import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
 import { TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { startOfMonth, endOfMonth, subMonths, parseISO, isWithinInterval } from "date-fns";
 import { ptBR } from "date-fns/locale";
-
-function useIsDark() {
-  const [dark, setDark] = useState(() =>
-    localStorage.getItem("darkMode") === "true" ||
-    document.documentElement.classList.contains("dark")
-  );
-  useEffect(() => {
-    const obs = new MutationObserver(() =>
-      setDark(document.documentElement.classList.contains("dark"))
-    );
-    obs.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
-    const h = (e) => setDark(e.detail);
-    window.addEventListener("darkModeChange", h);
-    return () => { obs.disconnect(); window.removeEventListener("darkModeChange", h); };
-  }, []);
-  return dark;
-}
 
 const fmt = (v) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
 const fmtPct = (v) => (v > 0 ? "+" : "") + v.toFixed(0) + "%";

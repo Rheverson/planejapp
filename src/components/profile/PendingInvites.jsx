@@ -1,3 +1,4 @@
+import { useIsDark } from "@/design/useTheme";
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { X, Clock, Check, XCircle } from 'lucide-react';
@@ -5,23 +6,6 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/AuthContext';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
-
-function useIsDark() {
-  const [dark, setDark] = useState(() =>
-    localStorage.getItem("darkMode") === "true" ||
-    document.documentElement.classList.contains("dark")
-  );
-  useEffect(() => {
-    const obs = new MutationObserver(() =>
-      setDark(document.documentElement.classList.contains("dark"))
-    );
-    obs.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
-    const h = (e) => setDark(e.detail);
-    window.addEventListener("darkModeChange", h);
-    return () => { obs.disconnect(); window.removeEventListener("darkModeChange", h); };
-  }, []);
-  return dark;
-}
 
 const relationshipLabels = {
   esposo_a: "Esposo(a)", namorado_a: "Namorado(a)", noivo_a: "Noivo(a)",

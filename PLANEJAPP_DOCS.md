@@ -1,6 +1,6 @@
 # PlanejeApp — Documentação Técnica Completa
 
-> Documento gerado em 26/08/2026 para uso com Claude Code.
+> Documento gerado em 26/08/2026 e revisado em 27/08/2026 pela auditoria (ver `AUDITORIA.md`).
 > Mantido por: Rheverson Gois
 
 ---
@@ -28,7 +28,7 @@ metas, orçamentos e receber insights financeiros personalizados.
 | Estado/Fetch | TanStack Query (React Query) |
 | Animações | Framer Motion |
 | UI Components | shadcn/ui + Radix UI |
-| Estilização | CSS-in-JS inline (sem Tailwind no app) |
+| Estilização | Híbrido: inline nas páginas + Tailwind no Layout, shadcn/ui e AIInsights |
 | Tipografia | Cabinet Grotesk + Outfit (Google Fonts) |
 | Backend | Supabase (PostgreSQL + Auth + Realtime + Storage) |
 | Edge Functions | Deno (Supabase Functions) |
@@ -37,7 +37,7 @@ metas, orçamentos e receber insights financeiros personalizados.
 | Notificações | Push Notifications + WhatsApp Bot |
 | Deploy App | Vercel (conectado ao GitHub — push automático) |
 | Deploy Landing | Vercel (sem Git — deploy via CLI `npx vercel --prod`) |
-| IA | Anthropic Claude API (Finn) |
+| IA | Groq — `llama-3.3-70b-versatile` (o assistente se chama Finn) |
 
 ---
 
@@ -191,7 +191,7 @@ transactions (
 | `cancel-stripe-customer` | ✅ | Remove customer do Stripe |
 | `create-billing-portal` | ✅ | Cria sessão do portal de faturamento Stripe |
 | `billing-portal` | ❌ | Portal de faturamento (versão antiga) |
-| `ai-chat` | ❌ | Chat com o Finn (IA financeira) via Claude API |
+| `ai-chat` | ✅ | Chat com o Finn (IA financeira) via Groq |
 | `ai-insights` | ❌ | Gera insights automáticos 2x/semana |
 | `send-email` | ❌ | Dispara e-mails via Brevo |
 | `send-daily-email` | ❌ | E-mail diário de resumo |
@@ -312,7 +312,7 @@ SUPABASE_URL=https://pomnecjcvpqegyeklims.supabase.co
 SUPABASE_ANON_KEY=eyJ...
 SUPABASE_SERVICE_ROLE_KEY=eyJ...
 BREVO_API_KEY=xkeysib-...
-ANTHROPIC_API_KEY=sk-ant-...
+GROQ_API_KEY=gsk_...
 WHATSAPP_TOKEN=...
 ```
 

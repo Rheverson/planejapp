@@ -1,3 +1,4 @@
+import { useIsDark } from "@/design/useTheme";
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, TrendingUp, TrendingDown, Repeat, Zap } from "lucide-react";
@@ -19,23 +20,6 @@ const frequencyOptions = [
 const dayOptions = Array.from({ length: 31 }, (_, i) => i + 1);
 const today    = new Date().toISOString().split("T")[0];
 const todayDay = new Date().getDate();
-
-function useIsDark() {
-  const [dark, setDark] = useState(() =>
-    localStorage.getItem("darkMode") === "true" ||
-    document.documentElement.classList.contains("dark")
-  );
-  useEffect(() => {
-    const obs = new MutationObserver(() =>
-      setDark(document.documentElement.classList.contains("dark"))
-    );
-    obs.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
-    const h = (e) => setDark(e.detail);
-    window.addEventListener("darkModeChange", h);
-    return () => { obs.disconnect(); window.removeEventListener("darkModeChange", h); };
-  }, []);
-  return dark;
-}
 
 export default function TransactionForm({ accounts, onSubmit, onClose, initialType = "expense", initialData = null }) {
   const isEditing = !!initialData;

@@ -1,3 +1,4 @@
+import { useIsDark } from "@/design/useTheme";
 import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { X, CheckCircle2, SplitSquareHorizontal, Calendar } from "lucide-react";
@@ -7,23 +8,6 @@ const fmt = (v) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency:
 function todayStr() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-}
-
-function useIsDark() {
-  const [dark, setDark] = useState(() =>
-    localStorage.getItem("darkMode") === "true" ||
-    document.documentElement.classList.contains("dark")
-  );
-  useEffect(() => {
-    const obs = new MutationObserver(() =>
-      setDark(document.documentElement.classList.contains("dark"))
-    );
-    obs.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
-    const h = (e) => setDark(e.detail);
-    window.addEventListener("darkModeChange", h);
-    return () => { obs.disconnect(); window.removeEventListener("darkModeChange", h); };
-  }, []);
-  return dark;
 }
 
 export default function RealizarPrevisaoModal({ transaction, onConfirm, onClose }) {

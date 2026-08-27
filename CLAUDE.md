@@ -11,6 +11,7 @@ Leia o arquivo `PLANEJAPP_DOCS.md` antes de qualquer tarefa. Ele contém toda a 
 - **Landing:** https://planejapp.com.br
 - **Repositório:** https://github.com/Rheverson/planejapp.git
 - **Stack:** React + Vite + Supabase + Stripe + Vercel
+- **IA:** Groq (`llama-3.3-70b-versatile`) — não é a Claude API, apesar do nome Finn
 - **Dono:** Rheverson Gois
 
 ---
@@ -24,9 +25,13 @@ Leia o arquivo `PLANEJAPP_DOCS.md` antes de qualquer tarefa. Ele contém toda a 
 4. Se tiver dúvida sobre regra de negócio, pergunte antes de implementar
 
 ### Ao escrever código
-- Use **estilo inline** para CSS — o projeto não usa Tailwind nem arquivos `.css` separados
+- O projeto é **híbrido**: páginas e componentes de domínio usam estilo inline;
+  o `Layout`, os 60 componentes `shadcn/ui` e a página `AIInsights` usam Tailwind,
+  que **está** instalado e configurado (`tailwind.config.js` + `src/index.css`)
+- Cores, raios, espaçamentos e tipografia vêm de `src/design/tokens.js`
+- Tema: `useTheme()` ou `useIsDark()` de `@/design/useTheme` — não recriar o hook local
 - Siga os tokens de cor já existentes nos componentes (`dark ? "#0c0e13" : "#ffffff"`)
-- Use sempre `useIsDark()` para detectar o tema
+- Use `useTheme()` de `@/design/useTheme` para detectar o tema
 - Mantenha o padrão visual: fundo escuro `#060709`, azul `#1d4ed8`, textos `#e8edf5`
 - Fontes: **Cabinet Grotesk** (títulos/números) + **Outfit** (corpo)
 - Componentes funcionais com hooks — sem classes React
@@ -35,10 +40,12 @@ Leia o arquivo `PLANEJAPP_DOCS.md` antes de qualquer tarefa. Ele contém toda a 
 ### Ao mexer no banco
 - Sempre filtrar por `user_id` — nunca remover esse filtro
 - Para testar: use o usuário `rheverson.gois@americanled.com.br`
-- Migrations vão em `supabase/migrations/` com nome descritivo
+- Migrations vão em `supabase/migrations/` com nome descritivo — o schema passou
+  a ser versionado; nunca altere o banco só pelo painel
 - RLS está ativo em todas as tabelas
 
 ### Ao fazer deploy
+- **Antes de tudo:** `npm test` (Vitest sobre o módulo de domínio) e `npm run build`
 - **App:** `git add . && git commit -m "..." && git push` (Vercel detecta automaticamente)
 - **Landing:** `cd src/pages/planejapp-landing && npx vercel --prod` (sem Git)
 - **Edge Functions:** `npx supabase functions deploy <nome>`
@@ -46,6 +53,11 @@ Leia o arquivo `PLANEJAPP_DOCS.md` antes de qualquer tarefa. Ele contém toda a 
 ---
 
 ## Regras Críticas de Negócio
+
+> Todo cálculo financeiro vive em **`src/domain/financas.js`**, coberto por testes
+> (`npm test`). Não reimplemente saldo, KPIs, progresso de meta, mês de fatura ou
+> taxa de poupança em componente — importe do módulo. Foi a duplicação dessas
+> regras que fez telas diferentes mostrarem números diferentes.
 
 ### Saldo de contas
 ```js
@@ -76,7 +88,14 @@ Projeção = saldo_atual_contas + entradas_previstas - saidas_previstas
 
 ## O Que NUNCA Fazer
 
-- ❌ Usar Tailwind ou arquivos `.css` separados
+- ❌ Ler `userId` do corpo da requisição numa Edge Function — a identidade vem
+  sempre do JWT, via `requireUser()` de `supabase/functions/_shared/auth.ts`
+- ❌ Publicar Edge Function com `verify_jwt = false` fora de webhook externo ou
+  cron (e, nesses casos, autenticar dentro da função)
+- ❌ Criar policy RLS com `USING (true)` em tabela com dado de usuário
+- ❌ Criar função `SECURITY DEFINER` que recebe o alvo por parâmetro sem checar
+  `auth.uid()` — use `pode_acessar_perfil()` como molde
+- ❌ Duplicar regra de cálculo financeiro fora de `src/domain/financas.js`
 - ❌ Remover filtro de `user_id` em queries
 - ❌ Fazer deploy da landing via `git push` (ela não tem conexão Git)
 - ❌ Alterar `stripe-webhook` sem testar cuidadosamente
@@ -127,3 +146,11 @@ Se a tarefa for ambígua, faça uma única pergunta objetiva antes de implementa
 - IA do app se chama **Finn** — consultor financeiro pessoal
 - Usuários ativos: ~31 cadastrados, 9 com acesso ativo
 - O app ainda está em fase de lançamento — prioridade: estabilidade e UX mobile
+
+---
+
+## Estado da Auditoria
+
+O diagnóstico completo e o controle de execução estão em **`AUDITORIA.md`**.
+Consulte antes de mexer em segurança, cálculo financeiro ou recorrência —
+várias armadilhas já documentadas ali.

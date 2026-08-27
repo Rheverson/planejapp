@@ -1,3 +1,4 @@
+import { useIsDark } from "@/design/useTheme";
 import React, { useState, useEffect, useRef } from "react";
 import ReactMarkdown from "react-markdown";
 import { useAuth } from "@/lib/AuthContext";
@@ -26,16 +27,6 @@ function getBrasiliaDate() {
   }).format(new Date()).split("/").reverse().join("-");
 }
 function getBrasiliaMonth() { return getBrasiliaDate().slice(0, 7); }
-
-function useIsDark() {
-  const [dark, setDark] = useState(() => localStorage.getItem("darkMode") === "true");
-  useEffect(() => {
-    const h = (e) => setDark(e.detail);
-    window.addEventListener("darkModeChange", h);
-    return () => window.removeEventListener("darkModeChange", h);
-  }, []);
-  return dark;
-}
 
 const QUICK_QUESTIONS = [
   { icon: "💰", text: "Posso gastar R$500 essa semana?" },
