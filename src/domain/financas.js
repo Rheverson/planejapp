@@ -12,12 +12,38 @@
 // sem Supabase, sem data/hora implícita — o que torna testável.
 // ============================================================
 
-// ── Helpers básicos ─────────────────────────────────────────
+// ── Dinheiro ────────────────────────────────────────────────
+//
+// Todo cálculo monetário acontece em CENTAVOS INTEIROS.
+//
+// A segunda auditoria mostrou o motivo: somando em ponto flutuante,
+// 0,01 dez vezes dava 0.09999999999999999 e 0,07 cem vezes dava
+// 7.000000000000009. A exibição escondia isso (Intl arredonda para
+// duas casas), mas as comparações espalhadas pelo app não —
+// `restante > 0.01` na realização parcial, `pct >= 100` no orçamento,
+// `current >= target_amount` na meta concluída.
+//
+// A API pública continua falando em reais; a conversão fica na borda.
 
 /** Converte com segurança para número (o Postgres devolve numeric como string). */
 export function num(valor) {
   const n = Number(valor);
   return Number.isFinite(n) ? n : 0;
+}
+
+/** Reais → centavos inteiros. 10,50 vira 1050. */
+export function paraCentavos(valor) {
+  return Math.round(num(valor) * 100);
+}
+
+/** Centavos inteiros → reais. 1050 vira 10,50. */
+export function paraReais(centavos) {
+  return Math.round(num(centavos)) / 100;
+}
+
+/** Lista sempre iterável, mesmo recebendo null (o default `= []` só cobre undefined). */
+function lista(valor) {
+  return Array.isArray(valor) ? valor : [];
 }
 
 /**
@@ -63,8 +89,8 @@ export function noMes(t, dataReferencia) {
 }
 
 /** Conjunto de ids das contas de investimento. */
-export function idsInvestimento(contas = []) {
-  return new Set(contas.filter((c) => c.type === "investment").map((c) => c.id));
+export function idsInvestimento(contas) {
+  return new Set(lista(contas).filter((c) => c.type === "investment").map((c) => c.id));
 }
 
 /** Último dia do mês de uma chave "YYYY-MM". */
@@ -90,29 +116,32 @@ export function dataNoMes(mes, dia) {
  *  - compra no cartão não afeta a conta;
  *  - transferência sai da origem e entra no destino.
  */
-export function calcularSaldosPorConta(contas = [], transacoes = []) {
-  const saldos = {};
-  contas.forEach((c) => { saldos[c.id] = num(c.initial_balance); });
+export function calcularSaldosPorConta(contas, transacoes) {
+  // Acumula em centavos inteiros e converte só no fim.
+  const centavos = {};
+  lista(contas).forEach((c) => { centavos[c.id] = paraCentavos(c.initial_balance); });
 
-  transacoes.forEach((t) => {
+  lista(transacoes).forEach((t) => {
     if (!ehRealizada(t)) return;
     if (ehCompraNoCartao(t)) return;
 
-    const valor = num(t.amount);
+    const valor = paraCentavos(t.amount);
 
     if (t.type === "transfer") {
-      if (t.account_id) saldos[t.account_id] = num(saldos[t.account_id]) - valor;
+      if (t.account_id) centavos[t.account_id] = (centavos[t.account_id] || 0) - valor;
       if (t.transfer_account_id) {
-        saldos[t.transfer_account_id] = num(saldos[t.transfer_account_id]) + valor;
+        centavos[t.transfer_account_id] = (centavos[t.transfer_account_id] || 0) + valor;
       }
       return;
     }
 
     if (!t.account_id) return;
-    if (t.type === "income") saldos[t.account_id] = num(saldos[t.account_id]) + valor;
-    else if (t.type === "expense") saldos[t.account_id] = num(saldos[t.account_id]) - valor;
+    if (t.type === "income") centavos[t.account_id] = (centavos[t.account_id] || 0) + valor;
+    else if (t.type === "expense") centavos[t.account_id] = (centavos[t.account_id] || 0) - valor;
   });
 
+  const saldos = {};
+  Object.keys(centavos).forEach((id) => { saldos[id] = paraReais(centavos[id]); });
   return saldos;
 }
 
@@ -120,15 +149,18 @@ export function calcularSaldosPorConta(contas = [], transacoes = []) {
  * Totais de saldo separando contas comuns de investimento.
  * O "saldo em conta" exibido no topo do app é `emConta`.
  */
-export function calcularTotaisDeSaldo(contas = [], transacoes = []) {
+export function calcularTotaisDeSaldo(contas, transacoes) {
   const saldos = calcularSaldosPorConta(contas, transacoes);
-  const comuns = contas.filter((c) => c.type !== "investment");
-  const investimentos = contas.filter((c) => c.type === "investment");
+  const comuns = lista(contas).filter((c) => c.type !== "investment");
+  const investimentos = lista(contas).filter((c) => c.type === "investment");
+
+  const somar = (itens) =>
+    paraReais(itens.reduce((acc, c) => acc + paraCentavos(saldos[c.id]), 0));
 
   return {
     saldos,
-    emConta: comuns.reduce((s, c) => s + num(saldos[c.id]), 0),
-    investido: investimentos.reduce((s, c) => s + num(saldos[c.id]), 0),
+    emConta: somar(comuns),
+    investido: somar(investimentos),
     contasComuns: comuns,
     contasInvestimento: investimentos,
   };
@@ -144,9 +176,9 @@ export function calcularTotaisDeSaldo(contas = [], transacoes = []) {
  * Despesas sem conta vinculada (`account_id` nulo) entram: são gastos
  * reais que o usuário registrou sem escolher a conta.
  */
-export function transacoesDoMes(transacoes = [], contas = [], dataReferencia) {
+export function transacoesDoMes(transacoes, contas, dataReferencia) {
   const investimento = idsInvestimento(contas);
-  return transacoes.filter(
+  return lista(transacoes).filter(
     (t) =>
       t.type !== "transfer" &&
       !investimento.has(t.account_id) &&
@@ -161,11 +193,12 @@ export function transacoesDoMes(transacoes = [], contas = [], dataReferencia) {
  * e não apenas o do mês — é o que torna a projeção do mês corrente
  * significativa.
  */
-export function calcularKPIsMes({ transacoes = [], contas = [], dataReferencia, saldoEmConta, hoje = new Date() }) {
+export function calcularKPIsMes({ transacoes, contas, dataReferencia, saldoEmConta, hoje = new Date() } = {}) {
   const doMes = transacoesDoMes(transacoes, contas, dataReferencia);
 
-  const soma = (lista, tipo) =>
-    lista.filter((t) => t.type === tipo).reduce((s, t) => s + num(t.amount), 0);
+  // Tudo somado em centavos; a conversão para reais acontece no retorno.
+  const soma = (itens, tipo) =>
+    itens.filter((t) => t.type === tipo).reduce((acc, t) => acc + paraCentavos(t.amount), 0);
 
   const realizadas = doMes.filter(ehRealizada);
   const previstas = doMes.filter(ehPrevista);
@@ -180,31 +213,33 @@ export function calcularKPIsMes({ transacoes = [], contas = [], dataReferencia, 
   // Mês corrente: parte do saldo real de hoje e aplica o que ainda falta acontecer.
   // Outros meses: o resultado líquido do próprio mês.
   const projecao = ehMesCorrente
-    ? num(saldoEmConta) + entradasPrevistas - saidasPrevistas
+    ? paraCentavos(saldoEmConta) + entradasPrevistas - saidasPrevistas
     : entradasRealizadas + entradasPrevistas - saidasRealizadas - saidasPrevistas;
 
   return {
-    entradas: entradasRealizadas + entradasPrevistas,
-    saidas: saidasRealizadas + saidasPrevistas,
-    entradasRealizadas,
-    entradasPrevistas,
-    saidasRealizadas,
-    saidasPrevistas,
-    resultadoDoMes: entradasRealizadas - saidasRealizadas,
-    projecaoFinal: projecao,
+    entradas: paraReais(entradasRealizadas + entradasPrevistas),
+    saidas: paraReais(saidasRealizadas + saidasPrevistas),
+    entradasRealizadas: paraReais(entradasRealizadas),
+    entradasPrevistas: paraReais(entradasPrevistas),
+    saidasRealizadas: paraReais(saidasRealizadas),
+    saidasPrevistas: paraReais(saidasPrevistas),
+    resultadoDoMes: paraReais(entradasRealizadas - saidasRealizadas),
+    projecaoFinal: paraReais(projecao),
     ehMesCorrente,
   };
 }
 
 /** Gastos realizados do mês agrupados por categoria. */
-export function gastosPorCategoria(transacoes = [], contas = [], dataReferencia) {
-  const mapa = {};
+export function gastosPorCategoria(transacoes, contas, dataReferencia) {
+  const centavos = {};
   transacoesDoMes(transacoes, contas, dataReferencia)
     .filter((t) => t.type === "expense" && ehRealizada(t))
     .forEach((t) => {
       const cat = t.category || "outros";
-      mapa[cat] = num(mapa[cat]) + num(t.amount);
+      centavos[cat] = (centavos[cat] || 0) + paraCentavos(t.amount);
     });
+  const mapa = {};
+  Object.keys(centavos).forEach((c) => { mapa[c] = paraReais(centavos[c]); });
   return mapa;
 }
 
@@ -216,9 +251,11 @@ export function gastosPorCategoria(transacoes = [], contas = [], dataReferencia)
  * Não confundir com a taxa de poupança. Este número aparecia nos
  * Relatórios rotulado como "taxa de poupança", contradizendo o Score.
  */
-export function calcularSobraDoMes({ entradas, saidas }) {
-  if (num(entradas) <= 0) return 0;
-  return ((num(entradas) - num(saidas)) / num(entradas)) * 100;
+export function calcularSobraDoMes({ entradas, saidas } = {}) {
+  const e = paraCentavos(entradas);
+  const sa = paraCentavos(saidas);
+  if (e <= 0) return 0;
+  return ((e - sa) / e) * 100;
 }
 
 /**
@@ -226,19 +263,20 @@ export function calcularSobraDoMes({ entradas, saidas }) {
  * investimento. É a mesma definição usada pela função SQL
  * `calculate_financial_score`, que alimenta o Score financeiro.
  */
-export function calcularTaxaPoupanca({ transacoes = [], contas = [], dataReferencia }) {
+export function calcularTaxaPoupanca({ transacoes, contas, dataReferencia } = {}) {
   const investimento = idsInvestimento(contas);
-  const doMes = transacoes.filter((t) => ehRealizada(t) && noMes(t, dataReferencia));
+  const doMes = lista(transacoes).filter((t) => ehRealizada(t) && noMes(t, dataReferencia));
 
+  // Tudo em centavos: a razão só é calculada no fim.
   const renda = doMes
     .filter((t) => t.type === "income" && !investimento.has(t.account_id))
-    .reduce((s, t) => s + num(t.amount), 0);
+    .reduce((acc, t) => acc + paraCentavos(t.amount), 0);
 
   let aportado = 0;
   let sacado = 0;
 
   doMes.forEach((t) => {
-    const valor = num(t.amount);
+    const valor = paraCentavos(t.amount);
     if (t.type === "income" && investimento.has(t.account_id)) aportado += valor;
     else if (t.type === "transfer" && investimento.has(t.transfer_account_id)) aportado += valor;
     else if (t.type === "expense" && investimento.has(t.account_id)) sacado += valor;
@@ -246,12 +284,14 @@ export function calcularTaxaPoupanca({ transacoes = [], contas = [], dataReferen
   });
 
   const aporteLiquido = Math.max(0, aportado - sacado);
-  if (renda <= 0) return { taxa: 0, renda, aporteLiquido };
+  if (renda <= 0) {
+    return { taxa: 0, renda: paraReais(renda), aporteLiquido: paraReais(aporteLiquido) };
+  }
 
   return {
     taxa: Math.round((aporteLiquido / renda) * 1000) / 10,
-    renda,
-    aporteLiquido,
+    renda: paraReais(renda),
+    aporteLiquido: paraReais(aporteLiquido),
   };
 }
 
@@ -281,10 +321,12 @@ export function calcularMesFatura(data, cartao) {
 }
 
 /** Total lançado em uma fatura. */
-export function totalDaFatura(transacoes = [], cartaoId, mesFatura) {
-  return transacoes
-    .filter((t) => t.credit_card_id === cartaoId && t.invoice_month === mesFatura)
-    .reduce((s, t) => s + num(t.amount), 0);
+export function totalDaFatura(transacoes, cartaoId, mesFatura) {
+  return paraReais(
+    lista(transacoes)
+      .filter((t) => t.credit_card_id === cartaoId && t.invoice_month === mesFatura)
+      .reduce((acc, t) => acc + paraCentavos(t.amount), 0)
+  );
 }
 
 // ── Metas ───────────────────────────────────────────────────
@@ -326,14 +368,14 @@ function periodoDoAporte(meta, hoje = new Date()) {
  *  - investimento + patrimônio       → saldo atual da conta vinculada;
  *  - entrada/saída                   → soma no intervalo da meta.
  */
-export function calcularProgressoMeta(meta, transacoes = [], contas = [], hoje = new Date()) {
+export function calcularProgressoMeta(meta, transacoes, contas, hoje = new Date()) {
   if (!meta) return 0;
-  let atual = 0;
+  let atual = 0; // sempre em centavos dentro desta função
 
   if (meta.type === "investment") {
     if (meta.investment_type === "contribution") {
       const { inicio, fim } = periodoDoAporte(meta, hoje);
-      transacoes.forEach((t) => {
+      lista(transacoes).forEach((t) => {
         if (!ehRealizada(t)) return;
         const entrouNaConta =
           (t.type === "income" && t.account_id === meta.linked_account_id) ||
@@ -341,12 +383,12 @@ export function calcularProgressoMeta(meta, transacoes = [], contas = [], hoje =
         if (!entrouNaConta) return;
         const d = paraData(t.date);
         if (!d || d < inicio || d >= fim) return;
-        atual += num(t.amount);
+        atual += paraCentavos(t.amount);
       });
-      return atual;
+      return paraReais(atual);
     }
 
-    const conta = contas.find((c) => c.id === meta.linked_account_id);
+    const conta = lista(contas).find((c) => c.id === meta.linked_account_id);
     if (conta) {
       const saldos = calcularSaldosPorConta([conta], transacoes);
       return num(saldos[conta.id]);
@@ -356,35 +398,35 @@ export function calcularProgressoMeta(meta, transacoes = [], contas = [], hoje =
     const investimento = idsInvestimento(contas);
     const inicio = paraData(meta.start_date);
     const fim = paraData(meta.end_date);
-    transacoes.forEach((t) => {
+    lista(transacoes).forEach((t) => {
       if (!ehRealizada(t)) return;
       const d = paraData(t.date);
       if (!d || !inicio || !fim || d < inicio || d > fim) return;
       if (!investimento.has(t.account_id)) return;
-      if (t.type === "income") atual += num(t.amount);
-      else if (t.type === "expense") atual -= num(t.amount);
+      if (t.type === "income") atual += paraCentavos(t.amount);
+      else if (t.type === "expense") atual -= paraCentavos(t.amount);
     });
-    return atual;
+    return paraReais(atual);
   }
 
   const inicio = paraData(meta.start_date);
   const fim = paraData(meta.end_date);
-  transacoes.forEach((t) => {
+  lista(transacoes).forEach((t) => {
     if (!ehRealizada(t)) return;
     if (t.type !== meta.type) return;
     if (meta.category && t.category !== meta.category) return;
     const d = paraData(t.date);
     if (!d || !inicio || !fim || d < inicio || d > fim) return;
-    atual += num(t.amount);
+    atual += paraCentavos(t.amount);
   });
-  return atual;
+  return paraReais(atual);
 }
 
 /** Percentual concluído de uma meta, limitado a 100. */
 export function percentualDaMeta(meta, atual) {
-  const alvo = num(meta?.target_amount);
+  const alvo = paraCentavos(meta?.target_amount);
   if (alvo <= 0) return 0;
-  return Math.min(100, Math.round((num(atual) / alvo) * 100));
+  return Math.min(100, Math.round((paraCentavos(atual) / alvo) * 100));
 }
 
 // ── Recorrência ─────────────────────────────────────────────
@@ -427,13 +469,20 @@ export function gerarOcorrenciasRecorrentes(dados, groupId) {
       const alvo = new Date(base.getFullYear(), base.getMonth() + i, 1);
       mes = chaveMes(alvo);
       data = dataNoMes(mes, diaEscolhido); // dia 31 vira 28/29/30 conforme o mês
-    } else {
-      const alvo =
-        frequencia === "weekly"
-          ? new Date(base.getFullYear(), base.getMonth(), base.getDate() + i * 7)
-          : new Date(base.getFullYear() + i, base.getMonth(), base.getDate());
+    } else if (frequencia === "weekly") {
+      const alvo = new Date(base.getFullYear(), base.getMonth(), base.getDate() + i * 7);
       mes = chaveMes(alvo);
       data = `${alvo.getFullYear()}-${String(alvo.getMonth() + 1).padStart(2, "0")}-${String(alvo.getDate()).padStart(2, "0")}`;
+    } else if (frequencia === "yearly") {
+      // Regra explícita para 29/02: nos anos não bissextos a ocorrência
+      // cai em 28/02, e NÃO em 01/03. É a mesma regra do mensal — o dia
+      // é limitado ao último dia do mês de destino — para que a série
+      // não escorregue de mês com o tempo.
+      mes = `${base.getFullYear() + i}-${String(base.getMonth() + 1).padStart(2, "0")}`;
+      data = dataNoMes(mes, diaEscolhido);
+    } else {
+      // Frequência desconhecida: não inventa série.
+      break;
     }
 
     if (fim && paraData(data) > fim) break;
