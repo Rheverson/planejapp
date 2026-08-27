@@ -57,7 +57,7 @@ function modeloIndisponivel(mensagem: string): boolean {
 }
 
 export type RespostaGroq =
-  | { ok: true; texto: string; modelo: string }
+  | { ok: true; texto: string; modelo: string; uso?: { entrada: number; saida: number } }
   | { ok: false; motivo: "sem_chave" | "limite" | "indisponivel" | "vazio" | "erro"; detalhe: string };
 
 /**
@@ -88,6 +88,13 @@ export async function chamarGroq(
           messages: mensagens,
           temperature: opcoes.temperature ?? 0.2,
           max_tokens: opcoes.maxTokens ?? 500,
+          // Os gpt-oss são modelos de raciocínio: por padrão gastam
+          // parte do orçamento de saída "pensando" antes de escrever.
+          // Com o limite baixo do plano gratuito isso estourava os
+          // tokens antes de sobrar texto, e a resposta voltava vazia.
+          // O Finn dá respostas de três frases sobre dados já prontos;
+          // não precisa de cadeia de raciocínio longa.
+          ...(modelo.startsWith("openai/gpt-oss") ? { reasoning_effort: "low" } : {}),
         }),
       });
     } catch (e) {
@@ -99,9 +106,21 @@ export async function chamarGroq(
     if (resposta.ok) {
       const texto = dados?.choices?.[0]?.message?.content;
       if (typeof texto === "string" && texto.trim()) {
-        return { ok: true, texto, modelo };
+        const uso = {
+          entrada: dados?.usage?.prompt_tokens ?? 0,
+          saida: dados?.usage?.completion_tokens ?? 0,
+        };
+        // A conta está no plano gratuito da Groq (8.000 tokens/minuto),
+        // então o consumo por conversa importa. Fica no log para dar
+        // para acompanhar sem precisar de instrumentação extra.
+        console.log(`Groq ${modelo}: ${uso.entrada} entrada + ${uso.saida} saida`);
+        return { ok: true, texto, modelo, uso };
       }
-      return { ok: false, motivo: "vazio", detalhe: `modelo ${modelo} devolveu resposta vazia` };
+      // Vazio não é erro definitivo: pode ser o raciocínio tendo
+      // consumido o orçamento. Vale tentar o próximo da lista.
+      ultimoDetalhe = `modelo ${modelo} devolveu resposta vazia`;
+      console.warn(ultimoDetalhe);
+      continue;
     }
 
     const detalhe = dados?.error?.message ?? `HTTP ${resposta.status}`;
