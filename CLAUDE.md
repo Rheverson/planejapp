@@ -12,19 +12,32 @@ Leia o arquivo `PLANEJAPP_DOCS.md` antes de qualquer tarefa. Ele contém toda a 
 - **Repositório:** https://github.com/Rheverson/planejapp.git
 - **Stack:** React + Vite + Supabase + Stripe + Vercel
 - **IA:** Groq (`openai/gpt-oss-120b`) — não é a Claude API, apesar do nome Finn
-- **Provedores em cascata:** `supabase/functions/_shared/ia.ts` tenta Groq →
-  Cerebras → Gemini, nessa ordem. Todos falam o protocolo OpenAI, então trocar é
-  só endpoint, chave e nome do modelo. Cada um é opcional: sem a chave no
-  ambiente (`GROQ_API_KEY`, `CEREBRAS_API_KEY`, `GEMINI_API_KEY`), é pulado.
-  Cota estourada (429) pula o provedor inteiro; modelo fora do ar pula só o
-  modelo. Nunca chame um provedor direto por `fetch` — use `chamarIA()`.
-- **Cota da IA (planos gratuitos, mudam sem aviso):** a Groq dá 8.000 tokens/min
-  e **200.000/dia** somando todos os usuários — a ~1.800 por mensagem, são
-  ~100 mensagens/dia no app inteiro, e foi esse teto diário que derrubou o Finn
-  em 27/08/2026. Cerebras (~1M tokens/dia) e Gemini (~1.000 requisições/dia)
-  entram quando ela acaba. O `console.log` registra
-  "IA <provedor>/<modelo>: N entrada + M saída" a cada chamada — é por onde se
-  acompanha quem está segurando o tranco. Medir antes de engordar o prompt.
+- **Provedores em cascata:** `supabase/functions/_shared/ia.ts` tenta
+  Groq → Gemini → Cerebras. Todos falam o protocolo OpenAI, então trocar é só
+  endpoint, chave e nome do modelo. Cada um é opcional: sem a chave no ambiente
+  (`GROQ_API_KEY`, `GEMINI_API_KEY`, `CEREBRAS_API_KEY`), é pulado. Cota, chave
+  inválida ou 5xx pulam o provedor inteiro; modelo fora do ar ou resposta vazia
+  pulam só o modelo. Nunca chame um provedor direto por `fetch` — use
+  `chamarIA()`, senão aquele caminho fica sem fallback (foi o caso do
+  `whatsapp-bot`).
+- **Estado dos provedores em 27/08/2026** (conferido contra o `/models` de cada
+  conta, não contra a documentação):
+  - Groq — `openai/gpt-oss-120b` e `gpt-oss-20b` respondem. 8.000 tokens/min e
+    **200.000/dia** somando todos os usuários. A ~1.800 por mensagem, são
+    ~100 mensagens/dia no app inteiro; foi esse teto que derrubou o Finn.
+  - Gemini — `gemini-3.5-flash-lite`, `gemini-flash-lite-latest` e
+    `gemini-3.5-flash` respondem. Cota contada em requisições (~1.000/dia), o
+    que complementa bem um limite de tokens.
+  - Cerebras — 402 "Payment required" nos dois modelos da conta, apesar de o
+    painel listar 3M tokens/dia. A chave é válida (lista modelos); falta
+    billing. Fica em último e volta sozinho quando for resolvido.
+- **Nomes de modelo saem de linha sem aviso:** os `gemini-2.5-*` já respondem
+  404 "no longer available to new users". Conferir contra o `/models` do
+  provedor antes de fixar um nome — a cascata pula o que não existe, mas um
+  degrau morto não protege ninguém.
+- **Acompanhar consumo:** o `console.log` registra
+  `IA <provedor>/<modelo>: N entrada + M saída` a cada chamada. Medir antes de
+  engordar o prompt do `ai-chat`.
 - **Dono:** Rheverson Gois
 
 ---
