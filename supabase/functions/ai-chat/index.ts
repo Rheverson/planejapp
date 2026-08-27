@@ -1,23 +1,20 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-}
+import { adminClient, cors, preflight, requireUser } from "../_shared/auth.ts"
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders })
-  }
+  const pre = preflight(req)
+  if (pre) return pre
+  const corsHeaders = cors(req)
 
   try {
-    const { userId, message, history } = await req.json()
+    // ✅ A identidade vem do JWT, nunca do corpo da requisição.
+    const auth = await requireUser(req)
+    if (auth.response) return auth.response
+    const userId = auth.user.id
 
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-    )
+    const { message, history } = await req.json()
+
+    const supabase = adminClient()
 
     const now = new Date()
     const startDate = `${now.getFullYear() - 1}-01-01`
@@ -37,15 +34,27 @@ serve(async (req) => {
     const goals = goalsRes.data || []
     const profile = profileRes.data
 
-    const allTransactionsRes = await supabase.from("transactions").select("*").eq("user_id", userId).eq("is_realized", true).neq("type", "transfer")
+    // ✅ Inclui transferências: sem elas o saldo por conta divergia do painel.
+    // A regra é a mesma do app (src/domain/financas.js):
+    //  - previstas não entram
+    //  - compra no cartão não afeta a conta (só o pagamento da fatura)
+    //  - transferência sai da origem e entra no destino
+    const allTransactionsRes = await supabase.from("transactions").select("*").eq("user_id", userId).neq("is_realized", false)
     const allTransactions = allTransactionsRes.data || []
 
     const accountBalances: Record<string, number> = {}
-    accounts.forEach((acc: any) => { accountBalances[acc.id] = acc.initial_balance || 0 })
+    accounts.forEach((acc: any) => { accountBalances[acc.id] = Number(acc.initial_balance) || 0 })
     allTransactions.forEach((t: any) => {
+      const valor = Number(t.amount) || 0
+      if (t.credit_card_id && t.type === 'expense') return
+      if (t.type === 'transfer') {
+        if (t.account_id)          accountBalances[t.account_id]          = (accountBalances[t.account_id] || 0)          - valor
+        if (t.transfer_account_id) accountBalances[t.transfer_account_id] = (accountBalances[t.transfer_account_id] || 0) + valor
+        return
+      }
       if (!t.account_id) return
-      if (t.type === 'income') accountBalances[t.account_id] = (accountBalances[t.account_id] || 0) + t.amount
-      else if (t.type === 'expense') accountBalances[t.account_id] = (accountBalances[t.account_id] || 0) - t.amount
+      if (t.type === 'income')       accountBalances[t.account_id] = (accountBalances[t.account_id] || 0) + valor
+      else if (t.type === 'expense') accountBalances[t.account_id] = (accountBalances[t.account_id] || 0) - valor
     })
 
     const regularAccounts = accounts.filter((a: any) => a.type !== 'investment')

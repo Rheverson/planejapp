@@ -266,11 +266,20 @@ export default function Transactions() {
 
   const duplicarMutation = useMutation({
     mutationFn: async ({ transaction, meses }) => {
-      const dia = transaction.date.split("-")[2];
+      const dia = Number(transaction.date.split("-")[2]);
+      // ✅ Ajusta o dia ao último dia do mês de destino.
+      // Antes, duplicar um lançamento do dia 31 gerava "2026-02-31" e o insert falhava.
+      const dataNoMes = (mes) => {
+        const [ano, m] = mes.split("-").map(Number);
+        const ultimoDia = new Date(ano, m, 0).getDate();
+        return `${mes}-${String(Math.min(dia, ultimoDia)).padStart(2, "0")}`;
+      };
       const inserts = meses.map((mes) => ({
         description: transaction.description, amount: Number(transaction.amount), type: transaction.type,
         category: transaction.category, account_id: transaction.account_id,
-        date: `${mes}-${dia}`, is_realized: false, notes: transaction.notes, user_id: activeOwnerId,
+        credit_card_id: transaction.credit_card_id ?? null,
+        invoice_month: transaction.credit_card_id ? mes : null,
+        date: dataNoMes(mes), is_realized: false, notes: transaction.notes, user_id: activeOwnerId,
       }));
       const { error } = await supabase.from("transactions").insert(inserts);
       if (error) throw error;
@@ -292,7 +301,9 @@ export default function Transactions() {
     if (t?.recurring_group_id) {
       setRecurringModal({ type: "delete", transaction: t });
     } else {
-      deleteMutation.mutate({ id });
+      // ✅ Abre a confirmação. Antes o AlertDialog existia mas nunca era
+      // acionado: um toque na lixeira apagava o lançamento direto.
+      setDeleteId(id);
     }
   };
 
@@ -720,7 +731,7 @@ export default function Transactions() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={() => deleteMutation.mutate(deleteId)} style={{ background: "#dc2626", color: "#ffffff", border: "none" }}>
+            <AlertDialogAction onClick={() => deleteMutation.mutate({ id: deleteId })} style={{ background: "#dc2626", color: "#ffffff", border: "none" }}>
               Excluir
             </AlertDialogAction>
           </AlertDialogFooter>

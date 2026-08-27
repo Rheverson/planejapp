@@ -16,6 +16,16 @@ const categoryIcons = {
   salario: DollarSign, outros: DollarSign
 };
 
+// ✅ As chaves acima são sem acento, mas as categorias são gravadas
+// acentuadas ("alimentação", "saúde", "educação", "salário"), então
+// nenhuma delas casava e todas caíam no ícone genérico.
+function chaveCategoria(categoria) {
+  return String(categoria || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "");
+}
+
 const fmt = (v) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
 
 // ✅ Corrige o bug de timezone: "2026-04-12" interpretado como UTC meia-noite
@@ -33,7 +43,7 @@ export default function TransactionItem({ transaction, accounts = [], creditCard
 
   const Icon = isTransfer
     ? ArrowLeftRight
-    : categoryIcons[transaction.category?.toLowerCase()] || DollarSign;
+    : categoryIcons[chaveCategoria(transaction.category)] || DollarSign;
 
   const account = accounts.find(a => a.id === transaction.account_id);
   const transferAccount = accounts.find(a => a.id === transaction.transfer_account_id);

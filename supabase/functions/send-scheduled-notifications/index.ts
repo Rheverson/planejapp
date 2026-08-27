@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
+import { requireInternalOrCron } from "../_shared/auth.ts"
 
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
@@ -30,6 +31,11 @@ function getMonthName(month: number): string {
 
 serve(async (req) => {
   try {
+    // ✅ Só chamadas internas: cron job autenticado ou service_role.
+    // Antes qualquer pessoa disparava push para toda a base de usuários.
+    const negado = await requireInternalOrCron(req)
+    if (negado) return negado
+
     const body = await req.json().catch(() => ({}))
     const period: string = body.period || 'morning'
 
@@ -181,27 +187,26 @@ async function handleUser(userId: string, period: string, dow: number, day: numb
   // ── NOITE ─────────────────────────────────────────────────
   if (period === 'evening') {
     if (dow === 5) {
-      await sendPush(userId, '🗓️ Balanço semanal', `Este mês: ${fmt(income)} entrou, ${fmt(expense)} saiu. ${income - expense >= 0 ? '✅' : '⚠️'}`)
-      return  // ← para aqui
+      await sendPush(userId, '🗓️ Fim de semana chegando!', `Este mês: ${fmt(income)} entrou, ${fmt(expense)} saiu. ${income - expense >= 0 ? '✅' : '⚠️'}`)
+      return
     }
     if (todayExpense > 0) {
       const usagePct2 = income > 0 ? Math.round((expense / income) * 100) : 0
       if (usagePct2 > 90) {
-        await sendPush(userId, '⚠️ Atenção!', `Você já usou ${usagePct2}% da sua renda este mês. Cuidado! 🚨`)
-        return  // ← para aqui
+        await sendPush(userId, '⚠️ Atenção!', `Você já usou ${usagePct2}% da sua renda este mês. Cuidado com os gastos! 🚨`)
+      } else {
+        const opts = [
+          { title: '📝 Resumo do dia', body: `Hoje você gastou ${fmt(todayExpense)}. Total do mês: ${fmt(expense)} (${usagePct2}% da renda)` },
+          { title: '🔥 Sequência ativa!', body: 'Tudo anotado? Mantenha sua sequência de registros!' },
+        ]
+        await sendPush(userId, opts[day % 2].title, opts[day % 2].body)
       }
-      const opts = [
-        { title: '📝 Resumo do dia', body: `Hoje você gastou ${fmt(todayExpense)}. Total do mês: ${fmt(expense)} (${usagePct2}% da renda)` },
-        { title: '🔥 Sequência ativa!', body: 'Tudo anotado? Mantenha sua sequência de registros!' },
-      ]
-      await sendPush(userId, opts[day % 2].title, opts[day % 2].body)
-      return  // ← para aqui
     } else {
       const opts = [
         { title: '📝 Não esquece!', body: '1 minuto para registrar o que saiu hoje. Manter o controle faz diferença!' },
-        { title: '🌙 Boa noite!', body: 'Registrar pequenos gastos ajuda a entender para onde vai seu dinheiro 💡' },
+        { title: '🌙 Boa noite!', body: 'Lembrete: registrar pequenos gastos ajuda a entender para onde vai seu dinheiro 💡' },
       ]
       await sendPush(userId, opts[day % 2].title, opts[day % 2].body)
-      return  // ← para aqui
     }
   }
+}

@@ -446,10 +446,12 @@ function ChatTab({ user, dark }) {
         setPendingAction(null);
         setMessages(prev => [...prev, { role: "assistant", content: `🗑️ Conta excluída.` }]);
       } else if (action._type === "send_invite") {
-        const { data: profile } = await supabase.from("profiles").select("referral_code").eq("id", user.id).single();
-        const referralLink = `https://www.planejapp.com.br/subscribe?ref=${profile?.referral_code || ""}`;
-        const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-email`, { method: "POST", headers: { "Content-Type": "application/json", "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` }, body: JSON.stringify({ to: action.email, senderEmail: "noreply@planejapp.com.br", senderName: "Planeje", subject: `Você foi convidado para o Planeje! 💜`, html: `<p>Olá${action.name ? ", " + action.name : ""}! Acesse: <a href="${referralLink}">${referralLink}</a></p>` }) });
-        if (!res.ok) throw new Error("Erro ao enviar email");
+        // O assunto, o HTML e o link de indicação são montados no servidor.
+        // O cliente não escolhe mais o conteúdo nem o remetente do e-mail.
+        const { data: envio, error: erroEnvio } = await supabase.functions.invoke("send-email", {
+          body: { template: "invite", to: action.email, name: action.name || null },
+        });
+        if (erroEnvio || envio?.error) throw new Error(envio?.error || "Erro ao enviar e-mail");
         setPendingAction(null);
         setMessages(prev => [...prev, { role: "assistant", content: `✅ **Convite enviado!** 📧 ${action.email}` }]);
       }

@@ -1,11 +1,27 @@
 <!doctype html>
-<html lang="en">
+<html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#1d4ed8" />
     <link rel="manifest" href="/manifest.json" />
     <title>Planeje App</title>
+
+    <!--
+      As fontes da marca nunca eram carregadas: 'Cabinet Grotesk' aparecia
+      como font-family em 32 arquivos e 'Outfit' nos containers de página,
+      mas não havia nenhum <link> nem @font-face — o app inteiro renderizava
+      na fonte do sistema, com os pesos 800/900 sintetizados pelo navegador.
+      Cabinet Grotesk é da Fontshare (não existe no Google Fonts).
+    -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="preconnect" href="https://api.fontshare.com" crossorigin />
+    <link rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap" />
+    <link rel="stylesheet"
+          href="https://api.fontshare.com/v2/css?f[]=cabinet-grotesk@700,800,900&display=swap" />
     <script>
       (function() {
         var params = new URLSearchParams(window.location.search);

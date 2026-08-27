@@ -1,0 +1,129 @@
+# PlanejeApp — Instruções para o Claude Code
+
+Você é o assistente de desenvolvimento do **PlanejeApp**, um app de controle financeiro pessoal com IA.
+Leia o arquivo `PLANEJAPP_DOCS.md` antes de qualquer tarefa. Ele contém toda a arquitetura, regras de negócio e padrões do projeto.
+
+---
+
+## Identidade do Projeto
+
+- **App:** https://app.planejapp.com.br
+- **Landing:** https://planejapp.com.br
+- **Repositório:** https://github.com/Rheverson/planejapp.git
+- **Stack:** React + Vite + Supabase + Stripe + Vercel
+- **Dono:** Rheverson Gois
+
+---
+
+## Comportamento Esperado
+
+### Antes de qualquer tarefa
+1. Leia o `PLANEJAPP_DOCS.md` para entender o contexto
+2. Identifique qual arquivo precisa ser alterado
+3. Entenda o impacto da mudança antes de executar
+4. Se tiver dúvida sobre regra de negócio, pergunte antes de implementar
+
+### Ao escrever código
+- Use **estilo inline** para CSS — o projeto não usa Tailwind nem arquivos `.css` separados
+- Siga os tokens de cor já existentes nos componentes (`dark ? "#0c0e13" : "#ffffff"`)
+- Use sempre `useIsDark()` para detectar o tema
+- Mantenha o padrão visual: fundo escuro `#060709`, azul `#1d4ed8`, textos `#e8edf5`
+- Fontes: **Cabinet Grotesk** (títulos/números) + **Outfit** (corpo)
+- Componentes funcionais com hooks — sem classes React
+- TanStack Query para todos os fetches — nunca `useEffect` + `fetch` direto
+
+### Ao mexer no banco
+- Sempre filtrar por `user_id` — nunca remover esse filtro
+- Para testar: use o usuário `rheverson.gois@americanled.com.br`
+- Migrations vão em `supabase/migrations/` com nome descritivo
+- RLS está ativo em todas as tabelas
+
+### Ao fazer deploy
+- **App:** `git add . && git commit -m "..." && git push` (Vercel detecta automaticamente)
+- **Landing:** `cd src/pages/planejapp-landing && npx vercel --prod` (sem Git)
+- **Edge Functions:** `npx supabase functions deploy <nome>`
+
+---
+
+## Regras Críticas de Negócio
+
+### Saldo de contas
+```js
+// Compras no cartão NÃO afetam saldo da conta
+if (t.credit_card_id && t.type === 'expense') return;
+// Só o pagamento da fatura afeta
+```
+
+### Projeção Final do Mês
+```
+Projeção = saldo_atual_contas + entradas_previstas - saidas_previstas
+```
+- Usa o saldo REAL atual (histórico completo, não só o mês)
+- Exclui contas do tipo `investment`
+- Inclui despesas sem `account_id` (account_id NULL)
+
+### Transações
+- `is_realized = true` → realizada (afeta saldo)
+- `is_realized = false` → prevista (não afeta saldo)
+- `type`: `income` | `expense` | `transfer`
+- Transferências: `account_id` = origem, `transfer_account_id` = destino
+
+### Cartão de crédito
+- `invoice_month` = 'YYYY-MM' determina em qual mês a despesa entra
+- `closing_day` do cartão define se vai para o mês atual ou próximo
+
+---
+
+## O Que NUNCA Fazer
+
+- ❌ Usar Tailwind ou arquivos `.css` separados
+- ❌ Remover filtro de `user_id` em queries
+- ❌ Fazer deploy da landing via `git push` (ela não tem conexão Git)
+- ❌ Alterar `stripe-webhook` sem testar cuidadosamente
+- ❌ Usar `useEffect + fetch` — sempre TanStack Query
+- ❌ Criar componentes de classe React
+- ❌ Esquecer de invalidar queries após mutations
+- ❌ Misturar lógica de cartão com lógica de débito no saldo
+
+---
+
+## Arquivos Mais Importantes
+
+```
+src/pages/Home.jsx                              # Dashboard — KPIs, saldos, botões
+src/pages/Transactions.jsx                      # Lista de transações
+src/components/transactions/TransactionForm.jsx # Formulário entrada/saída
+src/components/transactions/TransferForm.jsx    # Formulário de transferência
+src/components/financial/FinancialScore.jsx     # Score financeiro
+src/components/financial/CashFlowProjection.jsx # Projeção 30 dias
+src/lib/supabase.js                             # Cliente Supabase
+src/lib/AuthContext.jsx                         # Auth
+supabase/functions/create-checkout/index.ts     # Checkout Stripe
+supabase/functions/ai-chat/index.ts             # Finn (IA)
+supabase/functions/stripe-webhook/index.ts      # Webhook Stripe
+src/pages/planejapp-landing/index.html          # Landing page
+```
+
+---
+
+## Padrão de Resposta
+
+Ao receber uma tarefa:
+1. **Confirme** o que vai fazer em 1-2 linhas
+2. **Implemente** diretamente — sem perguntas desnecessárias
+3. **Mostre** apenas o trecho relevante alterado (não o arquivo inteiro, a menos que seja pequeno)
+4. **Informe** o comando de deploy necessário ao final
+5. **Avise** se a mudança tem risco ou impacto em outras partes
+
+Se a tarefa for ambígua, faça uma única pergunta objetiva antes de implementar.
+
+---
+
+## Contexto do Negócio
+
+- Plano: R$ 12,90/mês após trial gratuito
+- Trial padrão: 30 dias
+- Código do evento: `EVENTO2026` (60 dias, reutilizável)
+- IA do app se chama **Finn** — consultor financeiro pessoal
+- Usuários ativos: ~31 cadastrados, 9 com acesso ativo
+- O app ainda está em fase de lançamento — prioridade: estabilidade e UX mobile

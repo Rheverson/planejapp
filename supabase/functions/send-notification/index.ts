@@ -1,17 +1,18 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
+import { cors, preflight, requireInternal } from "../_shared/auth.ts"
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
-  }
+  const pre = preflight(req)
+  if (pre) return pre
+  const corsHeaders = cors(req)
 
   try {
+    // ✅ Só chamadas internas (cron, stripe-webhook, outras functions).
+    // Antes qualquer um enviava push em nome do app para qualquer user_id.
+    const negado = requireInternal(req)
+    if (negado) return negado
+
     const { user_id, title, body } = await req.json()
 
     if (!user_id || !title || !body) {

@@ -1,44 +1,107 @@
+# ============================================================
+# Edge Functions — configuração de deploy
+#
+# Auditoria de 26/08/2026: 15 das 18 funções estavam publicadas com
+# verify_jwt = false e liam o `userId` do corpo da requisição.
+#
+# Regra a partir daqui:
+#   verify_jwt = true  → função chamada pelo app (ou por outra função
+#                        com a service key, que também é um JWT válido).
+#   verify_jwt = false → só onde o chamador não consegue assinar um JWT:
+#                        webhooks externos e cron jobs do Postgres.
+#                        Nesses casos a autenticação é feita dentro da
+#                        função (assinatura HMAC ou token x-cron-key).
+#
+# Atenção: verify_jwt = true valida apenas a assinatura do token, e a
+# chave anônima é um JWT válido. Por isso toda função de usuário ainda
+# precisa chamar requireUser() de _shared/auth.ts.
+# ============================================================
 
-[functions.stripe-webhook]
+# ── Chamadas pelo app, com o JWT do usuário ─────────────────
+[functions.ai-chat]
 enabled = true
 verify_jwt = true
-import_map = "./functions/stripe-webhook/deno.json"
-# Uncomment to specify a custom file path to the entrypoint.
-# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
-entrypoint = "./functions/stripe-webhook/index.ts"
-# Specifies static files to be bundled with the function. Supports glob patterns.
-# For example, if you want to serve static HTML pages in your function:
-# static_files = [ "./functions/stripe-webhook/*.html" ]
+entrypoint = "./functions/ai-chat/index.ts"
+
+[functions.ai-insights]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/ai-insights/index.ts"
+
+[functions.cancel-subscription]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/cancel-subscription/index.ts"
+
+[functions.create-recurring]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/create-recurring/index.ts"
+
+[functions.verify-phone]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/verify-phone/index.ts"
+
+[functions.send-email]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/send-email/index.ts"
 
 [functions.create-checkout]
 enabled = true
 verify_jwt = true
 import_map = "./functions/create-checkout/deno.json"
-# Uncomment to specify a custom file path to the entrypoint.
-# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
 entrypoint = "./functions/create-checkout/index.ts"
-# Specifies static files to be bundled with the function. Supports glob patterns.
-# For example, if you want to serve static HTML pages in your function:
-# static_files = [ "./functions/create-checkout/*.html" ]
+
+[functions.create-billing-portal]
+enabled = true
+verify_jwt = true
+import_map = "./functions/create-billing-portal/deno.json"
+entrypoint = "./functions/create-billing-portal/index.ts"
+
+[functions.cancel-stripe-customer]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/cancel-stripe-customer/index.ts"
+
+# ── Chamadas internas (service key = JWT válido) ────────────
+[functions.send-notification]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/send-notification/index.ts"
+
+[functions.send-announcement]
+enabled = true
+verify_jwt = true
+entrypoint = "./functions/send-announcement/index.ts"
+
+# ── Cron do Postgres: não assina JWT, autentica por x-cron-key ──
+[functions.send-scheduled-notifications]
+enabled = true
+verify_jwt = false
+import_map = "./functions/send-scheduled-notifications/deno.json"
+entrypoint = "./functions/send-scheduled-notifications/index.ts"
+
+[functions.send-daily-email]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/send-daily-email/index.ts"
+
+[functions.send-bill-reminders]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/send-bill-reminders/index.ts"
+
+# ── Webhooks externos: autenticam pela assinatura do provedor ──
+[functions.stripe-webhook]
+enabled = true
+verify_jwt = false
+import_map = "./functions/stripe-webhook/deno.json"
+entrypoint = "./functions/stripe-webhook/index.ts"
 
 [functions.whatsapp-bot]
 enabled = true
-verify_jwt = true
+verify_jwt = false
 import_map = "./functions/whatsapp-bot/deno.json"
-# Uncomment to specify a custom file path to the entrypoint.
-# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
 entrypoint = "./functions/whatsapp-bot/index.ts"
-# Specifies static files to be bundled with the function. Supports glob patterns.
-# For example, if you want to serve static HTML pages in your function:
-# static_files = [ "./functions/whatsapp-bot/*.html" ]
-
-[functions.send-scheduled-notifications]
-enabled = true
-verify_jwt = true
-import_map = "./functions/send-scheduled-notifications/deno.json"
-# Uncomment to specify a custom file path to the entrypoint.
-# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
-entrypoint = "./functions/send-scheduled-notifications/index.ts"
-# Specifies static files to be bundled with the function. Supports glob patterns.
-# For example, if you want to serve static HTML pages in your function:
-# static_files = [ "./functions/send-scheduled-notifications/*.html" ]

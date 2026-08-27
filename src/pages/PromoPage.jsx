@@ -39,25 +39,31 @@
             if (!codeToCheck.trim() || status === "loading") return;
             setStatus("loading");
 
+            // A tabela promo_codes deixou de ser legível pelo cliente
+            // (os 72 códigos estavam expostos). A validação agora acontece
+            // no banco e devolve apenas o veredito e os dias de trial.
             const { data: promo, error } = await supabase
-            .from("promo_codes")
-            .select("*")
-            .eq("code", codeToCheck.trim().toUpperCase())
-            .single();
+            .rpc("validate_promo_code", { p_code: codeToCheck.trim() });
 
             if (error || !promo) {
+            setStatus("error");
+            setErrorMsg("Não foi possível validar o código. Tente novamente.");
+            return;
+            }
+
+            if (promo.status === "invalid") {
             setStatus("error");
             setErrorMsg("Código inválido. Verifique e tente novamente.");
             return;
             }
 
-            if (promo.is_used) {
+            if (promo.status === "used") {
             setStatus("used");
             setErrorMsg("Este código já foi utilizado.");
             return;
             }
 
-            if (new Date(promo.expires_at) < new Date()) {
+            if (promo.status === "expired") {
             setStatus("expired");
             setErrorMsg("Este código expirou.");
             return;

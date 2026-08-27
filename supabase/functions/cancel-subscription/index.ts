@@ -1,19 +1,20 @@
 // Edge function: cancel-subscription
-// Deploy: supabase functions deploy cancel-subscription --no-verify-jwt
+// Deploy: supabase functions deploy cancel-subscription
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-}
+import { cors, preflight, requireUser } from "../_shared/auth.ts"
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders })
+  const pre = preflight(req)
+  if (pre) return pre
+  const corsHeaders = cors(req)
 
   try {
-    const { userId } = await req.json()
-    if (!userId) throw new Error("userId obrigatório")
+    // ✅ Só o próprio titular cancela a própria assinatura.
+    // Antes o userId vinha do corpo e qualquer um cancelava a de qualquer outro.
+    const auth = await requireUser(req)
+    if (auth.response) return auth.response
+    const userId = auth.user.id
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
