@@ -4,9 +4,16 @@
 // Provedor: **Groq** (api.groq.com), não xAI/Grok. São coisas
 // diferentes com nomes parecidos; o projeto sempre usou Groq.
 //
-// Em 27/08/2026 o Finn parou de responder. A causa não era a chave:
-// a Groq descomissionou `llama-3.3-70b-versatile` e passou a devolver
+// Em 27/08/2026 o Finn parou de responder com
 //   HTTP 500 — "The model ... does not exist or you do not have access to it."
+//
+// A causa não era a chave, e nem o modelo ter sido descontinuado: os
+// modelos Meta (llama-3.3-70b-versatile, llama-3.1-8b-instant) passaram
+// a exigir "Contact Sales" na Groq e saíram do plano self-serve. Eles
+// seguem listados como Production na documentação, mas não aparecem no
+// /v1/models desta conta. Era a segunda metade da mensagem de erro —
+// "or you do not have access to it" — que importava.
+//
 // O modelo estava escrito em três arquivos, então a correção precisava
 // ser feita em três lugares. Agora vive aqui.
 //
@@ -18,11 +25,26 @@
 
 const ENDPOINT = "https://api.groq.com/openai/v1/chat/completions";
 
-/** Modelo principal e alternativas, em ordem de preferência. */
+/**
+ * Modelo principal e alternativa, em ordem de preferência.
+ *
+ * Só entram aqui modelos da lista **Production** da Groq. Os de
+ * **Preview** (qwen, minimax, orpheus) podem ser descontinuados sem
+ * aviso — é justamente o tipo de coisa que derrubou o Finn.
+ *
+ *   openai/gpt-oss-120b  500 t/s · US$ 0,15 entrada / 0,60 saída por 1M
+ *   openai/gpt-oss-20b   1000 t/s · US$ 0,075 / 0,30 — metade do preço,
+ *                        o dobro da velocidade, qualidade um pouco menor
+ *
+ * `groq/compound-mini` foi removido da lista de propósito: é um
+ * *sistema* agêntico com busca na web e execução de código embutidas.
+ * Para um assistente financeiro que só pode falar sobre os dados do
+ * próprio usuário, cair nele em silêncio traria resposta de fonte
+ * externa — pior do que falhar.
+ */
 export const MODELOS_GROQ = [
   "openai/gpt-oss-120b",
   "openai/gpt-oss-20b",
-  "groq/compound-mini",
 ];
 
 /** O erro indica que o modelo saiu do ar? */
