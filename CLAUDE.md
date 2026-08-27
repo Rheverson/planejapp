@@ -49,6 +49,12 @@ Leia o arquivo `PLANEJAPP_DOCS.md` antes de qualquer tarefa. Ele contém toda a 
 - **App:** `git add . && git commit -m "..." && git push` (Vercel detecta automaticamente)
 - **Landing:** `cd src/pages/planejapp-landing && npx vercel --prod` (sem Git)
 - **Edge Functions:** `npx supabase functions deploy <nome>`
+- **Ordem importa quando o protocolo do Finn muda:** publique o **app primeiro**,
+  a Edge Function depois. O `ai-chat` e o `AIInsights.jsx` conversam por blocos
+  (`__DELETE_TX__{...}__END_DELETE__`). Se a função sair na frente, ela emite um
+  bloco que o app ainda não sabe recortar e o JSON aparece cru na tela do usuário
+  — foi o que aconteceu com `__DUPLICATE_TX__`. O limpador hoje tem uma rede
+  genérica para blocos desconhecidos, mas a ordem continua sendo a correta.
 
 ---
 
