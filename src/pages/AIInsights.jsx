@@ -135,6 +135,7 @@ function buildHistory(messages) {
 }
 
 const fmt = (v) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v || 0);
+const dataBr = (d) => (d ? String(d).slice(0, 10).split("-").reverse().join("/") : "—");
 
 function Row({ label, value }) {
   return (
@@ -158,7 +159,43 @@ function AutoRealizeToggle({ value, onChange }) {
   );
 }
 
-function ActionCard({ action, onConfirm, onCancel, confirmLoading, onSetAutoRealize }) {
+// Ações que agem sobre um registro existente. O card delas nunca pode
+// ser montado com o que a IA escreveu: tem que vir da linha real.
+// O id de uma ação vem do texto gerado pelo modelo. A Edge Function
+// traduz o apelido curto de volta para o UUID real, mas se o modelo
+// inventar um apelido que não existe, o valor chega aqui pela metade.
+// Sem esta checagem ele iria para o banco como filtro `id = "1a2b3c4d"`.
+export const ehUuid = (v) =>
+  typeof v === "string" &&
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
+
+const ACOES_COM_ID = ["realize", "partial_realize", "delete_tx", "delete_goal", "delete_account"];
+
+/**
+ * A ação pode ser executada?
+ *
+ * Ações sobre um registro existente só liberam quando a linha real foi
+ * carregada E o id dela bate com o id da ação. É esta a garantia de que
+ * o que o usuário confirmou no card é o que vai ser alterado no banco.
+ */
+export function podeExecutar(action, registro) {
+  if (!action) return { ok: false, motivo: "sem_acao" };
+  if (!ACOES_SOBRE_REGISTRO[action._type]) return { ok: true };
+  if (!ehUuid(action.id)) return { ok: false, motivo: "id_invalido" };
+  if (registro?.status !== "ok") return { ok: false, motivo: "registro_ausente" };
+  if (registro.dados?.id !== action.id) return { ok: false, motivo: "id_divergente" };
+  return { ok: true };
+}
+
+export const ACOES_SOBRE_REGISTRO = {
+  delete_tx:       { tabela: "transactions", rotulo: "transação" },
+  realize:         { tabela: "transactions", rotulo: "transação" },
+  partial_realize: { tabela: "transactions", rotulo: "transação" },
+  delete_goal:     { tabela: "goals",        rotulo: "meta" },
+  delete_account:  { tabela: "accounts",     rotulo: "conta" },
+};
+
+export function ActionCard({ action, registro, onConfirm, onCancel, confirmLoading, onSetAutoRealize }) {
   if (!action) return null;
   const isPending   = action._type === "tx" && action.is_realized === false;
   const isRecurring = action._type === "recurring";
@@ -178,6 +215,9 @@ function ActionCard({ action, onConfirm, onCancel, confirmLoading, onSetAutoReal
   const cfg  = configs[action._type] || configs.tx;
   const Icon = cfg.icon;
   const needsAutoRealize = showAutoRealize && action.auto_realize === undefined;
+  const precisaDoRegistro = !!ACOES_SOBRE_REGISTRO[action._type];
+  // Sem a linha real em mãos não há o que confirmar.
+  const registroPendente = precisaDoRegistro && registro?.status !== "ok";
 
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
@@ -187,6 +227,18 @@ function ActionCard({ action, onConfirm, onCancel, confirmLoading, onSetAutoReal
           <p className={`text-sm font-medium ${cfg.color}`}>{cfg.title}</p>
         </div>
         <div className="px-4 py-3 space-y-2.5">
+          {/* O bloco vindo da IA traz só o id. Enquanto a linha real não
+              chega, nada é afirmado — antes daqui o card mostrava
+              "Descrição: —" e "R$ 0,00", que era o `|| 0` do fmt. */}
+          {precisaDoRegistro && registro?.status === "carregando" && (
+            <p className="text-sm text-gray-500 dark:text-gray-400 py-2">Carregando lançamento…</p>
+          )}
+          {precisaDoRegistro && registro?.status === "ausente" && (
+            <p className="text-sm text-red-600 dark:text-red-400 py-2">
+              Não foi possível localizar este lançamento. Ele pode já ter sido removido.
+            </p>
+          )}
+
           {action._type === "tx" && !action.intent && (<>
             <Row label="Valor" value={<span className={`text-lg font-bold ${cfg.color}`}>{fmt(action.amount)}</span>} />
             <Row label="Tipo" value={<span className={`text-sm font-medium ${cfg.color}`}>{action.type === "expense" ? "💸 Saída" : "💰 Entrada"}</span>} />
@@ -214,10 +266,12 @@ function ActionCard({ action, onConfirm, onCancel, confirmLoading, onSetAutoReal
             <div className="bg-violet-50 dark:bg-violet-900/20 rounded-xl px-3 py-2 text-xs text-violet-600 dark:text-violet-400 font-medium">📅 {action.months} previstas serão criadas a partir de {action.start_date}</div>
             <AutoRealizeToggle value={action.auto_realize} onChange={onSetAutoRealize} />
           </>)}
-          {action._type === "realize" && (<>
-            <Row label="Descrição" value={action.description} />
-            <Row label="Valor" value={<span className="text-base font-bold text-emerald-600">{fmt(action.amount)}</span>} />
-            <Row label="Data" value={action.date} />
+          {action._type === "realize" && registro?.status === "ok" && (<>
+            <Row label="Descrição" value={registro.dados.description} />
+            <Row label="Valor" value={<span className="text-lg font-bold text-emerald-600">{fmt(registro.dados.amount)}</span>} />
+            <Row label="Vencimento" value={dataBr(registro.dados.date)} />
+            {registro.dados.accounts?.name && <Row label="Conta" value={registro.dados.accounts.name} />}
+            <Row label="Realizar em" value={dataBr(action.date)} />
           </>)}
           {action._type === "partial_realize" && (<>
             <Row label="Descrição" value={action.description} />
@@ -225,11 +279,28 @@ function ActionCard({ action, onConfirm, onCancel, confirmLoading, onSetAutoReal
             <Row label="Restante" value={<span className="text-base font-bold text-amber-600">{fmt(action.remaining_amount)}</span>} />
             <Row label="Data" value={action.date} />
           </>)}
-          {action._type === "delete_tx" && (<><Row label="Descrição" value={action.description} /><Row label="Valor" value={fmt(action.amount)} /><p className="text-xs text-red-500 font-medium">⚠️ Esta ação não pode ser desfeita!</p></>)}
+          {action._type === "delete_tx" && registro?.status === "ok" && (<>
+            <Row label="Descrição" value={registro.dados.description} />
+            <Row label="Valor" value={<span className="text-lg font-bold text-red-600">{fmt(registro.dados.amount)}</span>} />
+            <Row label="Data" value={dataBr(registro.dados.date)} />
+            {registro.dados.category && <Row label="Categoria" value={<span className="text-xs bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded-full capitalize">{registro.dados.category}</span>} />}
+            {registro.dados.accounts?.name && <Row label="Conta" value={registro.dados.accounts.name} />}
+            <Row label="Status" value={<span className={`text-xs font-medium px-2 py-0.5 rounded-full ${registro.dados.is_realized === false ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"}`}>{registro.dados.is_realized === false ? "📋 Previsto" : "✅ Realizado"}</span>} />
+            <p className="text-xs text-red-500 font-medium">⚠️ Esta ação não pode ser desfeita!</p>
+          </>)}
           {action._type === "create_goal" && (<><Row label="Nome" value={action.name} /><Row label="Tipo" value={action.type === "expense" ? "📉 Limite de gasto" : action.type === "income" ? "📈 Meta de renda" : "💹 Investimento"} /><Row label="Valor" value={<span className="text-base font-bold text-violet-600">{fmt(action.target_amount)}</span>} /><Row label="Período" value={`${action.start_date} até ${action.end_date}`} /></>)}
-          {action._type === "delete_goal" && (<><Row label="Meta" value={action.name} /><p className="text-xs text-red-500 font-medium">⚠️ Esta ação não pode ser desfeita!</p></>)}
+          {action._type === "delete_goal" && registro?.status === "ok" && (<>
+            <Row label="Meta" value={registro.dados.name} />
+            <Row label="Valor alvo" value={fmt(registro.dados.target_amount)} />
+            {registro.dados.category && <Row label="Categoria" value={<span className="capitalize">{registro.dados.category}</span>} />}
+            <p className="text-xs text-red-500 font-medium">⚠️ Esta ação não pode ser desfeita!</p>
+          </>)}
           {action._type === "create_account" && (<><Row label="Nome" value={action.name} /><Row label="Tipo" value={{ bank: "🏦 Bancária", digital: "📱 Digital", wallet: "👛 Carteira", investment: "📈 Investimento", other: "📦 Outro" }[action.type] || action.type} /><Row label="Saldo inicial" value={fmt(action.initial_balance)} /></>)}
-          {action._type === "delete_account" && (<><Row label="Conta" value={action.name} /><p className="text-xs text-red-500 font-medium">⚠️ A conta será removida mas as transações serão mantidas.</p></>)}
+          {action._type === "delete_account" && registro?.status === "ok" && (<>
+            <Row label="Conta" value={registro.dados.name} />
+            <Row label="Saldo inicial" value={fmt(registro.dados.initial_balance)} />
+            <p className="text-xs text-red-500 font-medium">⚠️ A conta será removida mas as transações serão mantidas.</p>
+          </>)}
           {action._type === "send_invite" && (<><Row label="Para" value={action.email} />{action.name && <Row label="Nome" value={action.name} />}</>)}
           {needsAutoRealize && (<p className="text-[10px] text-amber-600 dark:text-amber-400 text-center">👆 Escolha uma opção acima para confirmar</p>)}
         </div>
@@ -237,7 +308,7 @@ function ActionCard({ action, onConfirm, onCancel, confirmLoading, onSetAutoReal
           <button onClick={onCancel} className="flex-1 h-10 rounded-xl border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 text-sm font-medium flex items-center justify-center gap-1.5">
             <X className="w-3.5 h-3.5" /> Cancelar
           </button>
-          <button onClick={onConfirm} disabled={confirmLoading || needsAutoRealize}
+          <button onClick={onConfirm} disabled={confirmLoading || needsAutoRealize || registroPendente}
             className={`flex-1 h-10 rounded-xl text-white text-sm font-medium flex items-center justify-center gap-1.5 disabled:opacity-50 ${["delete_tx","delete_goal","delete_account"].includes(action._type) ? "bg-red-500 hover:bg-red-600" : action._type === "realize" ? "bg-emerald-500 hover:bg-emerald-600" : "bg-gradient-to-r from-violet-600 to-indigo-600"}`}>
             {confirmLoading
               ? <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: "linear" }} className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full" />
@@ -277,6 +348,9 @@ function ChatTab({ user, dark }) {
   const [input, setInput]                   = useState("");
   const [loading, setLoading]               = useState(false);
   const [pendingAction, setPendingAction]   = useState(null);
+  // A linha real do banco correspondente à ação pendente.
+  // status: "carregando" | "ok" | "ausente"
+  const [registro, setRegistro]             = useState(null);
   const [confirmLoading, setConfirmLoading] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(true);
   const [wizard, setWizard]                 = useState(null);
@@ -300,6 +374,50 @@ function ChatTab({ user, dark }) {
   }, [user?.id]);
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, pendingAction]);
+
+  // Resolve a ação da IA no registro real antes de mostrar o card.
+  //
+  // O bloco que a IA devolve carrega apenas o id — nunca descrição,
+  // valor ou data. O card lia esses campos direto da ação e caía no
+  // `|| 0` do formatador, exibindo "R$ 0,00" e descrição vazia mesmo
+  // quando a exclusão acertava o registro certo. Confirmação e execução
+  // apontavam para coisas diferentes.
+  useEffect(() => {
+    const tipo = pendingAction?._type;
+    const alvo = ACOES_SOBRE_REGISTRO[tipo];
+
+    if (!alvo) { setRegistro(null); return; }
+    if (!ehUuid(pendingAction.id)) { setRegistro({ status: "ausente", paraId: pendingAction?.id }); return; }
+
+    let cancelado = false;
+    setRegistro({ status: "carregando", paraId: pendingAction.id });
+
+    (async () => {
+      const colunas = alvo.tabela === "transactions"
+        ? "id, description, amount, date, category, is_realized, account_id, accounts(name)"
+        : alvo.tabela === "goals"
+          ? "id, name, target_amount, type, category"
+          : "id, name, type, initial_balance";
+
+      // O filtro por user_id fica, junto com a RLS: a busca do card não
+      // pode virar um caminho para ler registro de outra pessoa.
+      const { data, error } = await supabase
+        .from(alvo.tabela)
+        .select(colunas)
+        .eq("id", pendingAction.id)
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (cancelado) return;
+      setRegistro(
+        error || !data
+          ? { status: "ausente", paraId: pendingAction.id }
+          : { status: "ok", paraId: pendingAction.id, dados: data },
+      );
+    })();
+
+    return () => { cancelado = true; };
+  }, [pendingAction, user?.id]);
 
   const detectAction = (reply) => {
     const rc = parseRecurringTx(reply); if (rc) return { ...rc, _type: "recurring" };
@@ -412,16 +530,6 @@ function ChatTab({ user, dark }) {
     }
   };
 
-  // O id de uma ação vem do texto gerado pelo modelo. A Edge Function
-  // traduz o apelido curto de volta para o UUID real, mas se o modelo
-  // inventar um apelido que não existe, o valor chega aqui pela metade.
-  // Sem esta checagem ele iria para o banco como filtro `id = "1a2b3c4d"`.
-  const ehUuid = (v) =>
-    typeof v === "string" &&
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
-
-  const ACOES_COM_ID = ["realize", "partial_realize", "delete_tx", "delete_goal", "delete_account"];
-
   const confirmAction = async () => {
     if (!pendingAction || confirmLoading || confirmingRef.current) return;
 
@@ -430,6 +538,24 @@ function ChatTab({ user, dark }) {
       setMessages(prev => [...prev, {
         role: "assistant",
         content: "🤔 Não consegui identificar com certeza qual item você quer. Pode dizer o nome exato?",
+      }]);
+      return;
+    }
+
+    // Garantia de que o card confirmado e o registro executado são o
+    // mesmo. Se divergirem — por exemplo se a ação mudou enquanto o
+    // card estava aberto — nada é executado.
+    const veredito = podeExecutar(pendingAction, registro);
+    if (!veredito.ok) {
+      console.error(
+        "[Finn] execução bloqueada:",
+        { motivo: veredito.motivo, acao: pendingAction.id, card: registro?.dados?.id, status: registro?.status },
+      );
+      setPendingAction(null);
+      setRegistro(null);
+      setMessages(prev => [...prev, {
+        role: "assistant",
+        content: "🤔 Esse lançamento mudou enquanto eu confirmava. Pode pedir de novo?",
       }]);
       return;
     }
@@ -581,7 +707,7 @@ function ChatTab({ user, dark }) {
   };
 
   const { listening, start, stop } = useSpeechRecognition({ onResult: (transcript) => { setInput(transcript); sendMessage(transcript); } });
-  const cancelAction = () => { setPendingAction(null); setWizard(null); setMessages(prev => [...prev, { role: "assistant", content: "❌ Cancelado!" }]); };
+  const cancelAction = () => { setPendingAction(null); setRegistro(null); setWizard(null); setMessages(prev => [...prev, { role: "assistant", content: "❌ Cancelado!" }]); };
 
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, background: bg }}>
@@ -615,7 +741,7 @@ function ChatTab({ user, dark }) {
 
         <AnimatePresence>
           {pendingAction && (
-            <ActionCard action={pendingAction} onConfirm={confirmAction} onCancel={cancelAction} confirmLoading={confirmLoading} onSetAutoRealize={handleSetAutoRealize} />
+            <ActionCard action={pendingAction} registro={registro} onConfirm={confirmAction} onCancel={cancelAction} confirmLoading={confirmLoading} onSetAutoRealize={handleSetAutoRealize} />
           )}
         </AnimatePresence>
 
