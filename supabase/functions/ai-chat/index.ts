@@ -316,7 +316,10 @@ Contas: ${accountNames}`
         // O detalhe da Groq traz id da organização, nome do modelo e
         // limites da conta. Fica no log do servidor; para fora vai só o
         // motivo, que é o que o app precisa para escolher a mensagem.
-        JSON.stringify({ error: "ia_indisponivel", motivo: resposta.motivo }),
+        // A trilha traz só provedor, modelo e rótulo curto — nunca a
+        // mensagem do provedor, que carrega id de organização e limites
+        // da conta. É o que permite diagnosticar sem o log do servidor.
+        JSON.stringify({ error: "ia_indisponivel", motivo: resposta.motivo, tentativas: resposta.tentativas }),
         { status: resposta.motivo === "limite" ? 429 : 503,
           headers: { ...corsHeaders, "Content-Type": "application/json" } },
       )

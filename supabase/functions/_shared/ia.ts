@@ -58,6 +58,15 @@ export const PROVEDORES: Provedor[] = [
     modelos: ["gemini-3.5-flash-lite", "gemini-flash-lite-latest", "gemini-3.5-flash"],
   },
   {
+    nome: "openrouter",
+    endpoint: "https://openrouter.ai/api/v1/chat/completions",
+    env: "OPENROUTER_API_KEY",
+    // Modelos com preço zero na lista pública deles. Instruct, não de
+    // raciocínio: os de raciocínio vazam o `<think>` dentro da resposta,
+    // que foi o motivo de o qwen ter sido descartado na Groq.
+    modelos: ["google/gemma-4-31b-it:free", "z-ai/glm-5.2:free"],
+  },
+  {
     nome: "cerebras",
     endpoint: "https://api.cerebras.ai/v1/chat/completions",
     env: "CEREBRAS_API_KEY",
@@ -95,12 +104,38 @@ function provedorEsgotado(status: number): boolean {
   return status === 429 ||        // cota / limite de taxa
          status === 401 ||        // chave inválida
          status === 403 ||        // chave sem permissão
+         status === 402 ||        // billing pendente (o caso da Cerebras)
          status >= 500;           // fora do ar
 }
 
+/**
+ * Prazos. Sem eles a cascata chegou a levar 38 segundos para devolver
+ * erro: o `fetch` espera indefinidamente, então um provedor lento
+ * segurava os outros e o usuário ficava olhando para o nada.
+ *
+ * O caminho feliz (Groq com cota) responde em 2 a 4 segundos. Os 15s
+ * por tentativa são para o provedor lento: com o prompt real, de ~1.700
+ * tokens, o Gemini não cabia em 9s e era cortado sempre — prazo curto
+ * demais transforma um backup que funciona em espera jogada fora.
+ *
+ * O orçamento total fica abaixo dos 45s que a tela do app espera, para
+ * a falha chegar como mensagem em vez de conexão pendurada.
+ */
+const PRAZO_POR_TENTATIVA = 15000;
+const PRAZO_TOTAL = 38000;
+
+/** Rótulo curto do que aconteceu numa tentativa. Seguro para sair da função. */
+export type Tentativa = { provedor: string; modelo: string; resultado: string; ms: number };
+
 export type RespostaIA =
   | { ok: true; texto: string; modelo: string; provedor: string; uso?: { entrada: number; saida: number } }
-  | { ok: false; motivo: "sem_chave" | "limite" | "indisponivel" | "vazio" | "erro"; detalhe: string };
+  | {
+      ok: false;
+      motivo: "sem_chave" | "limite" | "indisponivel" | "vazio" | "erro";
+      detalhe: string;
+      /** Trilha da cascata, sem mensagem de provedor. */
+      tentativas: Tentativa[];
+    };
 
 async function tentar(
   provedor: Provedor,
@@ -114,8 +149,13 @@ async function tentar(
   | { tipo: "proximo_provedor"; detalhe: string; limite: boolean }
 > {
   let resposta: Response;
+  // Cede a vez se o provedor não responder no prazo. O `finally` limpa
+  // o relógio para o timer não segurar a função de pé à toa.
+  const limite = new AbortController();
+  const relogio = setTimeout(() => limite.abort(), PRAZO_POR_TENTATIVA);
   try {
     resposta = await fetch(provedor.endpoint, {
+      signal: limite.signal,
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${chave}` },
       body: JSON.stringify({
@@ -132,8 +172,15 @@ async function tentar(
       }),
     });
   } catch (e) {
-    // Rede caiu ou o host não respondeu: o próximo provedor pode estar de pé.
-    return { tipo: "proximo_provedor", detalhe: `falha de rede: ${(e as Error)?.message}`, limite: false };
+    // Rede caiu, ou estourou o prazo: o próximo pode estar de pé.
+    const abortou = (e as Error)?.name === "AbortError";
+    return {
+      tipo: "proximo_provedor",
+      detalhe: abortou ? `não respondeu em ${PRAZO_POR_TENTATIVA / 1000}s` : `falha de rede: ${(e as Error)?.message}`,
+      limite: false,
+    };
+  } finally {
+    clearTimeout(relogio);
   }
 
   const dados = await resposta.json().catch(() => ({}));
@@ -158,6 +205,7 @@ async function tentar(
   const detalhe = dados?.error?.message ?? `HTTP ${resposta.status}`;
 
   if (provedorEsgotado(resposta.status)) {
+    // O status já diz o suficiente; a mensagem fica no detalhe interno.
     return { tipo: "proximo_provedor", detalhe, limite: resposta.status === 429 };
   }
   if (modeloIndisponivel(detalhe)) {
@@ -189,41 +237,72 @@ export async function chamarIA(
       ok: false,
       motivo: "sem_chave",
       detalhe: `nenhuma chave configurada (${PROVEDORES.map((p) => p.env).join(", ")})`,
+      tentativas: [],
     };
   }
 
   let ultimoDetalhe = "";
   let bateuLimite = false;
+  const comecou = Date.now();
+  const tentativas: Tentativa[] = [];
+  const anotar = (provedor: string, modelo: string, resultado: string) =>
+    tentativas.push({ provedor, modelo, resultado, ms: Date.now() - comecou });
 
   for (const { p, chave } of configurados) {
     for (const modelo of p.modelos) {
+      // Não vale começar uma tentativa que já nasceria fora do prazo.
+      if (Date.now() - comecou > PRAZO_TOTAL) {
+        console.warn(`IA: orçamento de ${PRAZO_TOTAL / 1000}s esgotado antes de ${p.nome}/${modelo}`);
+        return {
+          ok: false,
+          motivo: bateuLimite ? "limite" : "indisponivel",
+          detalhe: `tempo esgotado. Último erro: ${ultimoDetalhe}`,
+          tentativas,
+        };
+      }
+
       const r = await tentar(p, chave, modelo, mensagens, opcoes);
 
       if (r.tipo === "ok") {
-        // Sai no log para dar para acompanhar consumo e qual provedor
-        // está segurando o tranco, sem instrumentação extra.
-        console.log(`IA ${p.nome}/${modelo}: ${r.uso.entrada} entrada + ${r.uso.saida} saida`);
+        // Sai no log para dar para acompanhar consumo, quem está
+        // segurando o tranco e quanto cada um demora — foi a falta do
+        // tempo aqui que escondeu a cascata levando 38s.
+        console.log(
+          `IA ${p.nome}/${modelo}: ${r.uso.entrada} entrada + ${r.uso.saida} saida` +
+          ` em ${Date.now() - comecou}ms`,
+        );
         return { ok: true, texto: r.texto, modelo, provedor: p.nome, uso: r.uso };
       }
 
-      ultimoDetalhe = r.detalhe;
+      ultimoDetalhe = `${p.nome}/${modelo}: ${r.detalhe}`;
 
       if (r.tipo === "proximo_modelo") {
-        console.warn(`IA ${p.nome}/${modelo}: ${r.detalhe}`);
+        anotar(p.nome, modelo, r.detalhe.includes("vazia") ? "vazio" : "modelo indisponível");
+        console.warn(`IA ${p.nome}/${modelo} (${Date.now() - comecou}ms): ${r.detalhe}`);
         continue;
       }
 
       // Problema do provedor inteiro: não adianta insistir nos irmãos.
       bateuLimite = bateuLimite || r.limite;
-      console.warn(`IA ${p.nome} indisponível (${r.detalhe}); tentando o próximo provedor.`);
+      anotar(
+        p.nome,
+        modelo,
+        r.limite ? "cota/limite (429)"
+          : r.detalhe.includes("não respondeu em") ? "tempo esgotado"
+          : r.detalhe.includes("402") || r.detalhe.toLowerCase().includes("payment") ? "billing (402)"
+          : "recusou",
+      );
+      console.warn(`IA ${p.nome} indisponível em ${Date.now() - comecou}ms (${r.detalhe}); tentando o próximo.`);
       break;
     }
   }
 
+  console.warn("IA: nenhum provedor respondeu —", JSON.stringify(tentativas));
   return {
     ok: false,
     motivo: bateuLimite ? "limite" : "indisponivel",
     detalhe: `nenhum provedor respondeu. Último erro: ${ultimoDetalhe}`,
+    tentativas,
   };
 }
 
