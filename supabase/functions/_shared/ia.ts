@@ -53,9 +53,11 @@ export const PROVEDORES: Provedor[] = [
     endpoint: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
     env: "GEMINI_API_KEY",
     // Os `gemini-2.5-*` respondem 404 "no longer available to new
-    // users". O primeiro nome é a versão corrente; o `-latest` fica
-    // atrás dele para o dia em que a corrente também sair de linha.
-    modelos: ["gemini-3.5-flash-lite", "gemini-flash-lite-latest", "gemini-3.5-flash"],
+    // users". Medidos com o prompt real: o flash-lite atende em ~1s,
+    // enquanto `gemini-flash-lite-latest` levou 20s e `gemini-3.5-flash`
+    // passou de 30s. Reserva que não chega a tempo não é reserva, e
+    // ainda gasta o orçamento dos provedores seguintes.
+    modelos: ["gemini-3.5-flash-lite"],
   },
   {
     nome: "openrouter",
@@ -76,6 +78,17 @@ export const PROVEDORES: Provedor[] = [
     // sem atrapalhar: 402 apenas pula para o próximo. Se o billing for
     // resolvido, volta a funcionar sem mexer no código.
     modelos: ["gpt-oss-120b"],
+  },
+  {
+    nome: "huggingface",
+    endpoint: "https://router.huggingface.co/v1/chat/completions",
+    env: "HF_TOKEN",
+    // Última linha: o plano gratuito dá US$ 0,10/mês em créditos, o que
+    // não sustenta o app. Fica aqui para o dia em que todo o resto
+    // falhar ao mesmo tempo — e depois da Cerebras porque o 402 dela é
+    // instantâneo e não custa nada, enquanto cada chamada daqui gasta
+    // crédito de verdade.
+    modelos: ["Qwen/Qwen3.6-27B-Instruct", "meta-llama/Llama-3.3-70B-Instruct"],
   },
 ];
 
@@ -100,12 +113,20 @@ function modeloIndisponivel(mensagem: string): boolean {
  * outro modelo da mesma casa: cota, chave e indisponibilidade valem
  * para a conta toda.
  */
-function provedorEsgotado(status: number): boolean {
-  return status === 429 ||        // cota / limite de taxa
-         status === 401 ||        // chave inválida
+/**
+ * O erro é da conta inteira? Aí não adianta tentar outro modelo da mesma
+ * casa.
+ *
+ * 429 fica DE FORA de propósito. O limite costuma ser por modelo — a
+ * Groq responde "Rate limit reached for model `openai/gpt-oss-120b`" e,
+ * no mesmo instante, o gpt-oss-20b atende em 600ms. Tratar 429 como
+ * provedor esgotado deixou o Finn sem IA tendo alternativa de pé.
+ */
+function contaBloqueada(status: number): boolean {
+  return status === 401 ||        // chave inválida
          status === 403 ||        // chave sem permissão
          status === 402 ||        // billing pendente (o caso da Cerebras)
-         status >= 500;           // fora do ar
+         status >= 500;           // provedor fora do ar
 }
 
 /**
@@ -145,7 +166,7 @@ async function tentar(
   opcoes: { temperature?: number; maxTokens?: number },
 ): Promise<
   | { tipo: "ok"; texto: string; uso: { entrada: number; saida: number } }
-  | { tipo: "proximo_modelo"; detalhe: string }
+  | { tipo: "proximo_modelo"; detalhe: string; limite?: boolean }
   | { tipo: "proximo_provedor"; detalhe: string; limite: boolean }
 > {
   let resposta: Response;
@@ -204,9 +225,12 @@ async function tentar(
 
   const detalhe = dados?.error?.message ?? `HTTP ${resposta.status}`;
 
-  if (provedorEsgotado(resposta.status)) {
-    // O status já diz o suficiente; a mensagem fica no detalhe interno.
-    return { tipo: "proximo_provedor", detalhe, limite: resposta.status === 429 };
+  if (contaBloqueada(resposta.status)) {
+    return { tipo: "proximo_provedor", detalhe, limite: false };
+  }
+  // Cota estourada neste modelo: o vizinho pode ter cota própria.
+  if (resposta.status === 429) {
+    return { tipo: "proximo_modelo", detalhe, limite: true };
   }
   if (modeloIndisponivel(detalhe)) {
     return { tipo: "proximo_modelo", detalhe };
@@ -277,7 +301,14 @@ export async function chamarIA(
       ultimoDetalhe = `${p.nome}/${modelo}: ${r.detalhe}`;
 
       if (r.tipo === "proximo_modelo") {
-        anotar(p.nome, modelo, r.detalhe.includes("vazia") ? "vazio" : "modelo indisponível");
+        bateuLimite = bateuLimite || !!r.limite;
+        anotar(
+          p.nome,
+          modelo,
+          r.limite ? "cota do modelo (429)"
+            : r.detalhe.includes("vazia") ? "vazio"
+            : "modelo indisponível",
+        );
         console.warn(`IA ${p.nome}/${modelo} (${Date.now() - comecou}ms): ${r.detalhe}`);
         continue;
       }
