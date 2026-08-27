@@ -12,12 +12,19 @@ Leia o arquivo `PLANEJAPP_DOCS.md` antes de qualquer tarefa. Ele contém toda a 
 - **Repositório:** https://github.com/Rheverson/planejapp.git
 - **Stack:** React + Vite + Supabase + Stripe + Vercel
 - **IA:** Groq (`openai/gpt-oss-120b`) — não é a Claude API, apesar do nome Finn
-- **Cota da IA (plano gratuito):** 8.000 tokens/minuto **e 200.000 tokens/dia**,
-  somando todos os usuários. Cada mensagem custa ~1.800 de entrada, então o teto
-  é de **~100 mensagens por dia no app inteiro**. O limite diário é o que aperta:
-  ao estourar, o Finn responde a mensagem neutra de indisponibilidade. Medir o
-  custo antes de engordar o prompt do `ai-chat` — o `console.log` da função
-  registra "N entrada + M saída" a cada chamada.
+- **Provedores em cascata:** `supabase/functions/_shared/ia.ts` tenta Groq →
+  Cerebras → Gemini, nessa ordem. Todos falam o protocolo OpenAI, então trocar é
+  só endpoint, chave e nome do modelo. Cada um é opcional: sem a chave no
+  ambiente (`GROQ_API_KEY`, `CEREBRAS_API_KEY`, `GEMINI_API_KEY`), é pulado.
+  Cota estourada (429) pula o provedor inteiro; modelo fora do ar pula só o
+  modelo. Nunca chame um provedor direto por `fetch` — use `chamarIA()`.
+- **Cota da IA (planos gratuitos, mudam sem aviso):** a Groq dá 8.000 tokens/min
+  e **200.000/dia** somando todos os usuários — a ~1.800 por mensagem, são
+  ~100 mensagens/dia no app inteiro, e foi esse teto diário que derrubou o Finn
+  em 27/08/2026. Cerebras (~1M tokens/dia) e Gemini (~1.000 requisições/dia)
+  entram quando ela acaba. O `console.log` registra
+  "IA <provedor>/<modelo>: N entrada + M saída" a cada chamada — é por onde se
+  acompanha quem está segurando o tranco. Medir antes de engordar o prompt.
 - **Dono:** Rheverson Gois
 
 ---

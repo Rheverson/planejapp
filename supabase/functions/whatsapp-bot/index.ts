@@ -1,6 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { validarAssinaturaTwilio } from '../_shared/auth.ts'
-import { MODELOS_GROQ } from '../_shared/groq.ts'
+import { chamarIA } from '../_shared/ia.ts'
 
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
@@ -157,30 +157,20 @@ Deno.serve(async (req) => {
 
     // CORREÇÃO
     if (!isConfirm) {
-      const groqCorrection = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${Deno.env.get('GROQ_API_KEY')}` },
-        body: JSON.stringify({
-          model: MODELOS_GROQ[0],
-          temperature: 0.1,
-          max_tokens: 150,
-          messages: [
-            {
-              role: 'system',
-              content: `O usuário quer corrigir um lançamento pendente. Retorne SOMENTE JSON com os campos a alterar.
+      // Mesma cascata de provedores das outras funções: antes daqui
+      // o bot montava o fetch da Groq na mão e caía junto com a cota.
+      const corr = await chamarIA(
+        [
+          { role: 'system', content: `O usuário quer corrigir um lançamento pendente. Retorne SOMENTE JSON com os campos a alterar.
 Campos: amount (number), account_name (string), from_account (string), to_account (string), date (YYYY-MM-DD), category (string), description (string), is_realized (boolean), goal_name (string)
 Exemplos: {"account_name":"Flash"} ou {"amount":35.00} ou {"is_realized":false}
 Contas disponíveis: ${accountsList}
-Data de hoje: ${today}`
-            },
-            { role: 'user', content: message }
-          ]
-        })
-      })
-
-      const corrData = await groqCorrection.json()
-      const corrText = corrData.choices?.[0]?.message?.content ?? ''
-      const correction = extractJSON(corrText)
+Data de hoje: ${today}` },
+          { role: 'user', content: message },
+        ],
+        { temperature: 0.1, maxTokens: 150 },
+      )
+      const correction = corr.ok ? extractJSON(corr.texto) : null
 
       if (correction && Object.keys(correction).length > 0) {
         const updatedPayload = { ...pending.payload, ...correction }
@@ -266,18 +256,10 @@ Data de hoje: ${today}`
     return twilioReply(reply)
   }
 
-  // 4. Nova mensagem — interpretar com Groq
-  const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${Deno.env.get('GROQ_API_KEY')}` },
-    body: JSON.stringify({
-      model: MODELOS_GROQ[0],
-      temperature: 0.1,
-      max_tokens: 300,
-      messages: [
-        {
-          role: 'system',
-          content: `Você é um assistente financeiro. Interprete a mensagem e retorne SOMENTE JSON válido, sem markdown.
+  // 4. Nova mensagem — interpretar com a IA (cascata de provedores)
+  const interpretacao = await chamarIA(
+    [
+      { role: 'system', content: `Você é um assistente financeiro. Interprete a mensagem e retorne SOMENTE JSON válido, sem markdown.
 
 INTENTS:
 1. Transação: {"intent":"transaction","type":"expense|income","amount":50.00,"description":"...","category":"alimentação|transporte|moradia|saúde|educação|lazer|compras|outros","account_name":"...","date":"${today}","is_realized":true}
@@ -292,16 +274,20 @@ REGRAS:
 - Vírgula vira ponto: 23,99 → 23.99
 - Sem data → use: ${today}
 - Mencionar meta → intent "goal"
-- "transferi/mandei/passei de X para Y" → intent "transfer"`
-        },
-        { role: 'user', content: message }
-      ]
-    })
-  })
+- "transferi/mandei/passei de X para Y" → intent "transfer"` },
+      { role: 'user', content: message },
+    ],
+    { temperature: 0.1, maxTokens: 300 },
+  )
 
-  const groqData = await groqRes.json()
-  const rawText = groqData.choices?.[0]?.message?.content ?? ''
-  console.log('GROQ RAW:', rawText)
+  // Nenhum provedor respondeu: o bot avisa em vez de tratar como
+  // mensagem incompreensivel do usuario.
+  if (!interpretacao.ok) {
+    console.error('IA indisponivel no whatsapp:', interpretacao.motivo, interpretacao.detalhe)
+    return twilioReply('Estou com dificuldade para processar agora. Tente de novo em alguns minutos.')
+  }
+
+  const rawText = interpretacao.texto
 
   const parsed = extractJSON(rawText)
   console.log('PARSED:', JSON.stringify(parsed))

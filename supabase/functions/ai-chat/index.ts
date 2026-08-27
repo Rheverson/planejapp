@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { adminClient, cors, preflight, requireUser } from "../_shared/auth.ts"
-import { chamarGroq } from "../_shared/groq.ts"
+import { chamarIA } from "../_shared/ia.ts"
 
 serve(async (req) => {
   const pre = preflight(req)
@@ -303,7 +303,7 @@ Contas: ${accountNames}`
       { role: "user", content: message }
     ]
 
-    const resposta = await chamarGroq(
+    const resposta = await chamarIA(
       [{ role: "system", content: systemPrompt }, ...messages],
       { temperature: 0.2, maxTokens: 500 },
     )

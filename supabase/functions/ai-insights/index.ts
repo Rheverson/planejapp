@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 import { cors, preflight, requireUser } from "../_shared/auth.ts"
-import { chamarGroq } from "../_shared/groq.ts"
+import { chamarIA } from "../_shared/ia.ts"
 
 serve(async (req) => {
   const pre = preflight(req)
@@ -234,7 +234,7 @@ Responda APENAS com JSON válido:
   }
 }`
 
-    const resposta = await chamarGroq(
+    const resposta = await chamarIA(
       [{ role: "user", content: prompt }],
       { temperature: 0.7, maxTokens: 2000 },
     )
