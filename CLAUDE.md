@@ -13,31 +13,47 @@ Leia o arquivo `PLANEJAPP_DOCS.md` antes de qualquer tarefa. Ele contém toda a 
 - **Stack:** React + Vite + Supabase + Stripe + Vercel
 - **IA:** Groq (`openai/gpt-oss-120b`) — não é a Claude API, apesar do nome Finn
 - **Provedores em cascata:** `supabase/functions/_shared/ia.ts` tenta
-  Groq → Gemini → Cerebras. Todos falam o protocolo OpenAI, então trocar é só
-  endpoint, chave e nome do modelo. Cada um é opcional: sem a chave no ambiente
-  (`GROQ_API_KEY`, `GEMINI_API_KEY`, `CEREBRAS_API_KEY`), é pulado. Cota, chave
-  inválida ou 5xx pulam o provedor inteiro; modelo fora do ar ou resposta vazia
-  pulam só o modelo. Nunca chame um provedor direto por `fetch` — use
-  `chamarIA()`, senão aquele caminho fica sem fallback (foi o caso do
-  `whatsapp-bot`).
+  Groq → Gemini → OpenRouter → Cerebras. Todos falam o protocolo OpenAI, então
+  trocar é só endpoint, chave e nome do modelo. Cada um é opcional: sem a chave
+  no ambiente é pulado. Cota, chave inválida, billing (402) ou 5xx pulam o
+  provedor inteiro; modelo fora do ar ou resposta vazia pulam só o modelo.
+  Nunca chame um provedor direto por `fetch` — use `chamarIA()`, senão aquele
+  caminho fica sem fallback (foi o caso do `whatsapp-bot`).
+- **Prazos:** 15s por tentativa (AbortController) e 38s de orçamento total,
+  abaixo dos 45s que a tela espera. Sem isso a cascata levou 38s para devolver
+  erro, porque `fetch` sem prazo deixa um provedor lento segurar a fila.
+  15s não é exagero: o Gemini não cabe em 9s com o prompt real de ~1.700
+  tokens, e prazo curto demais transforma um backup que funciona em espera
+  jogada fora.
+- **Diagnosticar falha da IA:** a resposta de erro do `ai-chat` traz
+  `tentativas` — provedor, modelo, rótulo curto e tempo de cada degrau. Foi
+  criada porque o log do Supabase estava com a ingestão parada justamente na
+  hora em que o Finn quebrou. Nunca inclui a mensagem do provedor, que carrega
+  id de organização e limites da conta.
 - **Estado dos provedores em 27/08/2026** (conferido contra o `/models` de cada
   conta, não contra a documentação):
-  - Groq — `openai/gpt-oss-120b` e `gpt-oss-20b` respondem. 8.000 tokens/min e
-    **200.000/dia** somando todos os usuários. A ~1.800 por mensagem, são
-    ~100 mensagens/dia no app inteiro; foi esse teto que derrubou o Finn.
-  - Gemini — `gemini-3.5-flash-lite`, `gemini-flash-lite-latest` e
-    `gemini-3.5-flash` respondem. Cota contada em requisições (~1.000/dia), o
-    que complementa bem um limite de tokens.
+  - Groq — `openai/gpt-oss-120b` e `gpt-oss-20b`. Responde em 2 a 3s. 8.000
+    tokens/min e **200.000/dia** somando todos os usuários; a ~1.700 por
+    mensagem, são ~110 mensagens/dia no app inteiro. Foi esse teto que derrubou
+    o Finn.
+  - Gemini — `gemini-3.5-flash-lite` e reservas. Cota em requisições
+    (~1.000/dia), o que complementa um limite de tokens. Lento: precisa de mais
+    de 9s com o prompt real.
+  - OpenRouter — modelos de preço zero, instruct e não de raciocínio (os de
+    raciocínio vazam `<think>` na resposta; foi por isso que o qwen foi
+    descartado na Groq). Depende de `OPENROUTER_API_KEY`.
   - Cerebras — 402 "Payment required" nos dois modelos da conta, apesar de o
     painel listar 3M tokens/dia. A chave é válida (lista modelos); falta
     billing. Fica em último e volta sozinho quando for resolvido.
+  - Hugging Face — avaliado e **descartado**: o plano gratuito dá US$ 0,10/mês
+    em créditos, o que não sustenta nem um dia de uso.
 - **Nomes de modelo saem de linha sem aviso:** os `gemini-2.5-*` já respondem
   404 "no longer available to new users". Conferir contra o `/models` do
   provedor antes de fixar um nome — a cascata pula o que não existe, mas um
   degrau morto não protege ninguém.
 - **Acompanhar consumo:** o `console.log` registra
-  `IA <provedor>/<modelo>: N entrada + M saída` a cada chamada. Medir antes de
-  engordar o prompt do `ai-chat`.
+  `IA <provedor>/<modelo>: N entrada + M saída em Xms`. Medir antes de engordar
+  o prompt do `ai-chat`.
 - **Dono:** Rheverson Gois
 
 ---
