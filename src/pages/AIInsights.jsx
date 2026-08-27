@@ -373,17 +373,43 @@ function ChatTab({ user, dark }) {
     setMessages(prev => [...prev, { role: "user", content: message }]);
     if (wizard) { loadingRef.current = false; setLoading(false); await handleWizardInput(message); return; }
     setShowSuggestions(false);
+
+    // Corta a espera em 45s: sem isso o usuário fica olhando os três
+    // pontinhos para sempre quando a chamada trava.
+    const limite = new AbortController();
+    const relogio = setTimeout(() => limite.abort(), 45000);
+
     try {
       const history = buildHistory(messages);
-      const { data: result, error: err } = await supabase.functions.invoke("ai-chat", { body: { userId: user.id, message, history, month: currentMonth } });
-      if (err || result?.error) throw new Error(result?.error || "Erro");
-      const reply  = result.reply;
+      const { data: result, error: err } = await supabase.functions.invoke("ai-chat", {
+        body: { message, history, month: currentMonth },
+        signal: limite.signal,
+      });
+
+      // Antes, qualquer falha virava "não entendi bem" — foi por isso que
+      // um modelo descontinuado na Groq apareceu como se o Finn não
+      // estivesse compreendendo a pergunta. Agora cada motivo tem a sua fala.
+      if (err || result?.error) {
+        throw Object.assign(new Error(result?.error || err?.message || "Erro"), {
+          motivo: result?.motivo,
+        });
+      }
+
+      const reply = result?.reply;
+      if (!reply || !String(reply).trim()) {
+        throw Object.assign(new Error("resposta vazia"), { motivo: "vazio" });
+      }
+
       const action = detectAction(reply);
       if (action) setPendingAction(action); else setPendingAction(null);
       setMessages(prev => [...prev, { role: "assistant", content: reply }]);
-    } catch {
-      setMessages(prev => [...prev, { role: "assistant", content: "😕 Não entendi bem. Pode reformular?" }]);
-    } finally { setLoading(false); loadingRef.current = false; }
+    } catch (e) {
+      setMessages(prev => [...prev, { role: "assistant", content: mensagemDeFalhaDaIA(e) }]);
+    } finally {
+      clearTimeout(relogio);
+      setLoading(false);
+      loadingRef.current = false;
+    }
   };
 
   const confirmAction = async () => {
@@ -653,9 +679,9 @@ function AnalysisTab({ user, dark }) {
       const { data: result, error: err } = await supabase.functions.invoke("ai-insights", { body: { userId: user.id, month } });
       if (err) { try { const b = JSON.parse(err.context?.responseText || "{}"); if (b.error === "limite_atingido") { setLimiteAtingido(true); setError(b.message); return; } } catch {} throw err; }
       if (result?.error === "limite_atingido") { setLimiteAtingido(true); setError(result.message); return; }
-      if (result?.error) throw new Error(result.error);
+      if (result?.error) throw Object.assign(new Error(result.error), { motivo: result.motivo });
       setData(result); setUsage(result.usage); await saveInsights(result);
-    } catch { setError("Erro ao gerar análise. Tente novamente."); }
+    } catch (e) { setError(mensagemDeFalhaDaIA(e)); }
     finally { setLoading(false); }
   };
 
@@ -867,6 +893,26 @@ function AnalysisTab({ user, dark }) {
 }
 
 // ── Componente principal ──────────────────────────────────────
+// O usuário nunca vê o motivo da falha: nada de "limite atingido",
+// "modelo indisponível" ou "sem configuração" — isso é assunto de
+// operação, não de quem está usando o app. Ele recebe uma frase neutra,
+// e o diagnóstico vai para o console.
+//
+// O que não pode voltar a acontecer é a falha ficar invisível: era por
+// isso que um modelo descontinuado na Groq parecia "o Finn não entendeu
+// a pergunta" e ninguém percebia que a IA estava fora do ar.
+function mensagemDeFalhaDaIA(e) {
+  const motivo = e?.motivo || e?.name || "desconhecido";
+  console.warn("[Finn] falha ao responder:", motivo, e?.message || "");
+
+  const demorou = e?.name === "AbortError" ||
+    String(e?.message || "").toLowerCase().includes("abort");
+
+  return demorou
+    ? "⏳ Demorei demais para responder. Pode tentar de novo?"
+    : "😅 Não consegui responder agora. Tente de novo em instantes.";
+}
+
 export default function AIInsights() {
   const { user } = useAuth();
   const dark = useIsDark();

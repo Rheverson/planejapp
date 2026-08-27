@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { validarAssinaturaTwilio } from '../_shared/auth.ts'
+import { MODELOS_GROQ } from '../_shared/groq.ts'
 
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
@@ -160,7 +161,7 @@ Deno.serve(async (req) => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${Deno.env.get('GROQ_API_KEY')}` },
         body: JSON.stringify({
-          model: 'llama-3.3-70b-versatile',
+          model: MODELOS_GROQ[0],
           temperature: 0.1,
           max_tokens: 150,
           messages: [
@@ -270,7 +271,7 @@ Data de hoje: ${today}`
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${Deno.env.get('GROQ_API_KEY')}` },
     body: JSON.stringify({
-      model: 'llama-3.3-70b-versatile',
+      model: MODELOS_GROQ[0],
       temperature: 0.1,
       max_tokens: 300,
       messages: [

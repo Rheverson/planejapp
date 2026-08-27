@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 import { cors, preflight, requireUser } from "../_shared/auth.ts"
+import { chamarGroq } from "../_shared/groq.ts"
 
 serve(async (req) => {
   const pre = preflight(req)
@@ -233,30 +234,21 @@ Responda APENAS com JSON válido:
   }
 }`
 
-    const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `Bearer ${Deno.env.get("GROQ_API_KEY")}`
-      },
-      body: JSON.stringify({
-        model: "llama-3.3-70b-versatile",
-        messages: [{ role: "user", content: prompt }],
-        temperature: 0.7,
-        max_tokens: 2000
-      })
-    })
+    const resposta = await chamarGroq(
+      [{ role: "user", content: prompt }],
+      { temperature: 0.7, maxTokens: 2000 },
+    )
 
-    const groqData = await groqRes.json()
-    console.log('Groq status:', groqRes.status)
-
-    if (!groqRes.ok) {
-      console.error('Groq error:', JSON.stringify(groqData))
-      throw new Error("Erro ao chamar a IA: " + (groqData.error?.message || "Erro desconhecido"))
+    if (!resposta.ok) {
+      console.error('Groq falhou:', resposta.motivo, resposta.detalhe)
+      return new Response(
+        JSON.stringify({ error: resposta.detalhe, motivo: resposta.motivo }),
+        { status: resposta.motivo === "limite" ? 429 : 503,
+          headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      )
     }
 
-    const content = groqData.choices?.[0]?.message?.content
-    if (!content) throw new Error("Resposta vazia da IA")
+    const content = resposta.texto
 
     const cleanContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
     const insights = JSON.parse(cleanContent)
