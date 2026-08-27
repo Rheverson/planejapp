@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { validarAssinaturaTwilio } from '../_shared/auth.ts'
 
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
@@ -69,15 +70,40 @@ function buildConfirmMessage(p: any): string {
 }
 
 Deno.serve(async (req) => {
-  const form = await req.formData()
+  if (req.method !== 'POST') {
+    return new Response('Método não permitido', { status: 405 })
+  }
+
+  let form: FormData
+  try {
+    form = await req.formData()
+  } catch {
+    return new Response('Requisição inválida', { status: 400 })
+  }
+
+  // ── Autenticação do webhook ───────────────────────────────
+  // O campo `From` não é prova de identidade: ele vem do corpo e
+  // qualquer um pode enviá-lo. Só depois de conferir a assinatura do
+  // Twilio é que ele passa a valer como o telefone do remetente.
+  const params: Record<string, string> = {}
+  for (const [k, v] of form.entries()) {
+    if (typeof v === 'string') params[k] = v
+  }
+
+  const assinatura = await validarAssinaturaTwilio(req, params)
+  if (!assinatura.ok) {
+    console.error('Webhook recusado:', assinatura.motivo)
+    return new Response('Não autorizado', { status: assinatura.status })
+  }
+
   const rawPhone = form.get('From')?.toString() ?? ''
   const phone = rawPhone.replace('whatsapp:', '').trim()
   const message = form.get('Body')?.toString().trim() ?? ''
   const msgLower = message.toLowerCase().trim()
   const today = todayBrasilia()
 
-  console.log('PHONE:', phone)
-  console.log('MESSAGE:', message)
+  // Telefone e conteúdo da mensagem não vão para o log.
+  console.log('Mensagem recebida de número verificado')
 
   // 1. Verificar usuário e limite
   const { data: limitData } = await supabase

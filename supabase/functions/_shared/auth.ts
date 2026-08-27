@@ -163,3 +163,65 @@ export async function requireInternalOrCron(req: Request): Promise<Response | nu
   if (await isCronCall(req)) return null;
   return json(req, { error: "Não autorizado" }, 401);
 }
+
+// ── Webhook do Twilio ───────────────────────────────────────
+
+/**
+ * Valida a assinatura `X-Twilio-Signature`.
+ *
+ * O algoritmo do Twilio: concatena a URL exata que ele chamou com
+ * cada par chave+valor do POST, ordenados por chave; faz HMAC-SHA1
+ * com o auth token da conta; compara em base64.
+ *
+ * Sem isso, a identidade do remetente vinha do campo `From` do corpo —
+ * qualquer pessoa podia se passar por qualquer usuário cadastrado.
+ *
+ * Falha fechada: sem `TWILIO_AUTH_TOKEN` configurado, nada passa.
+ */
+export async function validarAssinaturaTwilio(
+  req: Request,
+  params: Record<string, string>,
+): Promise<{ ok: true } | { ok: false; motivo: string; status: number }> {
+  const token = Deno.env.get("TWILIO_AUTH_TOKEN");
+  if (!token) {
+    return {
+      ok: false,
+      status: 503,
+      motivo: "TWILIO_AUTH_TOKEN não configurado — webhook desabilitado por segurança",
+    };
+  }
+
+  const assinatura = req.headers.get("X-Twilio-Signature");
+  if (!assinatura) return { ok: false, status: 403, motivo: "sem assinatura" };
+
+  // A URL precisa ser exatamente a que está configurada no console do
+  // Twilio. Atrás de proxy, `req.url` pode não bater — por isso é
+  // possível fixá-la por variável de ambiente.
+  const url = Deno.env.get("TWILIO_WEBHOOK_URL") ?? req.url;
+
+  const base = url + Object.keys(params).sort()
+    .map((k) => k + params[k])
+    .join("");
+
+  const chave = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(token),
+    { name: "HMAC", hash: "SHA-1" },
+    false,
+    ["sign"],
+  );
+  const bytes = await crypto.subtle.sign("HMAC", chave, new TextEncoder().encode(base));
+  const esperada = btoa(String.fromCharCode(...new Uint8Array(bytes)));
+
+  // Comparação de tempo constante.
+  if (esperada.length !== assinatura.length) {
+    return { ok: false, status: 403, motivo: "assinatura inválida" };
+  }
+  let diff = 0;
+  for (let i = 0; i < esperada.length; i++) {
+    diff |= esperada.charCodeAt(i) ^ assinatura.charCodeAt(i);
+  }
+  if (diff !== 0) return { ok: false, status: 403, motivo: "assinatura inválida" };
+
+  return { ok: true };
+}
