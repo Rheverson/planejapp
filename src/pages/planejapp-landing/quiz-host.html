@@ -274,12 +274,33 @@ async function init() {
     level: 'M'
   })
 
-  // Subscribe players
-  sb.channel('quiz-players')
-    .on('postgres_changes', {event:'INSERT', schema:'public', table:'quiz_players', filter:`session_id=eq.${sessionId}`}, payload => {
-      addPlayer(payload.new)
-    })
-    .subscribe()
+  // A sala é atualizada por consulta periódica à view pública.
+  // Realtime não serve mais aqui: ele lê quiz_players direto, e essa
+  // tabela deixou de ser legível por anônimos porque guarda o telefone.
+  iniciarAtualizacaoDaSala()
+}
+
+let timerSala = null
+function iniciarAtualizacaoDaSala() {
+  clearInterval(timerSala)
+  atualizarSala()
+  timerSala = setInterval(atualizarSala, 2500)
+}
+
+function pararAtualizacaoDaSala() {
+  clearInterval(timerSala)
+  timerSala = null
+}
+
+async function atualizarSala() {
+  const {data} = await sb.from('quiz_placar')
+    .select('id, nome')
+    .eq('session_id', sessionId)
+    .order('joined_at', {ascending: true})
+  if(!data) return
+
+  const conhecidos = new Set(players.map(j => j.id))
+  data.filter(j => !conhecidos.has(j.id)).forEach(addPlayer)
 }
 
 function addPlayer(p) {
@@ -293,13 +314,14 @@ function addPlayer(p) {
   chip.className = 'player-chip'
   chip.id = `chip-${p.id}`
   const color = AV_COLORS[count % AV_COLORS.length]
-  const initials = (p.nickname || p.phone).slice(0,2).toUpperCase()
-  chip.innerHTML = `<div class="av" style="background:${color}">${initials}</div>${p.nickname || p.phone}`
+  const initials = (p.nome || p.nickname || '??').slice(0,2).toUpperCase()
+  chip.innerHTML = `<div class="av" style="background:${color}">${initials}</div>${p.nome}`
   list.appendChild(chip)
 }
 
 // ── START GAME ─────────────────────────────────────────────────
 async function startGame() {
+  pararAtualizacaoDaSala()
   await sb.from('quiz_sessions').update({status:'question', current_question:0}).eq('id', sessionId)
   showQuestion(0)
 }
@@ -402,8 +424,9 @@ async function revealAnswer() {
 }
 
 async function loadLeaderboard() {
-  const {data} = await sb.from('quiz_players')
-    .select('id, phone, nickname, score')
+  // Lê a view pública: o telefone não sai do banco.
+  const {data} = await sb.from('quiz_placar')
+    .select('id, nome, score')
     .eq('session_id', sessionId)
     .order('score', {ascending: false})
     .limit(8)
@@ -417,7 +440,7 @@ async function loadLeaderboard() {
     list.innerHTML += `
       <div class="lb-row">
         <div class="lb-pos ${posClass}">${medals[i] || (i+1)}</div>
-        <div class="lb-name">${p.nickname || p.phone}</div>
+        <div class="lb-name">${p.nome}</div>
         <div class="lb-score">${p.score} pts</div>
       </div>`
   })
@@ -436,8 +459,8 @@ async function nextQuestion() {
 
 async function showFinal() {
   showScreen('s-final')
-  const {data} = await sb.from('quiz_players')
-    .select('phone, nickname, score')
+  const {data} = await sb.from('quiz_placar')
+    .select('nome, score')
     .eq('session_id', sessionId)
     .order('score', {ascending: false})
     .limit(3)
@@ -464,7 +487,7 @@ async function showFinal() {
     const block = blockClass[rank]
     podium.innerHTML += `
       <div class="podium-slot">
-        <div class="podium-name">${p.nickname || p.phone}</div>
+        <div class="podium-name">${p.nome}</div>
         <div class="podium-score">${p.score} pts</div>
         <div class="podium-block ${block}"><div class="podium-medal">${medals[rank]}</div></div>
       </div>`

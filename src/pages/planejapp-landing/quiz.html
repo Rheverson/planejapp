@@ -210,12 +210,21 @@ async function joinGame(){
 
   document.getElementById('btn-join').disabled = true
 
-  const {data, error} = await sb.from('quiz_players').insert({
+  // O id vem do cliente: quiz_players deixou de ser legível (o telefone
+  // vivia ali), então não dá mais para ler a linha de volta após inserir.
+  const novoId = (crypto.randomUUID && crypto.randomUUID()) ||
+    'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+      const r = Math.random() * 16 | 0
+      return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16)
+    })
+
+  const {error} = await sb.from('quiz_players').insert({
+    id: novoId,
     session_id: sessionId,
     phone: phone,
     nickname: nick || null,
     score: 0
-  }).select().single()
+  })
 
   if(error){
     err.textContent = 'Erro ao entrar. Tente novamente.'
@@ -223,7 +232,7 @@ async function joinGame(){
     return
   }
 
-  playerId = data.id
+  playerId = novoId
   show('s-wait')
   subscribeSession()
 }
@@ -320,7 +329,7 @@ async function submitAnswer(qIdx, answerIdx, btn){
 
 async function showFinal(){
   show('s-final')
-  const {data} = await sb.from('quiz_players').select('score').eq('id', playerId).single()
+  const {data} = await sb.from('quiz_placar').select('score').eq('id', playerId).single()
   const score = data?.score || myScore
   document.getElementById('final-score').textContent = score
 
