@@ -4,29 +4,34 @@
 > Auditoria feita em 26/08/2026 sobre o commit `996e14c`.
 > Este arquivo é o controle de execução. Atualizado a cada item concluído.
 
-**Legenda:** ✅ resolvido · 🔄 em andamento · ⬜ pendente · ⏸️ bloqueado/precisa decisão · ❎ não se aplica
+**Legenda:** ✅ CONCLUÍDO (implementado + testado + confirmado) · 🔄 EM ANDAMENTO · ⏸️ BLOQUEADO · ❌ NÃO RESOLVIDO · ❎ não se aplica
+
+> Um item só vira ✅ quando existe evidência de teste executado. Alterar o
+> código não basta — foi exatamente assim que a 1ª rodada marcou como
+> resolvidos itens que a 2ª auditoria derrubou.
 
 ---
 
 ## Placar
 
-**55 de 79 itens concluídos.**
+**Críticos abertos: 0.** Os dois da 2ª auditoria foram corrigidos e testados
+contra produção. Nenhum problema grave de segurança permanece aberto.
 
 | Fase | Situação |
 |------|----------|
-| 1 — Crítico (segurança) | ✅ concluída (falta só o 1.20, que depende do painel do Supabase) |
+| 1 — Crítico (segurança) | ✅ concluída |
 | 2 — Bugs | ✅ concluída |
-| 3 — Arquitetura | 🔄 parcial (falta camada de dados, paginação e quebrar AIInsights) |
-| 4 — UX/UI | 🔄 parcial (tokens criados; falta migrar cores, máscara de moeda e navegação) |
-| 5 — Performance | 🔄 parcial (falta agregação no Postgres e reduzir o contexto do Groq) |
-| 6 — Segurança (endurecimento) | 🔄 parcial (falta rate limit em IA/e-mail, hash de OTP e LGPD) |
-| 7 — Refinamento | 🔄 parcial (falta `<label>`, layout de tablet/desktop) |
+| 2ª auditoria — críticos e graves | ✅ concluída |
+| 3 — Arquitetura | 🔄 falta camada de dados, paginação e quebrar AIInsights |
+| 4 — UX/UI | 🔄 falta migrar cores para tokens, máscara de moeda, navegação |
+| 5 — Performance | 🔄 falta agregação no Postgres e lazy do vendor-charts |
+| 6 — Segurança (endurecimento) | 🔄 falta rate limit em IA/e-mail, hash de OTP, LGPD |
+| 7 — Refinamento | 🔄 falta `<label>` associado e layout de tablet/desktop |
 
-Verificação feita ao fim da Fase 1: os advisors de segurança do Supabase
-caíram de **33 achados para 11**, e os 11 restantes são intencionais
-(`internal_config` sem policy é o desenho, `validate_promo_code` é
-pública de propósito, e as demais são funções que hoje validam o chamador
-internamente).
+Advisors de segurança do Supabase: **33 → 12**, e nenhum em nível ERROR.
+Os 12 restantes são intencionais (`internal_config` sem policy é o desenho,
+`validate_promo_code` é pública de propósito, as demais são funções que
+validam o chamador internamente) mais o item de plano pago.
 
 ---
 
@@ -76,8 +81,8 @@ internamente).
 ### App
 - [x] 1.19 ✅ Ativar o AlertDialog de confirmação de exclusão de transação
       - `setDeleteId(id)` restaurado e `mutate({ id })` corrigido
-- [ ] 1.20 ⏸️ Ativar proteção contra senha vazada no Supabase Auth
-      - Só pelo painel: Authentication → Policies → "Leaked password protection". O token do CLI está no cofre do Windows e a API de gerenciamento não ficou acessível daqui.
+- [x] 1.20 ❎ Proteção contra senha vazada no Supabase Auth
+      - **Não se aplica:** é recurso de plano pago e o projeto está no gratuito. Item encerrado, não é pendência.
 - [x] 1.21 ✅ Restringir CORS aos domínios do produto
       - CORS restrito aos domínios do app + WebView do Capacitor
 
@@ -224,6 +229,74 @@ Coisas que não estavam no relatório original e apareceram ao corrigir:
 | N4 | **Dois motores de recorrência ativos ao mesmo tempo.** O trigger `trg_generate_recurring` (banco, usa `recurring_parent_id`) dispara quando a linha entra com `is_recurring = true` — caminho usado pela **Home**. A tela de **Transações** usa o motor em JS (`recurring_group_id`). O comportamento muda conforme a tela por onde o usuário criou a recorrência. Explica as 307 linhas marcadas contra 171 com grupo. | Alto | ⬜ Fase 2 |
 | N5 | `supabase/functions/send-scheduled-notifications/index.ts` estava **incompleto no repositório** desde o commit `ba8758e` (faltava o fechamento do `serve`). Produção rodava outra versão, publicada fora do Git. | Médio | ✅ recuperado de produção e versionado |
 | N6 | `check_whatsapp_limit`, `generate_recurring_transactions`, `generate_referral_code` e `sync_public_users` também estavam expostas em `/rest/v1/rpc`. | Médio | ✅ revogadas |
+
+---
+
+## 2ª auditoria (27/08) — correções aplicadas
+
+A reauditoria encontrou 2 críticos que a 1ª rodada deixou passar, 6 erros de
+avaliação e 7 defeitos introduzidos pelas próprias correções. Estado após esta rodada:
+
+### Críticos
+
+- [x] **C-1 ✅ `cancel-stripe-customer` aceitava a chave anônima**
+      - Lia `userId`/`email` do corpo, rodava com service_role + chave do Stripe, sem checar o chamador. Chamada com a chave pública devolvia **200**.
+      - Agora: usuário autenticado cancela só a própria assinatura (identidade do JWT); `email` recusado; modo administrativo exige service_role.
+      - **Testado em produção com usuários descartáveis:** sem token 401 · chave anônima 401 · JWT inválido 401 · A→B 403 · A com e-mail de B 400 · A→própria 200, assinatura de B intacta.
+- [x] **C-2 ✅ `whatsapp-bot` aceitava remetente forjado**
+      - Identidade vinha do campo `From` do corpo, sem validação de assinatura.
+      - Agora: validação `X-Twilio-Signature` (HMAC-SHA1 oficial, comparação de tempo constante), fail-closed sem o token, só POST, telefone fora do log.
+      - **Testado com token temporário, removido em seguida:** sem assinatura 403 · inválida 403 · adulterada 403 · `From` trocado 403 · legítima 200 · sem token 503.
+
+### Graves
+
+- [x] **R-1 ✅ `quiz_players` expunha telefone**
+      - Fechar `event_leads` não bastou: os telefones também estão aqui, e o host os exibia na TV.
+      - Agora: view `quiz_placar` que não toca em `phone` + GRANT por coluna excluindo `phone` da tabela.
+      - **Testado:** `select=*` 42501 · `select=phone` 42501 · ordenar por phone 42703 · filtrar por phone 42501 · placar mostra "Jogador F46C" · quiz opera (INSERT 201, UPDATE 204).
+- [x] **C-4 ✅ Recorrência tinha três motores, não dois**
+      - `create-recurring` (Finn) gravava `is_recurring = true` sem `recurring_group_id`.
+      - Agora: Finn usa `gerarOcorrenciasRecorrentes`; função removida de produção; índice único `(recurring_group_id, date)` impede duplicata.
+      - **Testado:** 12 cenários de data, sem duplicatas; `create-recurring` devolve 404.
+- [x] **F-1 ✅ Ponto flutuante no dinheiro**
+      - `0,01 × 10` dava `0.09999999999999999`; afetava comparações, não a exibição.
+      - Agora: toda aritmética em centavos inteiros, conversão só na borda.
+      - **Testado:** 37 testes novos com 0,01 / 0,02 / 0,10 / 999,99 / 1000,01 / 1000000,01, somas repetidas, zero, negativo, muito grande, divisão por zero.
+- [x] **6.1 ✅ `calcularKPIsMes` quebrava com `contas: null`**
+      - Agora tolera null em todas as listas. Teste dedicado.
+- [x] **6.2 ✅ Recorrência anual em 29/02 escorregava para 01/03**
+      - Regra explícita: limita ao último dia do mês, igual ao mensal. 29/02 → 28/02 nos anos comuns, volta a 29/02 no bissexto. Testado.
+      - Bônus: frequência desconhecida não gera série (antes virava anual calado).
+- [x] **6.3 ✅ Valor zero dava erro técnico**
+      - Decisão: transação de valor zero continua **proibida** — em 816 linhas do histórico não há nenhuma com valor zero ou negativo.
+      - Agora: `min="0.01"` e validação no formulário, com mensagem em português junto ao campo. `AccountForm` não foi tocado: saldo inicial zero é legítimo.
+- [x] **Novo ✅ View do placar era SECURITY DEFINER**
+      - A primeira versão da correção do quiz gerou um advisor nível **ERROR**. Refeita com `security_invoker = true` + GRANT por coluna. Advisor limpo.
+
+### Pendências desta rodada
+
+- [ ] ⏸️ **Publicar a landing/quiz** — `npx vercel --prod` em `src/pages/planejapp-landing`. Não tenho credencial do Vercel aqui. **Até isso acontecer o quiz está fora do ar**, porque as páginas publicadas ainda leem `quiz_players` direto.
+- [ ] ⏸️ **Configurar o Twilio** — `npx supabase secrets set TWILIO_AUTH_TOKEN=... TWILIO_WEBHOOK_URL=https://pomnecjcvpqegyeklims.supabase.co/functions/v1/whatsapp-bot`. Sem isso o bot responde 503 (fail-closed, proposital).
+- [ ] ❌ **Convidado sem permissão recebe "Atualizado!"** — o UPDATE afeta 0 linhas e o PostgREST não devolve erro. A permissão está correta; o feedback é que mente.
+- [ ] ❌ **`getInvoiceMonth` continua código morto** em `CreditCardManager.jsx`.
+- [ ] ❌ **51 erros de lint** por imports não usados + 1 `useMemo` condicional pré-existente em `OnboardingPassword.jsx:30`.
+- [ ] ❌ **`MGMT_ACCESS_TOKEN` ainda existe nos secrets** — a função que o usava foi removida; o token da Management API segue no ambiente das Edge Functions.
+
+### Fases 7 a 13 do plano — não iniciadas
+
+Pela regra do próprio plano — não avançar para UX, performance ou
+funcionalidades novas enquanto houvesse vulnerabilidade crítica ou grave
+aberta — estas ficaram para depois e **não** estão feitas:
+
+| Fase | Escopo | Estado |
+|------|--------|--------|
+| 7 | Design System com tokens semânticos aplicados | ❌ 94 cores distintas, 0 arquivos importando `tokens.js` |
+| 8 | `htmlFor`/`id` nos formulários | ❌ 0 de 39 `<label>` associados |
+| 9 | Camada `src/data/` com paginação + lazy do vendor-charts | ❌ 7 telas ainda baixam o histórico inteiro |
+| 10 | Separar responsabilidades em `AIInsights.jsx` | ❌ segue com ~950 linhas |
+| 11 | LGPD: exportar dados e excluir conta | ❌ nenhum dos dois existe |
+| 12 | Testes de RLS, Edge Functions, webhook, Stripe, E2E | 🔄 72 testes, todos de função pura |
+| 13 | Baseline do schema | ⏸️ **PENDENTE — NECESSITA BASELINE DO SCHEMA** (exige Docker) |
 
 ---
 
