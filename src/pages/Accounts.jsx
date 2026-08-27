@@ -18,6 +18,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { calcularSaldosPorConta } from "@/domain/financas";
 
 const iconMap    = { bank: Building2, wallet: Wallet, digital: Smartphone, investment: TrendingUp, other: MoreHorizontal };
 const typeLabels = { bank: "Conta Bancária", wallet: "Carteira", digital: "Conta Digital", investment: "Investimentos", other: "Outros" };
@@ -31,19 +32,12 @@ function AccountDetailModal({ account, transactions, onClose }) {
   const monthStart = startOfMonth(selectedDate);
   const monthEnd   = endOfMonth(selectedDate);
 
-  const currentBalance = useMemo(() => {
-    let bal = Number(account.initial_balance) || 0;
-    transactions.forEach(t => {
-      if (t.is_realized === false) return;
-      if (t.type === "income"  && t.account_id === account.id) bal += Number(t.amount);
-      else if (t.type === "expense" && t.account_id === account.id) bal -= Number(t.amount);
-      else if (t.type === "transfer") {
-        if (t.account_id === account.id) bal -= Number(t.amount);
-        if (t.transfer_account_id === account.id) bal += Number(t.amount);
-      }
-    });
-    return bal;
-  }, [account, transactions]);
+  // Mesma regra de saldo usada na Home e no Finn — inclusive a de que
+  // compra no cartão não afeta a conta.
+  const currentBalance = useMemo(
+    () => calcularSaldosPorConta([account], transactions)[account.id] ?? 0,
+    [account, transactions]
+  );
 
   const monthTx = useMemo(() => {
     return transactions

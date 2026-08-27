@@ -2,6 +2,9 @@ import React, { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthContext";
+import { useSharedProfile } from "@/lib/SharedProfileContext";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { gastosPorCategoria } from "@/domain/financas";
 import { Plus, X, AlertTriangle, CheckCircle, Edit2 } from "lucide-react";
 import { toast } from "sonner";
 import { startOfMonth, endOfMonth, parseISO, isWithinInterval } from "date-fns";
@@ -37,8 +40,12 @@ const CATEGORY_OPTIONS = [
 
 export default function BudgetManager({ transactions, accounts, selectedDate }) {
   const { user } = useAuth();
+  // ✅ Usa o dono do perfil ativo. Com `user.id`, ao visualizar o perfil
+  // compartilhado o card cruzava o orçamento do convidado com os gastos do dono.
+  const { activeOwnerId } = useSharedProfile();
+  const ownerId = activeOwnerId ?? user?.id;
   const dark = useIsDark();
-  const [budgets, setBudgets] = useState([]);
+  const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ category: "alimentação", amount: "", alert_at: 80 });
   const [saving, setSaving] = useState(false);
@@ -50,49 +57,40 @@ export default function BudgetManager({ transactions, accounts, selectedDate }) 
   const subBg  = dark ? "#12151c" : "#f9fafb";
   const inputBg= dark ? "#12151c" : "#f9fafb";
 
-  useEffect(() => {
-    if (!user) return;
-    supabase.from("budgets").select("*").eq("user_id", user.id).eq("is_active", true)
-      .then(({ data }) => { if (data) setBudgets(data); });
-  }, [user]);
+  // ✅ React Query em vez de useEffect + setState: o card passa a
+  // participar do cache e a refletir mudanças feitas em outras telas.
+  const { data: budgets = [] } = useQuery({
+    queryKey: ["budgets", ownerId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("budgets").select("*").eq("user_id", ownerId).eq("is_active", true);
+      if (error) throw error;
+      return data ?? [];
+    },
+    enabled: !!ownerId,
+  });
 
-  // Calcula gasto atual por categoria no mês
-  const spentByCategory = useMemo(() => {
-    const investIds = new Set(accounts.filter(a => a.type === "investment").map(a => a.id));
-    const start = startOfMonth(selectedDate);
-    const end   = endOfMonth(selectedDate);
-    const map = {};
-    transactions.filter(t =>
-      t.type === "expense" &&
-      t.is_realized !== false &&
-      !investIds.has(t.account_id)
-    ).forEach(t => {
-      try {
-        if (isWithinInterval(parseISO(t.date), { start, end })) {
-          const cat = t.category || "outros";
-          map[cat] = (map[cat] || 0) + Number(t.amount);
-        }
-      } catch {}
-    });
-    return map;
-  }, [transactions, accounts, selectedDate]);
+  // Gasto por categoria com a mesma regra das demais telas.
+  const spentByCategory = useMemo(
+    () => gastosPorCategoria(transactions, accounts, selectedDate),
+    [transactions, accounts, selectedDate]
+  );
 
   async function saveBudget() {
     if (!form.amount || Number(form.amount) <= 0) { toast.error("Digite um valor válido"); return; }
     setSaving(true);
     const { error } = await supabase.from("budgets").upsert({
-      user_id: user.id,
+      user_id: ownerId,
       category: form.category,
       amount: Number(form.amount),
       alert_at: Number(form.alert_at),
       period: "monthly",
       emoji: CATEGORY_OPTIONS.find(c => c.value === form.category)?.emoji || "📦",
     }, { onConflict: "user_id,category,period" });
-    if (error) { toast.error("Erro ao salvar"); }
+    if (error) { toast.error("Não foi possível salvar o orçamento."); }
     else {
       toast.success("Orçamento salvo!");
-      const { data } = await supabase.from("budgets").select("*").eq("user_id", user.id).eq("is_active", true);
-      if (data) setBudgets(data);
+      queryClient.invalidateQueries({ queryKey: ["budgets", ownerId] });
       setShowForm(false);
       setForm({ category: "alimentação", amount: "", alert_at: 80 });
     }
@@ -100,8 +98,8 @@ export default function BudgetManager({ transactions, accounts, selectedDate }) 
   }
 
   async function deleteBudget(id) {
-    await supabase.from("budgets").update({ is_active: false }).eq("id", id);
-    setBudgets(prev => prev.filter(b => b.id !== id));
+    await supabase.from("budgets").update({ is_active: false }).eq("id", id).eq("user_id", ownerId);
+    queryClient.invalidateQueries({ queryKey: ["budgets", ownerId] });
     toast.success("Orçamento removido");
   }
 

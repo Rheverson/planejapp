@@ -24,6 +24,7 @@ import FinancialScore from "@/components/financial/FinancialScore";
 import CashFlowProjection from "@/components/financial/CashFlowProjection";
 import MonthComparison from "@/components/financial/MonthComparison";
 import BudgetManager from "@/components/financial/BudgetManager";
+import { calcularTotaisDeSaldo, calcularKPIsMes, gerarOcorrenciasRecorrentes } from "@/domain/financas";
 
 const fmt = (v) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
@@ -174,7 +175,22 @@ export default function Home() {
   });
 
   const createTransactionMutation = useMutation({
-    mutationFn: async (newTx) => { const { data, error } = await supabase.from("transactions").insert([{ ...newTx, user_id: activeOwnerId, amount: parseFloat(newTx.amount) }]).select(); if (error) throw error; return data; },
+    mutationFn: async (newTx) => {
+      const base = { ...newTx, user_id: activeOwnerId, amount: parseFloat(newTx.amount) };
+      // ✅ Recorrência criada pela Home usa a mesma geração da tela de
+      // Transações. Antes, a linha entrava com is_recurring = true e quem
+      // expandia a série era um trigger no banco, com outro modelo de dados
+      // (recurring_parent_id) que a UI não sabe editar em bloco.
+      if (base.is_recurring) {
+        const inserts = gerarOcorrenciasRecorrentes(base);
+        const { data, error } = await supabase.from("transactions").insert(inserts).select();
+        if (error) throw error;
+        return data;
+      }
+      const { data, error } = await supabase.from("transactions").insert([base]).select();
+      if (error) throw error;
+      return data;
+    },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["transactions"] }); queryClient.invalidateQueries({ queryKey: ["accounts"] }); setShowTransactionForm(false); toast.success("Transação adicionada!"); },
     onError: (err) => toast.error("Erro ao salvar: " + err.message),
   });
@@ -193,53 +209,22 @@ export default function Home() {
     [transactions, monthStart, monthEnd]
   );
 
-  // Calcula saldos das contas ANTES do kpis para poder usar totalBalance na previsão
-  const accountBalances = useMemo(() => {
-    const b = {};
-    accounts.forEach(a => { b[a.id] = Number(a.initial_balance) || 0; });
-    transactions.forEach(t => {
-      if (t.is_realized === false) return;
-      // Compras no cartão NÃO afetam saldo da conta — só o pagamento da fatura afeta
-      if (t.credit_card_id && t.type === "expense") return;
-      if (t.type === "income" && t.account_id)    b[t.account_id] = (b[t.account_id]||0) + Number(t.amount);
-      else if (t.type === "expense" && t.account_id) b[t.account_id] = (b[t.account_id]||0) - Number(t.amount);
-      else if (t.type === "transfer") {
-        if (t.account_id)          b[t.account_id]          = (b[t.account_id]||0)          - Number(t.amount);
-        if (t.transfer_account_id) b[t.transfer_account_id] = (b[t.transfer_account_id]||0) + Number(t.amount);
-      }
-    });
-    return b;
-  }, [accounts, transactions]);
+  // Saldos e KPIs vêm do módulo de domínio — a mesma regra usada em
+  // Contas, Metas, Relatórios e no Finn.
+  const { saldos: accountBalances, emConta: totalBalance, investido: totalInvested,
+          contasComuns: regularAccounts, contasInvestimento: investmentAccounts } =
+    useMemo(() => calcularTotaisDeSaldo(accounts, transactions), [accounts, transactions]);
 
-  const regularAccounts    = accounts.filter(a => a.type !== "investment");
-  const investmentAccounts = accounts.filter(a => a.type === "investment");
-  // totalBalance = saldo real atual de todas as contas não-investimento
-  const totalBalance  = regularAccounts.reduce((s,a)=>s+(accountBalances[a.id]||0),0);
-  const totalInvested = investmentAccounts.reduce((s,a)=>s+(accountBalances[a.id]||0),0);
+  const kpis = useMemo(
+    () => calcularKPIsMes({
+      transacoes: transactions,
+      contas: accounts,
+      dataReferencia: selectedDate,
+      saldoEmConta: totalBalance,
+    }),
+    [transactions, accounts, selectedDate, totalBalance]
+  );
 
-  const kpis = useMemo(() => {
-    const invIds = new Set(accounts.filter(a => a.type === "investment").map(a => a.id));
-    // Inclui compras de cartão como despesa do mês (mas não afeta saldo de conta — só ao pagar fatura)
-    const tx = monthTransactions.filter(t => !invIds.has(t.account_id));
-    const r  = tx.filter(t => t.is_realized !== false);
-    const p  = tx.filter(t => t.is_realized === false);
-    const ir = r.filter(t => t.type === "income").reduce((s,t)=>s+Number(t.amount),0);
-    const ip = p.filter(t => t.type === "income").reduce((s,t)=>s+Number(t.amount),0);
-    const er = r.filter(t => t.type === "expense").reduce((s,t)=>s+Number(t.amount),0);
-    const ep = p.filter(t => t.type === "expense").reduce((s,t)=>s+Number(t.amount),0);
-
-    // Mês atual: Previsão = saldo real das contas hoje + entradas previstas - despesas previstas
-    // Outros meses: net do mês (realizado + planejado)
-    const today = new Date();
-    const isCurrentMonth = selectedDate.getMonth() === today.getMonth() &&
-                           selectedDate.getFullYear() === today.getFullYear();
-
-    const forecastBalance = isCurrentMonth
-      ? totalBalance + ip - ep   // usa o totalBalance já calculado acima
-      : (ir + ip) - (er + ep);
-
-    return { totalIncome: ir+ip, totalExpense: er+ep, currentBalance: ir-er, forecastBalance };
-  }, [monthTransactions, accounts, selectedDate, totalBalance]);
   const expenseCount  = monthTransactions.filter(t=>t.type==="expense"&&t.is_realized!==false).length;
   const recentTx = monthTransactions.slice(0, 5);
 
@@ -358,10 +343,10 @@ export default function Home() {
 
         {/* KPIs */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-          <KPICard title="Entradas"    value={kpis.totalIncome}    color="green"  hidden={hidden} dark={dark} to={`/Transactions?filter=income&month=${format(selectedDate,"yyyy-MM")}`} />
-          <KPICard title="Saídas"      value={kpis.totalExpense}   color="red"    hidden={hidden} dark={dark} to={`/Transactions?filter=expense&month=${format(selectedDate,"yyyy-MM")}`} />
-          <KPICard title="Resultado do Mês" value={kpis.currentBalance} color={kpis.currentBalance>=0?"blue":"red"}   subtitle="Mês atual"     hidden={hidden} dark={dark} to={`/Transactions?filter=realized&month=${format(selectedDate,"yyyy-MM")}`} />
-          <KPICard title="Projeção Final do Mês"    value={kpis.forecastBalance} color={kpis.forecastBalance>=0?"violet":"red"} subtitle="Mês completo" hidden={hidden} dark={dark} to={`/Transactions?filter=planned&month=${format(selectedDate,"yyyy-MM")}`} />
+          <KPICard title="Entradas"    value={kpis.entradas}    color="green"  hidden={hidden} dark={dark} to={`/Transactions?filter=income&month=${format(selectedDate,"yyyy-MM")}`} />
+          <KPICard title="Saídas"      value={kpis.saidas}   color="red"    hidden={hidden} dark={dark} to={`/Transactions?filter=expense&month=${format(selectedDate,"yyyy-MM")}`} />
+          <KPICard title="Resultado do Mês" value={kpis.resultadoDoMes} color={kpis.resultadoDoMes>=0?"blue":"red"}   subtitle="Mês atual"     hidden={hidden} dark={dark} to={`/Transactions?filter=realized&month=${format(selectedDate,"yyyy-MM")}`} />
+          <KPICard title="Projeção Final do Mês"    value={kpis.projecaoFinal} color={kpis.projecaoFinal>=0?"violet":"red"} subtitle="Mês completo" hidden={hidden} dark={dark} to={`/Transactions?filter=planned&month=${format(selectedDate,"yyyy-MM")}`} />
         </div>
 
         {/* Score financeiro */}

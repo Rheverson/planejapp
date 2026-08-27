@@ -876,7 +876,9 @@ export function useCategorySuggestion(description, transactionType) {
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [description]);
+    // `transactionType` entra nas dependências: sem ele, trocar de saída
+    // para entrada mantinha a sugestão calculada com o dicionário anterior.
+  }, [description, transactionType, userPatterns]);
 
   const confirmCategory = useCallback((category, desc) => {
     if (!desc || desc.length < 3) return;

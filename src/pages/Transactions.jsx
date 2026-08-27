@@ -19,6 +19,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { gerarOcorrenciasRecorrentes } from "@/domain/financas";
 
 const CATEGORIES = [
   "alimentação","moradia","transporte","saúde","educação",
@@ -124,40 +125,8 @@ export default function Transactions() {
   const createMutation = useMutation({
     mutationFn: async (data) => {
       if (data.is_recurring) {
-        // Gera um group_id único para toda a série
-        const groupId = crypto.randomUUID();
-        const baseDate = new Date(data.date + "T00:00:00");
-        const endDate = data.recurring_end_date ? new Date(data.recurring_end_date + "T00:00:00") : null;
-        const inserts = [];
-        let current = new Date(baseDate);
-        let count = 0;
-        const maxOccurrences = 24; // máximo 24 meses
-
-        while (count < maxOccurrences) {
-          if (endDate && current > endDate) break;
-          const dateStr = current.toISOString().split("T")[0];
-          inserts.push({
-            ...data,
-            user_id: activeOwnerId,
-            date: dateStr,
-            is_realized: false,
-            is_recurring: false, // instâncias individuais não são recorrentes
-            recurring_group_id: groupId,
-            recurring_end_date: null,
-            recurring_frequency: null,
-            recurring_day: null,
-          });
-          // Avança para próxima ocorrência
-          if (data.recurring_frequency === "monthly") {
-            current.setMonth(current.getMonth() + 1);
-          } else if (data.recurring_frequency === "weekly") {
-            current.setDate(current.getDate() + 7);
-          } else if (data.recurring_frequency === "yearly") {
-            current.setFullYear(current.getFullYear() + 1);
-          }
-          count++;
-          if (!endDate && count >= 12) break; // sem data fim = 12 meses
-        }
+        // Mesma geração usada pela Home — ver gerarOcorrenciasRecorrentes.
+        const inserts = gerarOcorrenciasRecorrentes({ ...data, user_id: activeOwnerId });
         const { error } = await supabase.from("transactions").insert(inserts);
         if (error) throw error;
       } else {
@@ -240,7 +209,9 @@ export default function Transactions() {
       }).eq("id", transaction.id);
       if (errUpdate) throw errUpdate;
 
-      // Se pagamento parcial, cria nova previsão com o restante na data original
+      // Se pagamento parcial, cria nova previsão com o restante na data original.
+      // ✅ Preserva os vínculos: sem eles o restante de uma fatura saía do
+      // cartão e o restante de uma recorrência saía da série.
       if (restante > 0.01) {
         const { error: errInsert } = await supabase.from("transactions").insert([{
           description: transaction.description,
@@ -248,6 +219,9 @@ export default function Transactions() {
           type: transaction.type,
           category: transaction.category,
           account_id: transaction.account_id,
+          credit_card_id: transaction.credit_card_id ?? null,
+          invoice_month: transaction.invoice_month ?? null,
+          recurring_group_id: transaction.recurring_group_id ?? null,
           date: transaction.date, // ← mantém a data prevista original
           is_realized: false,
           notes: transaction.notes,

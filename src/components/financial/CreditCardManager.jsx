@@ -8,6 +8,7 @@ import { useSharedProfile } from "@/lib/SharedProfileContext";
 import { toast } from "sonner";
 import { format, parseISO, startOfMonth, endOfMonth, addMonths } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { calcularMesFatura } from "@/domain/financas";
 
 function useIsDark() {
   const [dark, setDark] = useState(() =>
@@ -26,16 +27,11 @@ function useIsDark() {
 
 const fmt = (v) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v || 0);
 
-// Calcula mês da fatura baseado na data e dia de fechamento
-function getInvoiceMonth(date, closingDay) {
-  const d = typeof date === "string" ? parseISO(date) : date;
-  // Se a compra foi DEPOIS do dia de fechamento, vai para a fatura do próximo mês
-  if (d.getDate() > closingDay) {
-    const next = addMonths(d, 1);
-    return format(next, "yyyy-MM");
-  }
-  return format(d, "yyyy-MM");
-}
+// Delegado ao módulo de domínio: esta versão local ignorava
+// expense_date_mode e podia agrupar a compra em mês diferente
+// daquele gravado no lançamento pelo TransactionForm.
+const getInvoiceMonth = (date, closingDay, cartao) =>
+  calcularMesFatura(date, cartao ?? { closing_day: closingDay, expense_date_mode: "closing_date" });
 
 // ── Card de fatura ────────────────────────────────────────────
 function InvoiceCard({ card, invoiceMonth, transactions, dark, onPay }) {

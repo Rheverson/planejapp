@@ -14,6 +14,8 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useQueryClient } from "@tanstack/react-query";
+import { useSharedProfile } from "@/lib/SharedProfileContext";
 
 const NAV_HEIGHT = 68;
 
@@ -274,6 +276,11 @@ function useSpeechRecognition({ onResult }) {
 
 // ── Chat Tab ──────────────────────────────────────────────────
 function ChatTab({ user, dark }) {
+  const queryClient = useQueryClient();
+  // O Finn opera sobre a conta de quem está logado — o `ai-chat` deriva a
+  // identidade do JWT. Num perfil compartilhado, gravar aqui escreveria na
+  // conta errada, então as ações ficam desabilitadas.
+  const { isViewingSharedProfile } = useSharedProfile();
   const [messages, setMessages]             = useState([]);
   const [input, setInput]                   = useState("");
   const [loading, setLoading]               = useState(false);
@@ -389,6 +396,11 @@ function ChatTab({ user, dark }) {
 
   const confirmAction = async () => {
     if (!pendingAction || confirmLoading || confirmingRef.current) return;
+    if (isViewingSharedProfile) {
+      setPendingAction(null);
+      setMessages(prev => [...prev, { role: "assistant", content: "Enquanto você está vendo um perfil compartilhado, eu não posso lançar nada — o registro iria para a sua própria conta. Volte para o seu perfil para eu executar isso." }]);
+      return;
+    }
     confirmingRef.current = true;
     setConfirmLoading(true);
     const action = pendingAction;
@@ -455,8 +467,14 @@ function ChatTab({ user, dark }) {
         setPendingAction(null);
         setMessages(prev => [...prev, { role: "assistant", content: `✅ **Convite enviado!** 📧 ${action.email}` }]);
       }
+      // ✅ Invalida o cache: sem isto o lançamento criado pelo Finn só
+      // aparecia nas outras telas depois de uma remontagem.
+      queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["accounts"] });
+      queryClient.invalidateQueries({ queryKey: ["goals"] });
+      queryClient.invalidateQueries({ queryKey: ["budgets"] });
     } catch {
-      setMessages(prev => [...prev, { role: "assistant", content: "❌ Erro ao executar. Tente novamente." }]);
+      setMessages(prev => [...prev, { role: "assistant", content: "❌ Não consegui concluir. Tente novamente." }]);
       setPendingAction(null);
     } finally { setConfirmLoading(false); confirmingRef.current = false; }
   };

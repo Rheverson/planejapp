@@ -9,6 +9,7 @@ import { useAuth } from "@/lib/AuthContext";
 import { useQuery } from "@tanstack/react-query";
 import { addMonths, format } from "date-fns";
 import { supabase } from "@/lib/supabase";
+import { calcularMesFatura } from "@/domain/financas";
 
 const frequencyOptions = [
   { value: "monthly", label: "Mensal"  },
@@ -106,12 +107,7 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
     if (selectedCard) {
       finalCreditCardId = selectedCard.id;
       finalAccountId = null;
-      const d = new Date(date + "T00:00:00");
-      invoiceMonth = selectedCard.expense_date_mode === "purchase_date"
-        ? format(d, "yyyy-MM")
-        : d.getDate() > selectedCard.closing_day
-          ? format(addMonths(d, 1), "yyyy-MM")
-          : format(d, "yyyy-MM");
+      invoiceMonth = calcularMesFatura(date, selectedCard);
     }
 
     onSubmit({

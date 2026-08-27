@@ -17,6 +17,7 @@ import {
   TrendingUp, TrendingDown, Target, Wallet, BarChart2
 } from "lucide-react";
 import { useMonth } from "@/lib/MonthContext";
+import { transacoesDoMes, ehRealizada, calcularSobraDoMes, calcularTaxaPoupanca, calcularProgressoMeta } from "@/domain/financas";
 import MonthSelector from "@/components/common/MonthSelector";
 
 const CATEGORY_COLORS = {
@@ -233,25 +234,31 @@ export default function Reports() {
   const monthStart = startOfMonth(selectedDate);
   const monthEnd   = endOfMonth(selectedDate);
 
-  const monthTx = useMemo(() =>
-    transactions.filter(t =>
-      t.is_realized !== false && t.type !== 'transfer' &&
-      isWithinInterval(parseISO(t.date), { start: monthStart, end: monthEnd })
-    ), [transactions, monthStart, monthEnd]);
+  // ✅ Usa o mesmo recorte da Home: sem transferências e sem contas de
+  // investimento. Antes os Relatórios incluíam investimentos, então
+  // "Saídas" divergia da Home no mesmo mês.
+  const monthTx = useMemo(
+    () => transacoesDoMes(transactions, accounts, selectedDate).filter(ehRealizada),
+    [transactions, accounts, selectedDate]
+  );
 
-  const income  = useMemo(() => monthTx.filter(t => t.type === "income").reduce((s, t) => s + t.amount, 0),  [monthTx]);
-  const expense = useMemo(() => monthTx.filter(t => t.type === "expense").reduce((s, t) => s + t.amount, 0), [monthTx]);
+  const income  = useMemo(() => monthTx.filter(t => t.type === "income").reduce((s, t) => s + Number(t.amount), 0),  [monthTx]);
+  const expense = useMemo(() => monthTx.filter(t => t.type === "expense").reduce((s, t) => s + Number(t.amount), 0), [monthTx]);
   const balance = income - expense;
-  const savingsRate = income > 0 ? ((balance / income) * 100).toFixed(1) : 0;
 
-  const prevTx = useMemo(() => {
-    const s = startOfMonth(subMonths(selectedDate, 1));
-    const e = endOfMonth(subMonths(selectedDate, 1));
-    return transactions.filter(t =>
-      t.is_realized !== false && t.type !== 'transfer' &&
-      isWithinInterval(parseISO(t.date), { start: s, end: e })
-    );
-  }, [transactions, selectedDate]);
+  // "Sobra do mês" ≠ "taxa de poupança". Esta tela mostrava a sobra
+  // rotulada como taxa de poupança, contradizendo o Score financeiro,
+  // que mede o aporte líquido em investimento sobre a renda.
+  const sobraDoMes  = calcularSobraDoMes({ entradas: income, saidas: expense }).toFixed(1);
+  const poupanca    = useMemo(
+    () => calcularTaxaPoupanca({ transacoes: transactions, contas: accounts, dataReferencia: selectedDate }),
+    [transactions, accounts, selectedDate]
+  );
+
+  const prevTx = useMemo(
+    () => transacoesDoMes(transactions, accounts, subMonths(selectedDate, 1)).filter(ehRealizada),
+    [transactions, accounts, selectedDate]
+  );
   const prevExpense = prevTx.filter(t => t.type === "expense").reduce((s, t) => s + t.amount, 0);
   const expenseDiff = prevExpense > 0 ? (((expense - prevExpense) / prevExpense) * 100).toFixed(1) : null;
 
@@ -295,27 +302,13 @@ export default function Reports() {
     monthTx.filter(t => t.type === "expense").sort((a, b) => b.amount - a.amount).slice(0, 5),
     [monthTx]);
 
+  // Mesmo cálculo da tela de Metas. Antes havia uma versão simplificada
+  // aqui, que ignorava transferências e aporte periódico — a mesma meta
+  // aparecia com percentual diferente nas duas telas.
   const goalsWithProgress = useMemo(() => goals
     .filter(g => g.end_date && !isBefore(parseISO(g.end_date), new Date()))
-    .map(goal => {
-      let current = 0;
-      if (goal.linked_account_id) {
-        const acc = accounts.find(a => a.id === goal.linked_account_id);
-        current = acc?.initial_balance || 0;
-        transactions.forEach(t => {
-          if (t.account_id !== goal.linked_account_id || t.is_realized === false) return;
-          current += t.type === "income" ? t.amount : -t.amount;
-        });
-      } else {
-        const s = parseISO(goal.start_date), e = parseISO(goal.end_date);
-        transactions.forEach(t => {
-          if (t.is_realized === false || t.type !== goal.type) return;
-          if (goal.category && t.category !== goal.category) return;
-          if (isWithinInterval(parseISO(t.date), { start: s, end: e })) current += t.amount;
-        });
-      }
-      return { ...goal, current };
-    }), [goals, transactions, accounts]);
+    .map(goal => ({ ...goal, current: calcularProgressoMeta(goal, transactions, accounts) })),
+    [goals, transactions, accounts]);
 
   const tabs = [
     { key: "overview", label: "Resumo"   },
@@ -378,7 +371,8 @@ export default function Reports() {
               {/* KPIs */}
               <div className="grid grid-cols-2 gap-3">
                 {[
-                  { label: "Taxa de poupança", value: `${savingsRate}%`, sub: "da receita guardada", bg: "bg-emerald-50 dark:bg-emerald-950", text: "text-emerald-600 dark:text-emerald-400" },
+                  { label: "Sobra do mês", value: `${sobraDoMes}%`, sub: "das entradas não gastas", bg: "bg-blue-50 dark:bg-blue-950", text: "text-blue-600 dark:text-blue-400" },
+                  { label: "Taxa de poupança", value: `${poupanca.taxa}%`, sub: "da renda virou investimento", bg: "bg-emerald-50 dark:bg-emerald-950", text: "text-emerald-600 dark:text-emerald-400" },
                   { label: "Variação saídas", value: expenseDiff !== null ? `${expenseDiff > 0 ? "+" : ""}${expenseDiff}%` : "—", sub: "vs mês anterior", bg: expenseDiff > 0 ? "bg-red-50 dark:bg-red-950" : "bg-emerald-50 dark:bg-emerald-950", text: expenseDiff > 0 ? "text-red-600 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400" },
                 ].map(({ label, value, sub, bg, text }) => (
                   <div key={label} className={`${bg} rounded-2xl p-4`}>

@@ -15,6 +15,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { calcularProgressoMeta } from "@/domain/financas";
 
 function useIsDark() {
   const [dark, setDark] = useState(() => localStorage.getItem("darkMode") === "true");
@@ -101,81 +102,16 @@ export default function Goals() {
     onError: (err) => toast.error("Erro: " + err.message),
   });
 
-  const goalsWithProgress = useMemo(() => {
-    const getPeriodBounds = (goal) => {
-      const now = new Date();
-      if (goal.contribution_period === "daily") {
-        const s = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        const e = new Date(s); e.setDate(e.getDate() + 1);
-        return { start: s, end: e };
-      }
-      if (goal.contribution_period === "weekly") {
-        const s = new Date(now); s.setDate(now.getDate() - now.getDay()); s.setHours(0,0,0,0);
-        const e = new Date(s); e.setDate(s.getDate() + 7);
-        return { start: s, end: e };
-      }
-      if (goal.contribution_period === "yearly") {
-        return { start: new Date(now.getFullYear(), 0, 1), end: new Date(now.getFullYear() + 1, 0, 1) };
-      }
-      return { start: new Date(now.getFullYear(), now.getMonth(), 1), end: new Date(now.getFullYear(), now.getMonth() + 1, 1) };
-    };
-
-    return goals.map((goal) => {
-      let current = 0;
-      if (goal.type === "investment") {
-        if (goal.investment_type === "contribution") {
-          const { start, end } = getPeriodBounds(goal);
-          transactions.forEach((t) => {
-            if (!t.is_realized) return;
-            if (t.account_id !== goal.linked_account_id) return;
-            if (t.type !== "income") return;
-            const date = parseISO(t.date);
-            if (date < start || date >= end) return;
-            current += Number(t.amount);
-          });
-        } else {
-          const account = accounts.find(a => a.id === goal.linked_account_id);
-          if (account) {
-            current = Number(account.initial_balance) || 0;
-            transactions.forEach((t) => {
-              if (!t.is_realized) return;
-              if (t.type === "transfer") {
-                if (t.transfer_account_id === goal.linked_account_id) current += Number(t.amount);
-                if (t.account_id === goal.linked_account_id) current -= Number(t.amount);
-                return;
-              }
-              if (t.account_id !== goal.linked_account_id) return;
-              if (t.type === "income") current += Number(t.amount);
-              if (t.type === "expense") current -= Number(t.amount);
-            });
-          } else {
-            const start = parseISO(goal.start_date), end = parseISO(goal.end_date);
-            transactions.forEach((t) => {
-              if (!t.is_realized) return;
-              const date = parseISO(t.date);
-              if (!isWithinInterval(date, { start, end })) return;
-              const acc = accounts.find(a => a.id === t.account_id);
-              if (acc?.type === "investment") {
-                if (t.type === "income") current += Number(t.amount);
-                if (t.type === "expense") current -= Number(t.amount);
-              }
-            });
-          }
-        }
-      } else {
-        const start = parseISO(goal.start_date), end = parseISO(goal.end_date);
-        transactions.forEach((t) => {
-          if (!t.is_realized) return;
-          const date = parseISO(t.date);
-          if (!isWithinInterval(date, { start, end })) return;
-          if (t.type !== goal.type) return;
-          if (goal.category && t.category !== goal.category) return;
-          current += Number(t.amount);
-        });
-      }
-      return { ...goal, current };
-    });
-  }, [goals, transactions, accounts]);
+  // O progresso vem do módulo de domínio. Antes havia uma segunda
+  // implementação em Reports.jsx, e a mesma meta aparecia com
+  // percentuais diferentes nas duas telas.
+  const goalsWithProgress = useMemo(
+    () => goals.map((goal) => ({
+      ...goal,
+      current: calcularProgressoMeta(goal, transactions, accounts),
+    })),
+    [goals, transactions, accounts]
+  );
 
   const activeGoals     = goalsWithProgress.filter(g => !isBefore(parseISO(g.end_date), new Date()));
   const completedGoals  = goalsWithProgress.filter(g => isBefore(parseISO(g.end_date), new Date()));
