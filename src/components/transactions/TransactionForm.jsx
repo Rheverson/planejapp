@@ -51,6 +51,7 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
   const [recurringDay, setRecurringDay]         = useState(initialData?.recurring_day || todayDay);
   const [recurringEndDate, setRecurringEndDate] = useState(initialData?.recurring_end_date || "");
   const [showSuggestion, setShowSuggestion]     = useState(false);
+  const [erroValor, setErroValor]               = useState("");
 
   const { data: creditCards = [] } = useQuery({
     queryKey: ["credit_cards", user?.id],
@@ -83,6 +84,16 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
 
   const handleSubmit = (e) => {
     e.preventDefault();
+
+    // O banco tem CHECK (amount > 0). Sem esta guarda, digitar 0 passava
+    // pelo `required` do input e voltava como erro técnico do PostgREST.
+    const valor = parseFloat(amount);
+    if (!Number.isFinite(valor) || valor <= 0) {
+      setErroValor("Informe um valor maior que zero.");
+      return;
+    }
+    setErroValor("");
+
     if (description && category) confirmCategory(category, description);
     let invoiceMonth = null;
     let finalCreditCardId = null;
@@ -95,7 +106,7 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
     }
 
     onSubmit({
-      description, amount: parseFloat(amount) || 0, category,
+      description, amount: valor, category,
       date,
       is_realized: finalCreditCardId ? false : isRealized,
       credit_card_id: finalCreditCardId,
@@ -201,7 +212,7 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
             <label style={labelStyle}>Valor</label>
             <div style={{ position: "relative" }}>
               <span style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", fontSize: "0.9rem", fontWeight: 600, color: muted }}>R$</span>
-              <input type="number" step="0.01" placeholder="0,00" value={amount}
+              <input type="number" step="0.01" min="0.01" placeholder="0,00" value={amount}
                 onChange={e => setAmount(e.target.value)}
                 onFocus={e => e.target.style.borderColor = "#1d4ed8"}
                 onBlur={e => e.target.style.borderColor = inputBrd}
@@ -209,6 +220,11 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
                 style={{ ...inputStyle, height: 52, paddingLeft: 42, fontSize: "1.4rem", fontWeight: 800, fontFamily: "'Cabinet Grotesk',sans-serif", color: currentTypeC.text, letterSpacing: "-0.02em" }}
               />
             </div>
+            {erroValor && (
+              <p role="alert" style={{ fontSize: "0.72rem", color: "#e85d5d", marginTop: 6 }}>
+                {erroValor}
+              </p>
+            )}
           </div>
 
           {/* Descrição */}

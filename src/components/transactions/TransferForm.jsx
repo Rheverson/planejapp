@@ -12,6 +12,7 @@ export default function TransferForm({ accounts, onSubmit, onClose }) {
   const [fromAccountId, setFromAccountId] = useState("");
   const [toAccountId,   setToAccountId]   = useState("");
   const [amount,        setAmount]         = useState("");
+  const [erroValor,     setErroValor]      = useState("");
   const [date,          setDate]           = useState(today);
   const [description,   setDescription]   = useState("Transferência");
 
@@ -44,9 +45,16 @@ export default function TransferForm({ accounts, onSubmit, onClose }) {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!fromAccountId || !toAccountId || !amount) return;
+    // Atenção: "0" é string truthy, então `!amount` não barrava zero.
+    const valor = parseFloat(amount);
+    if (!fromAccountId || !toAccountId) return;
     if (fromAccountId === toAccountId) return;
-    onSubmit({ fromAccountId, toAccountId, amount: parseFloat(amount), date, description });
+    if (!Number.isFinite(valor) || valor <= 0) {
+      setErroValor("Informe um valor maior que zero.");
+      return;
+    }
+    setErroValor("");
+    onSubmit({ fromAccountId, toAccountId, amount: valor, date, description });
   };
 
   // Filtra contas disponíveis para destino (exclui a de origem)
@@ -94,7 +102,7 @@ export default function TransferForm({ accounts, onSubmit, onClose }) {
             <div style={{ position: "relative" }}>
               <span style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", fontSize: "0.9rem", fontWeight: 600, color: muted }}>R$</span>
               <input
-                type="number" step="0.01" placeholder="0,00" value={amount}
+                type="number" step="0.01" min="0.01" placeholder="0,00" value={amount}
                 onChange={e => setAmount(e.target.value)}
                 onFocus={e => e.target.style.borderColor = "#1d4ed8"}
                 onBlur={e => e.target.style.borderColor = inputBrd}
@@ -102,6 +110,11 @@ export default function TransferForm({ accounts, onSubmit, onClose }) {
                 style={{ ...inputStyle, height: 56, paddingLeft: 42, fontSize: "1.5rem", fontWeight: 800, fontFamily: "'Cabinet Grotesk',sans-serif", color: "#60a5fa", letterSpacing: "-0.02em" }}
               />
             </div>
+            {erroValor && (
+              <p role="alert" style={{ fontSize: "0.72rem", color: "#e85d5d", marginTop: 6 }}>
+                {erroValor}
+              </p>
+            )}
           </div>
 
           {/* De → Para */}

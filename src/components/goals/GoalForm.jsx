@@ -173,7 +173,7 @@ export default function GoalForm({ goal, accounts = [], onSubmit, onClose }) {
             </Label>
             <div className="relative">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500 text-sm">R$</span>
-              <Input type="number" step="0.01" placeholder="0,00" value={targetAmount}
+              <Input type="number" step="0.01" min="0.01" placeholder="0,00" value={targetAmount}
                 onChange={(e) => setTargetAmount(e.target.value)}
                 className={`pl-10 h-11 text-xl font-bold ${inputClass}`} required />
             </div>
