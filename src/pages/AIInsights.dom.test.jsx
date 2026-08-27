@@ -22,7 +22,15 @@ vi.mock("@/lib/AuthContext", () => ({ useAuth: () => ({ user: { id: "u1" } }) })
 vi.mock("@/lib/SharedProfileContext", () => ({ useSharedProfile: () => ({ isViewingSharedProfile: false, activeOwnerId: "u1" }) }));
 vi.mock("react-markdown", () => ({ default: ({ children }) => children }));
 
-const { ActionCard, podeExecutar, ACOES_SOBRE_REGISTRO } = await import("./AIInsights.jsx");
+const { ActionCard, ListaDeEscolha, podeExecutar, ACOES_SOBRE_REGISTRO } = await import("./AIInsights.jsx");
+const { supabase } = await import("@/lib/supabase");
+
+// Encadeamento do PostgREST: .select().in().eq() devolve as linhas.
+function bancoResponde(linhas) {
+  supabase.from.mockReturnValue({
+    select: () => ({ in: () => ({ eq: () => Promise.resolve({ data: linhas }) }) }),
+  });
+}
 
 const ID = "8f14e45f-ceea-467a-9575-1b1c1c1c1c1c";
 const OUTRO_ID = "11111111-2222-3333-4444-555555555555";
@@ -148,9 +156,9 @@ describe("garantia: o card confirmado é o registro executado", () => {
     expect(podeExecutar({ _type: "create_goal", name: "x" }, null).ok).toBe(true);
   });
 
-  it("cobre as cinco ações que dependem de registro", () => {
+  it("cobre as seis ações que dependem de registro", () => {
     expect(Object.keys(ACOES_SOBRE_REGISTRO).sort()).toEqual(
-      ["delete_account", "delete_goal", "delete_tx", "partial_realize", "realize"]
+      ["delete_account", "delete_goal", "delete_tx", "duplicate_tx", "partial_realize", "realize"]
     );
   });
 });
@@ -269,5 +277,77 @@ describe("pagamento parcial — o card veio do registro, não do texto da IA", (
   it("mostra o número do registro no cabeçalho", () => {
     montar({ _type: "partial_realize", id: ID, paid_amount: 200 }, despesa);
     expect(screen.getByText("#12")).toBeTruthy();
+  });
+});
+
+describe("lista de escolha — o Finn oferece, o usuário toca", () => {
+  // Antes disto o Finn respondia "indique o número da transação (por
+  // exemplo #475)" e o usuário tinha que digitar.
+  const A = "aaaaaaaa-1111-4111-8111-111111111111";
+  const B = "bbbbbbbb-2222-4222-8222-222222222222";
+
+  const gasolina = [
+    { id: A, ref: 12, description: "Gasolina", amount: 180, date: "2026-08-11", is_realized: true },
+    { id: B, ref: 19, description: "Gasolina posto Shell", amount: 240, date: "2026-08-23", is_realized: true },
+  ];
+
+  const montarLista = (props = {}) => {
+    const onEscolher = vi.fn();
+    render(
+      <ListaDeEscolha
+        escolha={{ acao: "duplicate_tx", ids: [A, B], userId: "u1" }}
+        onEscolher={onEscolher}
+        onCancelar={vi.fn()}
+        {...props}
+      />
+    );
+    return onEscolher;
+  };
+
+  it("mostra os candidatos com dados do banco", async () => {
+    bancoResponde(gasolina);
+    montarLista();
+    expect(await screen.findByText("Gasolina")).toBeTruthy();
+    expect(screen.getByText("Gasolina posto Shell")).toBeTruthy();
+    expect(screen.getByText("R$ 180,00")).toBeTruthy();
+    expect(screen.getByText("R$ 240,00")).toBeTruthy();
+  });
+
+  it("mostra o número de cada item", async () => {
+    bancoResponde(gasolina);
+    montarLista();
+    expect(await screen.findByText(/#12/)).toBeTruthy();
+    expect(screen.getByText(/#19/)).toBeTruthy();
+  });
+
+  it("o toque devolve o id daquele registro", async () => {
+    bancoResponde(gasolina);
+    const onEscolher = montarLista();
+    const botao = await screen.findByText("Gasolina posto Shell");
+    botao.closest("button").click();
+    expect(onEscolher).toHaveBeenCalledWith(B);
+  });
+
+  it("avisa quando nenhum candidato existe mais", async () => {
+    bancoResponde([]);
+    montarLista();
+    expect(await screen.findByText(/Não encontrei esses lançamentos/i)).toBeTruthy();
+  });
+
+  it("botões têm área de toque de 44px", async () => {
+    bancoResponde(gasolina);
+    montarLista();
+    await screen.findByText("Gasolina");
+    for (const b of screen.getAllByRole("button")) {
+      expect(b.className).toContain("min-h-11");
+    }
+  });
+
+  it("ação desconhecida não vira lista", () => {
+    bancoResponde(gasolina);
+    const { container } = render(
+      <ListaDeEscolha escolha={{ acao: "formatar_disco", ids: [A], userId: "u1" }} onEscolher={vi.fn()} onCancelar={vi.fn()} />
+    );
+    expect(container.textContent).toBe("");
   });
 });

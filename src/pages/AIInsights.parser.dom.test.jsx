@@ -92,6 +92,11 @@ describe("nada de bloco de ação na tela", () => {
     expect(t).toBe("Conselho aqui.");
   });
 
+  it("remove o rotulo escolher: da lista de opcoes", () => {
+    const t = limpo('Qual gasolina voce quer duplicar?\n\nescolher:\n__ESCOLHER__{"acao":"duplicate_tx","ids":["a"]}__END_ESCOLHER__');
+    expect(t).toBe("Qual gasolina voce quer duplicar?");
+  });
+
   it("nao remove texto que so parece rotulo", () => {
     const t = "Vou criar meta: guardar R$ 500 por mes.";
     expect(limpo(t)).toBe(t);
@@ -102,4 +107,37 @@ describe("nada de bloco de ação na tela", () => {
     expect(limpo(null)).toBe("");
     expect(limpo(undefined)).toBe("");
   });
+});
+
+describe("todo bloco conhecido some do texto", () => {
+  // Cada marcador do protocolo, com um corpo JSON minimo valido.
+  const CASOS = [
+    ['PENDING_TX', 'END_TX'],
+    ['RECURRING_TX', 'END_RECURRING'],
+    ['PARTIAL_REALIZE', 'END_PARTIAL'],
+    ['REALIZE_TX', 'END_REALIZE'],
+    ['DELETE_TX', 'END_DELETE'],
+    ['DUPLICATE_TX', 'END_DUPLICATE'],
+    ['ESCOLHER', 'END_ESCOLHER'],
+    ['CREATE_GOAL', 'END_GOAL'],
+    ['DELETE_GOAL', 'END_DELETE_GOAL'],
+    ['CREATE_ACCOUNT', 'END_ACCOUNT'],
+    ['DELETE_ACCOUNT', 'END_DELETE_ACCOUNT'],
+    ['SEND_INVITE', 'END_INVITE'],
+  ];
+
+  for (const [abre, fecha] of CASOS) {
+    it(`${abre} nao aparece na tela`, () => {
+      const bruto = `Texto do Finn. __${abre}__{"id":"x"}__${fecha}__`;
+      const t = limpo(bruto);
+      expect(t).toBe("Texto do Finn.");
+      expect(t).not.toContain(abre);
+      expect(t).not.toContain(fecha);
+    });
+
+    it(`${abre} tambem some sem os underscores`, () => {
+      const t = limpo(`Texto do Finn. ${abre}{"id":"x"}${fecha}`);
+      expect(t).not.toContain(abre);
+    });
+  }
 });

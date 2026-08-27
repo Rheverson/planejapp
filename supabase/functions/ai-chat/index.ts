@@ -268,6 +268,7 @@ lançar: __PENDING_TX__{"type":"expense|income","amount":0,"description":"","cat
 realizar prevista: __REALIZE_TX__{"id":"#N","date":"${nowStr}"}__END_REALIZE__
 realizar parte: __PARTIAL_REALIZE__{"id":"#N","paid_amount":0,"remaining_amount":0,"date":"${nowStr}"}__END_PARTIAL__
 excluir transação: __DELETE_TX__{"id":"#N"}__END_DELETE__
+duplicar transação: __DUPLICATE_TX__{"id":"#N"}__END_DUPLICATE__
 criar meta: __CREATE_GOAL__{"name":"","type":"expense","category":"","target_amount":0,"start_date":"${nowStr}","end_date":"AAAA-MM-DD"}__END_GOAL__
 excluir meta: __DELETE_GOAL__{"id":"#N"}__END_DELETE_GOAL__
 criar conta: __CREATE_ACCOUNT__{"name":"","type":"bank|digital|wallet|investment|other","initial_balance":0}__END_ACCOUNT__
@@ -277,11 +278,14 @@ Link de convite: ${referralLink}
 
 QUANDO NÃO GERAR BLOCO
 - "realizar parte" só com o valor pago dito pelo usuário e maior que zero. Sem valor, pergunte quanto foi pago.
-- Antes de excluir ou cancelar, pare e pergunte se:
+- Quando mais de um item casar com o pedido, NÃO peça para o usuário digitar o número. Escreva a pergunta e ofereça os candidatos com o bloco de escolha, que o app transforma em botões:
+  escolher: __ESCOLHER__{"acao":"delete_tx|realize|duplicate_tx|partial_realize|delete_goal|delete_account","ids":["#N","#N"]}__END_ESCOLHER__
+  Use no máximo 6 candidatos, os mais prováveis. A pergunta vai no texto; o bloco só carrega os números.
+- Antes de excluir, duplicar ou cancelar, pare e pergunte se:
   · "conta" puder ser conta bancária OU conta a pagar (é ambíguo em português) — pergunte qual das duas.
-  · mais de um item casar com a descrição — pergunte qual, citando os candidatos pelo número.
   · nenhum item casar — diga que não encontrou. Nunca escolha o mais parecido.
-  · o pedido não disser O QUE excluir ("exclui tudo", "apaga aquilo") — pergunte o quê.
+  · o pedido não disser O QUE fazer ("exclui tudo", "apaga aquilo") — pergunte o quê.
+- Nunca peça o valor de algo que já está nas listas acima: se o usuário mandou duplicar o salário e há um salário em ÚLTIMAS REALIZADAS, use aquele lançamento.
 - Nunca invente outro tipo de bloco.
 - "paguei o aluguel" → ache a prevista parecida e use __REALIZE_TX__.
 - Categorias: alimentação, transporte, moradia, saúde, educação, lazer, compras, outros.
@@ -317,7 +321,15 @@ QUANDO NÃO GERAR BLOCO
     // feita bloco a bloco: dentro de __DELETE_ACCOUNT__ o #3 so pode ser
     // uma conta. Um numero que nao estava na lista enviada simplesmente
     // nao vira UUID -- o app rejeita, em vez de agir no registro errado.
+    // O bloco de escolha carrega vários números numa lista, e a tabela
+    // depende da acao que ele anuncia.
+    const TABELA_DA_ACAO: Record<string, Map<number, string>> = {
+      delete_tx: mapaTx, realize: mapaTx, partial_realize: mapaTx, duplicate_tx: mapaTx,
+      delete_goal: mapaMeta, delete_account: mapaConta,
+    }
+
     const MAPA_POR_BLOCO: Array<[RegExp, Map<number, string>]> = [
+      [/__DUPLICATE_TX__[\s\S]*?__END_DUPLICATE__/g,          mapaTx],
       [/__PARTIAL_REALIZE__[\s\S]*?__END_PARTIAL__/g,          mapaTx],
       [/__REALIZE_TX__[\s\S]*?__END_REALIZE__/g,               mapaTx],
       [/__DELETE_TX__[\s\S]*?__END_DELETE__/g,                 mapaTx],
@@ -326,6 +338,28 @@ QUANDO NÃO GERAR BLOCO
     ]
 
     let respostaExpandida = resposta.texto
+
+    // __ESCOLHER__ primeiro: os ids vêm numa lista, não em "id":"#N".
+    respostaExpandida = respostaExpandida.replace(
+      /__ESCOLHER__[\s\S]*?__END_ESCOLHER__/g,
+      (bloco) => {
+        const corpo = bloco.match(/\{[\s\S]*\}/)
+        let dados: any = null
+        try { dados = corpo ? JSON.parse(corpo[0]) : null } catch { dados = null }
+        const mapa = dados && TABELA_DA_ACAO[String(dados.acao)]
+        if (!mapa || !Array.isArray(dados.ids)) return ''
+
+        // Só entram os números que estavam na lista enviada. Um número
+        // inventado simplesmente não vira opção.
+        const ids = dados.ids
+          .map((n: any) => mapa.get(Number(String(n).replace('#', ''))))
+          .filter(Boolean)
+          .slice(0, 6)
+        if (!ids.length) return ''
+        return `__ESCOLHER__${JSON.stringify({ acao: dados.acao, ids })}__END_ESCOLHER__`
+      },
+    )
+
     for (const [blocoRe, mapa] of MAPA_POR_BLOCO) {
       respostaExpandida = respostaExpandida.replace(blocoRe, (bloco) =>
         bloco.replace(/"id"\s*:\s*"?#?(\d{1,7})"?/g, (original, numero) => {
@@ -338,7 +372,7 @@ QUANDO NÃO GERAR BLOCO
     // Descarta bloco que nao pode dar em acao valida.
     const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
     const TODOS_OS_BLOCOS =
-      /[*]*_{0,2}(PENDING_TX|RECURRING_TX|PARTIAL_REALIZE|REALIZE_TX|DELETE_TX|CREATE_GOAL|DELETE_GOAL|CREATE_ACCOUNT|DELETE_ACCOUNT|SEND_INVITE)_{0,2}[*]*[\s\S]*?[*]*_{0,2}(END_TX|END_RECURRING|END_PARTIAL|END_REALIZE|END_DELETE_GOAL|END_DELETE_ACCOUNT|END_DELETE|END_GOAL|END_ACCOUNT|END_INVITE)_{0,2}[*]*/g
+      /[*]*_{0,2}(PENDING_TX|RECURRING_TX|PARTIAL_REALIZE|REALIZE_TX|DELETE_TX|DUPLICATE_TX|CREATE_GOAL|DELETE_GOAL|CREATE_ACCOUNT|DELETE_ACCOUNT|SEND_INVITE)_{0,2}[*]*[\s\S]*?[*]*_{0,2}(END_TX|END_RECURRING|END_PARTIAL|END_REALIZE|END_DELETE_GOAL|END_DELETE_ACCOUNT|END_DUPLICATE|END_DELETE|END_GOAL|END_ACCOUNT|END_INVITE)_{0,2}[*]*/g
 
     respostaExpandida = respostaExpandida.replace(TODOS_OS_BLOCOS, (bloco, tipo) => {
       const corpo = bloco.match(/\{[\s\S]*\}/)
@@ -348,7 +382,7 @@ QUANDO NÃO GERAR BLOCO
 
       // Numero que nao estava na lista nunca virou UUID: o modelo
       // apontou para um item que o usuario nao tem.
-      const precisaDeId = ['PARTIAL_REALIZE', 'REALIZE_TX', 'DELETE_TX', 'DELETE_GOAL', 'DELETE_ACCOUNT'].includes(tipo)
+      const precisaDeId = ['PARTIAL_REALIZE', 'REALIZE_TX', 'DELETE_TX', 'DUPLICATE_TX', 'DELETE_GOAL', 'DELETE_ACCOUNT'].includes(tipo)
       if (precisaDeId && !UUID_RE.test(String(dados.id ?? ''))) {
         console.warn('bloco descartado: id nao resolvido', tipo)
         return ''

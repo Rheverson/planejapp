@@ -11,7 +11,7 @@ import {
   TrendingUp, TrendingDown, Wallet, MessageCircle,
   BarChart2, RefreshCw, Clock, ChevronDown, ChevronUp,
   CheckCircle2, AlertTriangle, Info, PiggyBank, Calendar,
-  Target, Building2, Mail, Trash2, CheckCheck, Mic, MicOff
+  Target, Building2, Mail, Trash2, CheckCheck, Mic, MicOff, Copy
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -95,6 +95,8 @@ function parseRecurringTx(c)    { return parseBlock(c, "RECURRING_TX",    "END_R
 function parsePartialRealize(c) { return parseBlock(c, "PARTIAL_REALIZE", "END_PARTIAL")       }
 function parseRealizeTx(c)      { return parseBlock(c, "REALIZE_TX",      "END_REALIZE")       }
 function parseDeleteTx(c)       { return parseBlock(c, "DELETE_TX",       "END_DELETE")        }
+function parseDuplicateTx(c)    { return parseBlock(c, "DUPLICATE_TX",    "END_DUPLICATE")     }
+function parseEscolher(c)       { return parseBlock(c, "ESCOLHER",        "END_ESCOLHER")      }
 function parseCreateGoal(c)     { return parseBlock(c, "CREATE_GOAL",     "END_GOAL")          }
 function parseDeleteGoal(c)     { return parseBlock(c, "DELETE_GOAL",     "END_DELETE_GOAL")   }
 function parseCreateAccount(c)  { return parseBlock(c, "CREATE_ACCOUNT",  "END_ACCOUNT")       }
@@ -110,6 +112,8 @@ const BLOCOS_DE_ACAO = [
   ["PARTIAL_REALIZE", "END_PARTIAL"],
   ["REALIZE_TX", "END_REALIZE"],
   ["DELETE_TX", "END_DELETE"],
+  ["DUPLICATE_TX", "END_DUPLICATE"],
+  ["ESCOLHER", "END_ESCOLHER"],
   ["CREATE_GOAL", "END_GOAL"],
   ["DELETE_GOAL", "END_DELETE_GOAL"],
   ["CREATE_ACCOUNT", "END_ACCOUNT"],
@@ -135,7 +139,7 @@ const ABERTURA_ORFA = new RegExp(
 // Rotulo do catalogo de acoes copiado do prompt ("1 lancar:").
 // O modelo transcreve com ou sem acento.
 const ROTULO_DE_ACAO =
-  /^\s*\d*\s*(lan[cç]ar|realizar prevista|realizar parte|excluir transa[cç][aã]o|criar meta|excluir meta|criar conta|excluir conta|convidar)\s*:\s*$/gim;
+  /^\s*\d*\s*(lan[cç]ar|realizar prevista|realizar parte|excluir transa[cç][aã]o|duplicar transa[cç][aã]o|duplicar|escolher|criar meta|excluir meta|criar conta|excluir conta|convidar)\s*:\s*$/gim;
 
 export function cleanContent(content) {
   if (!content) return "";
@@ -204,7 +208,7 @@ export const ehUuid = (v) =>
   typeof v === "string" &&
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
 
-const ACOES_COM_ID = ["realize", "partial_realize", "delete_tx", "delete_goal", "delete_account"];
+const ACOES_COM_ID = ["realize", "partial_realize", "delete_tx", "duplicate_tx", "delete_goal", "delete_account"];
 
 /**
  * A ação pode ser executada?
@@ -225,11 +229,81 @@ export function podeExecutar(action, registro) {
 
 export const ACOES_SOBRE_REGISTRO = {
   delete_tx:       { tabela: "transactions", rotulo: "transação" },
+  duplicate_tx:    { tabela: "transactions", rotulo: "transação" },
   realize:         { tabela: "transactions", rotulo: "transação" },
   partial_realize: { tabela: "transactions", rotulo: "transação" },
   delete_goal:     { tabela: "goals",        rotulo: "meta" },
   delete_account:  { tabela: "accounts",     rotulo: "conta" },
 };
+
+// Candidatos que o Finn ofereceu. Os rotulos saem do banco: a IA
+// escolhe QUAIS itens listar, nunca o que cada botao diz.
+export function ListaDeEscolha({ escolha, onEscolher, onCancelar }) {
+  const alvo = ACOES_SOBRE_REGISTRO[escolha?.acao];
+  const [itens, setItens] = useState(null);
+
+  useEffect(() => {
+    if (!alvo || !escolha?.ids?.length) { setItens([]); return; }
+    let cancelado = false;
+    (async () => {
+      const colunas = alvo.tabela === "transactions"
+        ? "id, ref, description, amount, date, is_realized"
+        : alvo.tabela === "goals" ? "id, ref, name, target_amount" : "id, ref, name, type";
+      const { data } = await supabase
+        .from(alvo.tabela).select(colunas)
+        .in("id", escolha.ids).eq("user_id", escolha.userId);
+      if (cancelado) return;
+      // A ordem em que o Finn ofereceu é a ordem que o usuário lê.
+      const porId = new Map((data || []).map(d => [d.id, d]));
+      setItens(escolha.ids.map(id => porId.get(id)).filter(Boolean));
+    })();
+    return () => { cancelado = true; };
+  }, [escolha, alvo]);
+
+  if (!alvo) return null;
+  if (itens === null) {
+    return <p className="text-sm text-gray-500 dark:text-gray-400 px-1 py-2">Carregando opções…</p>;
+  }
+  if (!itens.length) {
+    return <p className="text-sm text-gray-500 dark:text-gray-400 px-1 py-2">Não encontrei esses lançamentos.</p>;
+  }
+
+  const verbo = escolha.acao === "delete_tx" || escolha.acao === "delete_goal" || escolha.acao === "delete_account"
+    ? "Excluir" : escolha.acao === "duplicate_tx" ? "Duplicar" : "Escolher";
+
+  return (
+    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col gap-1.5 w-full">
+      {itens.map((item) => (
+        <button
+          key={item.id}
+          onClick={() => onEscolher(item.id)}
+          className="w-full min-h-11 flex items-center justify-between gap-3 text-left rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-2.5 active:scale-[0.99] transition"
+        >
+          <span className="min-w-0">
+            <span className="block text-sm font-medium text-gray-800 dark:text-gray-100 truncate">
+              {item.description || item.name}
+            </span>
+            <span className="block text-xs text-gray-500 dark:text-gray-400">
+              #{item.ref}{item.date ? ` · ${dataBr(item.date)}` : ""}
+              {item.is_realized === false ? " · previsto" : ""}
+            </span>
+          </span>
+          <span className="text-sm font-semibold text-gray-700 dark:text-gray-200 flex-shrink-0">
+            {item.amount !== undefined ? fmt(item.amount)
+              : item.target_amount !== undefined ? fmt(item.target_amount) : ""}
+          </span>
+        </button>
+      ))}
+      <button
+        onClick={onCancelar}
+        className="self-start text-xs text-gray-500 dark:text-gray-400 px-1 py-2 min-h-11"
+      >
+        Nenhum desses
+      </button>
+      <p className="text-[11px] text-gray-400 px-1">Toque para {verbo.toLowerCase()} — você ainda confirma depois.</p>
+    </motion.div>
+  );
+}
 
 export function ActionCard({ action, registro, onConfirm, onCancel, confirmLoading, onSetAutoRealize }) {
   if (!action) return null;
@@ -241,6 +315,7 @@ export function ActionCard({ action, registro, onConfirm, onCancel, confirmLoadi
     recurring:       { icon: RefreshCw,  color: "text-violet-600", title: "Lançamento recorrente", headerColor: "from-violet-50 to-indigo-50 dark:from-violet-900/30 dark:to-indigo-900/30", borderColor: "border-violet-200 dark:border-violet-800" },
     partial_realize: { icon: CheckCheck,  color: "text-blue-600",    title: "Pagamento parcial",    headerColor: "from-blue-50 to-indigo-50 dark:from-blue-900/30 dark:to-indigo-900/30",     borderColor: "border-blue-200 dark:border-blue-800"    },
     realize:         { icon: CheckCheck,  color: "text-emerald-600", title: "Realizar prevista",    headerColor: "from-emerald-50 to-teal-50 dark:from-emerald-900/30 dark:to-teal-900/30",  borderColor: "border-emerald-200 dark:border-emerald-800" },
+    duplicate_tx:    { icon: Copy,        color: "text-violet-600",  title: "Duplicar lançamento",  headerColor: "from-violet-50 to-indigo-50 dark:from-violet-900/30 dark:to-indigo-900/30", borderColor: "border-violet-200 dark:border-violet-800" },
     delete_tx:       { icon: Trash2,      color: "text-red-600",     title: "Excluir transação",    headerColor: "from-red-50 to-rose-50 dark:from-red-900/30 dark:to-rose-900/30",          borderColor: "border-red-200 dark:border-red-800"      },
     create_goal:     { icon: Target,      color: "text-violet-600",  title: "Criar meta",           headerColor: "from-violet-50 to-indigo-50 dark:from-violet-900/30 dark:to-indigo-900/30",borderColor: "border-violet-200 dark:border-violet-800" },
     delete_goal:     { icon: Trash2,      color: "text-red-600",     title: "Excluir meta",         headerColor: "from-red-50 to-rose-50 dark:from-red-900/30 dark:to-rose-900/30",          borderColor: "border-red-200 dark:border-red-800"      },
@@ -343,6 +418,13 @@ export function ActionCard({ action, registro, onConfirm, onCancel, confirmLoadi
             {doAlvo.dados.accounts?.name && <Row label="Conta" value={doAlvo.dados.accounts.name} />}
             <Row label="Data" value={dataBr(action.date)} />
           </>)}
+          {action._type === "duplicate_tx" && doAlvo?.status === "ok" && (<>
+            <Row label="Descrição" value={doAlvo.dados.description} />
+            <Row label="Valor" value={<span className="text-lg font-bold text-violet-600">{fmt(doAlvo.dados.amount)}</span>} />
+            {doAlvo.dados.category && <Row label="Categoria" value={<span className="capitalize">{doAlvo.dados.category}</span>} />}
+            {doAlvo.dados.accounts?.name && <Row label="Conta" value={doAlvo.dados.accounts.name} />}
+            <p className="text-xs text-gray-500">Uma cópia deste lançamento será criada com a data de hoje.</p>
+          </>)}
           {action._type === "delete_tx" && doAlvo?.status === "ok" && (<>
             <Row label="Descrição" value={doAlvo.dados.description} />
             <Row label="Valor" value={<span className="text-lg font-bold text-red-600">{fmt(doAlvo.dados.amount)}</span>} />
@@ -412,6 +494,8 @@ function ChatTab({ user, dark }) {
   const [input, setInput]                   = useState("");
   const [loading, setLoading]               = useState(false);
   const [pendingAction, setPendingAction]   = useState(null);
+  // Candidatos oferecidos pelo Finn, aguardando o toque do usuário.
+  const [escolha, setEscolha]               = useState(null);
   // A linha real do banco correspondente à ação pendente.
   // status: "carregando" | "ok" | "ausente"
   const [registro, setRegistro]             = useState(null);
@@ -486,12 +570,23 @@ function ChatTab({ user, dark }) {
     return () => { cancelado = true; };
   }, [pendingAction, user?.id]);
 
+  const detectEscolha = (reply) => {
+    const e = parseEscolher(reply);
+    if (!e?.acao || !Array.isArray(e.ids) || !e.ids.length) return null;
+    // Só ids reais viram opção: o servidor já traduziu os números, e o
+    // que não estava na lista dele nunca chegou aqui como UUID.
+    const ids = e.ids.filter(ehUuid).slice(0, 6);
+    if (!ids.length || !ACOES_SOBRE_REGISTRO[e.acao]) return null;
+    return { acao: e.acao, ids, userId: user.id };
+  };
+
   const detectAction = (reply) => {
     const rc = parseRecurringTx(reply); if (rc) return { ...rc, _type: "recurring" };
     const tx = parsePendingTx(reply);   if (tx) return { ...tx, _type: "tx" };
     const pr = parsePartialRealize(reply); if (pr) return { ...pr, _type: "partial_realize" };
     const re = parseRealizeTx(reply);   if (re) return { ...re, _type: "realize" };
     const dt = parseDeleteTx(reply);    if (dt) return { ...dt, _type: "delete_tx" };
+    const du = parseDuplicateTx(reply); if (du) return { ...du, _type: "duplicate_tx" };
     const cg = parseCreateGoal(reply);  if (cg) return { ...cg, _type: "create_goal" };
     const dg = parseDeleteGoal(reply);  if (dg) return { ...dg, _type: "delete_goal" };
     const ca = parseCreateAccount(reply); if (ca) return { ...ca, _type: "create_account" };
@@ -585,8 +680,12 @@ function ChatTab({ user, dark }) {
         throw Object.assign(new Error("resposta vazia"), { motivo: "vazio" });
       }
 
-      const action = detectAction(reply);
-      if (action) setPendingAction(action); else setPendingAction(null);
+      // Uma lista de candidatos substitui a ação: o usuário escolhe
+      // primeiro, e só então aparece o cartão de confirmação.
+      const opcoes = detectEscolha(reply);
+      const action = opcoes ? null : detectAction(reply);
+      setEscolha(opcoes);
+      setPendingAction(action);
       setMessages(prev => [...prev, { role: "assistant", content: reply }]);
     } catch (e) {
       setMessages(prev => [...prev, { role: "assistant", content: mensagemDeFalhaDaIA(e) }]);
@@ -595,6 +694,15 @@ function ChatTab({ user, dark }) {
       setLoading(false);
       loadingRef.current = false;
     }
+  };
+
+  // O toque no candidato monta a ação com o id daquele registro. Daí
+  // em diante é o caminho de sempre: o cartão busca a linha real e o
+  // usuário ainda confirma.
+  const escolherItem = (id) => {
+    if (!escolha || !ehUuid(id) || !escolha.ids.includes(id)) return;
+    setPendingAction({ _type: escolha.acao, id });
+    setEscolha(null);
   };
 
   const confirmAction = async () => {
@@ -739,6 +847,27 @@ function ChatTab({ user, dark }) {
         }
         setPendingAction(null);
         setMessages(prev => [...prev, { role: "assistant", content: `✅ **Pago!** ${registro.dados.description} marcado como realizado.` }]);
+      } else if (action._type === "duplicate_tx") {
+        // A cópia sai da linha real que o usuário confirmou no card,
+        // não de campos que a IA tenha escrito.
+        const base = registro.dados;
+        const { error } = await supabase.from("transactions").insert({
+          user_id: user.id,
+          type: base.type,
+          amount: base.amount,
+          description: base.description,
+          category: base.category,
+          account_id: base.account_id,
+          date: confirmDate,
+          is_realized: true,
+        });
+        if (error) throw error;
+        setPendingAction(null);
+        setRegistro(null);
+        setMessages(prev => [...prev, {
+          role: "assistant",
+          content: `✅ **Duplicado!**\n\n${fmt(base.amount)} — ${base.description}\n📅 ${confirmDate}`,
+        }]);
       } else if (action._type === "delete_tx") {
         // `.select()` devolve as linhas afetadas. Sem isso o app dizia
         // "excluída" mesmo quando o filtro não casava com nada — por
@@ -803,7 +932,7 @@ function ChatTab({ user, dark }) {
   };
 
   const { listening, start, stop } = useSpeechRecognition({ onResult: (transcript) => { setInput(transcript); sendMessage(transcript); } });
-  const cancelAction = () => { setPendingAction(null); setRegistro(null); setWizard(null); setMessages(prev => [...prev, { role: "assistant", content: "❌ Cancelado!" }]); };
+  const cancelAction = () => { setPendingAction(null); setRegistro(null); setEscolha(null); setWizard(null); setMessages(prev => [...prev, { role: "assistant", content: "❌ Cancelado!" }]); };
 
   return (
     <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, background: bg }}>
@@ -840,6 +969,16 @@ function ChatTab({ user, dark }) {
           </motion.div>
           );
         })}
+
+        <AnimatePresence>
+          {escolha && (
+            <ListaDeEscolha
+              escolha={escolha}
+              onEscolher={escolherItem}
+              onCancelar={() => setEscolha(null)}
+            />
+          )}
+        </AnimatePresence>
 
         <AnimatePresence>
           {pendingAction && (
