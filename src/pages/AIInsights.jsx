@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSharedProfile } from "@/lib/SharedProfileContext";
+import { gerarOcorrenciasRecorrentes, dataNoMes, MAX_OCORRENCIAS } from "@/domain/financas";
 
 const NAV_HEIGHT = 68;
 
@@ -411,11 +412,47 @@ function ChatTab({ user, dark }) {
         setPendingAction(null);
         setMessages(prev => [...prev, { role: "assistant", content: `✅ **Transferência lançada!**\n\n🔄 **${fmt(action.amount)}** — ${action.from_account} → ${action.to_account}` }]);
       } else if (action._type === "recurring") {
+        // ✅ Motor único: o Finn passa pelo mesmo gerador da Home e da tela
+        // de Transações. A Edge Function create-recurring era um terceiro
+        // caminho, que gravava is_recurring = true e nenhum
+        // recurring_group_id — as séries criadas por aqui não apareciam no
+        // modal de "editar todos os seguintes".
         setPendingAction(null);
-        const { data: result, error } = await supabase.functions.invoke("create-recurring", { body: { userId: user.id, type: action.type, amount: action.amount, description: action.description, category: action.category, accountName: action.account_name, day: action.day, months: action.months, frequency: action.frequency || "monthly", startDate: action.start_date || getBrasiliaDate(), autoRealize: action.auto_realize ?? false } });
-        if (error || result?.error) throw new Error(result?.error || "Erro ao criar recorrentes");
+
+        let accountId = action.account_id || null;
+        if (!accountId && action.account_name) {
+          const { data: accs } = await supabase.from("accounts").select("id")
+            .eq("user_id", user.id).ilike("name", `%${action.account_name}%`).limit(1);
+          accountId = accs?.[0]?.id || null;
+        }
+
+        const inicio = action.start_date || getBrasiliaDate();
+        const meses = Math.min(Math.abs(parseInt(action.months, 10) || 12), MAX_OCORRENCIAS);
+        const dia = action.day ? Math.min(Math.max(parseInt(action.day, 10), 1), 31) : null;
+        const base = dia ? dataNoMes(inicio.slice(0, 7), dia) : inicio;
+
+        // Data-fim derivada da quantidade de meses pedida pelo usuário.
+        const fim = new Date(`${base}T12:00:00`);
+        fim.setMonth(fim.getMonth() + meses - 1);
+
+        const ocorrencias = gerarOcorrenciasRecorrentes({
+          user_id: user.id,
+          type: action.type || "expense",
+          amount: action.amount,
+          description: action.description,
+          category: action.category || null,
+          account_id: accountId,
+          date: base,
+          recurring_frequency: action.frequency || "monthly",
+          recurring_end_date: fim.toISOString().slice(0, 10),
+          auto_realize: action.auto_realize ?? false,
+        });
+
+        const { error } = await supabase.from("transactions").insert(ocorrencias);
+        if (error) throw error;
+
         const autoMsg = action.auto_realize ? " com **registro automático** ✅" : "";
-        setMessages(prev => [...prev, { role: "assistant", content: `✅ **${result.inserted} lançamentos recorrentes criados!**\n\n🔄 **${fmt(action.amount)}** — ${action.description}\n📅 Todo dia ${action.day} por ${action.months} meses${autoMsg}` }]);
+        setMessages(prev => [...prev, { role: "assistant", content: `✅ **${ocorrencias.length} lançamentos recorrentes criados!**\n\n🔄 **${fmt(action.amount)}** — ${action.description}\n📅 A partir de ${base.split("-").reverse().join("/")}${autoMsg}` }]);
       } else if (action._type === "partial_realize") {
         await supabase.from("transactions").update({ amount: action.remaining_amount }).eq("id", action.id).eq("user_id", user.id);
         let accountId = null;

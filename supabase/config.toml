@@ -33,11 +33,6 @@ enabled = true
 verify_jwt = true
 entrypoint = "./functions/cancel-subscription/index.ts"
 
-[functions.create-recurring]
-enabled = true
-verify_jwt = true
-entrypoint = "./functions/create-recurring/index.ts"
-
 [functions.verify-phone]
 enabled = true
 verify_jwt = true
