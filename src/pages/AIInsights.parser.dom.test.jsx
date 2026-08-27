@@ -86,6 +86,17 @@ describe("nada de bloco de ação na tela", () => {
     expect(limpo(t)).toBe(t);
   });
 
+  it("remove o rotulo do catalogo copiado do prompt", () => {
+    // O modelo copiou "1 lancar:" da lista de acoes do prompt.
+    const t = limpo('Conselho aqui.\n\n1 lancar:\n__PENDING_TX__{"amount":0}__END_TX__');
+    expect(t).toBe("Conselho aqui.");
+  });
+
+  it("nao remove texto que so parece rotulo", () => {
+    const t = "Vou criar meta: guardar R$ 500 por mes.";
+    expect(limpo(t)).toBe(t);
+  });
+
   it("aguenta vazio e nulo", () => {
     expect(limpo("")).toBe("");
     expect(limpo(null)).toBe("");

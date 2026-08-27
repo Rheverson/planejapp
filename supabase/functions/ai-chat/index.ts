@@ -219,6 +219,8 @@ serve(async (req) => {
 COMO RESPONDER
 - Responda com NÚMERO, não com conselho genérico. "Corte gastos" não serve; "os R$${catsOrdenadas[0] ? (catsOrdenadas[0][1] as number).toFixed(0) : '0'} em ${catsOrdenadas[0]?.[0] || 'x'} são o maior peso do mês" serve.
 - Use os dados abaixo. Se o dado não estiver aqui, diga que não tem — nunca estime nem invente.
+- As listas abaixo SÃO os registros do usuário. Se houver qualquer linha em CONTAS, PREVISTAS ou ÚLTIMAS REALIZADAS, nunca diga que não há registros: cite pelo menos um lançamento concreto, com valor e data.
+- Ao falar de um lançamento, conta ou meta específica, cite o número dele (#3) junto com a descrição — é o mesmo número que aparece na tela do usuário.
 - 2 a 5 frases. Diga o que está acontecendo, por quê, e qual o próximo passo concreto com valor e prazo.
 - Compare sempre com a referência: média dos 3 meses, a meta do usuário, ou o mês anterior.
 - Fale em reais e em percentual da renda. Arredonde para real inteiro.
@@ -254,21 +256,26 @@ COMO LER OS NÚMEROS
 IDENTIFICAÇÃO
 Cada item das listas acima tem um número próprio (#1, #2...). Contas, transações e metas numeram separado: a conta #3 não é a transação #3. Use o número exatamente como aparece na lista. Nunca invente um número que não esteja listado.
 
-AÇÕES
-Formato: o bloco vai SOZINHO na última linha, depois do texto. Nunca no meio da frase, nunca dois blocos na mesma resposta, nunca dentro de negrito ou lista. Se o usuário pedir várias coisas, faça UMA e diga que faz a próxima em seguida.
-1 lançar: __PENDING_TX__{"type":"expense|income","amount":0,"description":"","category":"","account_name":"","date":"${nowStr}","is_realized":true}__END_TX__
-2 realizar prevista: __REALIZE_TX__{"id":"#N","date":"${nowStr}"}__END_REALIZE__
-3 realizar parte: __PARTIAL_REALIZE__{"id":"#N","paid_amount":0,"remaining_amount":0,"date":"${nowStr}"}__END_PARTIAL__
-4 excluir transação: __DELETE_TX__{"id":"#N"}__END_DELETE__
-5 criar meta: __CREATE_GOAL__{"name":"","type":"expense","category":"","target_amount":0,"start_date":"${nowStr}","end_date":"AAAA-MM-DD"}__END_GOAL__
-6 excluir meta: __DELETE_GOAL__{"id":"#N"}__END_DELETE_GOAL__
-7 criar conta: __CREATE_ACCOUNT__{"name":"","type":"bank|digital|wallet|investment|other","initial_balance":0}__END_ACCOUNT__
-8 excluir conta: __DELETE_ACCOUNT__{"id":"#N"}__END_DELETE_ACCOUNT__
-9 convidar: __SEND_INVITE__{"email":"","name":""}__END_INVITE__
+QUANDO AGIR — teste antes de gerar qualquer bloco
+Pergunte a si mesmo: o usuário MANDOU fazer, nesta última mensagem, com verbo no imperativo ("exclui", "paga", "realiza", "lança", "cria")?
+- NÃO → responda só com texto. NENHUM bloco. Vale para toda pergunta ("estou gastando muito?", "onde vai meu dinheiro?", "como resolver?", "o que você sugere?") e para todo pedido de análise, plano ou recomendação.
+- SIM → um bloco só, o da coisa que ele mandou.
+Recomendar não é executar. Se a sua análise sugere realizar uma receita ou cortar uma despesa, ESCREVA a sugestão citando o número do item e PARE. Quem decide é o usuário: ele responde "pode realizar o #7" e só então você gera o bloco.
+
+AÇÕES — catálogo interno. NUNCA escreva o nome nem o rótulo de uma ação na resposta ("lançar:", "realizar prevista:", "AÇÕES"): o usuário não pode ver nada disto. Ele vê só o seu texto e um cartão de confirmação montado pelo app.
+Formato: no máximo UM bloco por resposta, sozinho na última linha, depois do texto. Nunca no meio da frase, nunca em negrito, nunca dentro de lista. Se o usuário pedir várias coisas, faça a primeira e diga que faz a próxima em seguida.
+lançar: __PENDING_TX__{"type":"expense|income","amount":0,"description":"","category":"","account_name":"","date":"${nowStr}","is_realized":true}__END_TX__
+realizar prevista: __REALIZE_TX__{"id":"#N","date":"${nowStr}"}__END_REALIZE__
+realizar parte: __PARTIAL_REALIZE__{"id":"#N","paid_amount":0,"remaining_amount":0,"date":"${nowStr}"}__END_PARTIAL__
+excluir transação: __DELETE_TX__{"id":"#N"}__END_DELETE__
+criar meta: __CREATE_GOAL__{"name":"","type":"expense","category":"","target_amount":0,"start_date":"${nowStr}","end_date":"AAAA-MM-DD"}__END_GOAL__
+excluir meta: __DELETE_GOAL__{"id":"#N"}__END_DELETE_GOAL__
+criar conta: __CREATE_ACCOUNT__{"name":"","type":"bank|digital|wallet|investment|other","initial_balance":0}__END_ACCOUNT__
+excluir conta: __DELETE_ACCOUNT__{"id":"#N"}__END_DELETE_ACCOUNT__
+convidar: __SEND_INVITE__{"email":"","name":""}__END_INVITE__
 Link de convite: ${referralLink}
 
 QUANDO NÃO GERAR BLOCO
-- Pergunta ("posso gastar?", "quanto gastei?", "como resolver?") é só texto. Analisar e sugerir NÃO é executar: sugira em palavras e espere o usuário pedir.
 - "realizar parte" só com o valor pago dito pelo usuário e maior que zero. Sem valor, pergunte quanto foi pago.
 - Antes de excluir ou cancelar, pare e pergunte se:
   · "conta" puder ser conta bancária OU conta a pagar (é ambíguo em português) — pergunte qual das duas.
@@ -327,6 +334,34 @@ QUANDO NÃO GERAR BLOCO
         }),
       )
     }
+
+    // Descarta bloco que nao pode dar em acao valida.
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    const TODOS_OS_BLOCOS =
+      /[*]*_{0,2}(PENDING_TX|RECURRING_TX|PARTIAL_REALIZE|REALIZE_TX|DELETE_TX|CREATE_GOAL|DELETE_GOAL|CREATE_ACCOUNT|DELETE_ACCOUNT|SEND_INVITE)_{0,2}[*]*[\s\S]*?[*]*_{0,2}(END_TX|END_RECURRING|END_PARTIAL|END_REALIZE|END_DELETE_GOAL|END_DELETE_ACCOUNT|END_DELETE|END_GOAL|END_ACCOUNT|END_INVITE)_{0,2}[*]*/g
+
+    respostaExpandida = respostaExpandida.replace(TODOS_OS_BLOCOS, (bloco, tipo) => {
+      const corpo = bloco.match(/\{[\s\S]*\}/)
+      let dados: any = null
+      try { dados = corpo ? JSON.parse(corpo[0]) : null } catch { dados = null }
+      if (!dados) return ''
+
+      // Numero que nao estava na lista nunca virou UUID: o modelo
+      // apontou para um item que o usuario nao tem.
+      const precisaDeId = ['PARTIAL_REALIZE', 'REALIZE_TX', 'DELETE_TX', 'DELETE_GOAL', 'DELETE_ACCOUNT'].includes(tipo)
+      if (precisaDeId && !UUID_RE.test(String(dados.id ?? ''))) {
+        console.warn('bloco descartado: id nao resolvido', tipo)
+        return ''
+      }
+
+      // Pagamento parcial de zero nao e pagamento parcial.
+      if (tipo === 'PARTIAL_REALIZE' && !(Number(dados.paid_amount) > 0)) {
+        console.warn('bloco descartado: parcial sem valor pago')
+        return ''
+      }
+
+      return bloco
+    }).trim()
 
     return new Response(JSON.stringify({ reply: respostaExpandida, uso: resposta.uso }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" }

@@ -132,12 +132,21 @@ const ABERTURA_ORFA = new RegExp(
   `[*]*_{0,2}(${BLOCOS_DE_ACAO.map(([abre]) => abre).join("|")})_{0,2}[*]*\\s*\\{[\\s\\S]*$`,
 );
 
+// Rotulo do catalogo de acoes copiado do prompt ("1 lancar:").
+// O modelo transcreve com ou sem acento.
+const ROTULO_DE_ACAO =
+  /^\s*\d*\s*(lan[cç]ar|realizar prevista|realizar parte|excluir transa[cç][aã]o|criar meta|excluir meta|criar conta|excluir conta|convidar)\s*:\s*$/gim;
+
 export function cleanContent(content) {
   if (!content) return "";
   let texto = String(content);
   for (const re of RECORTES) texto = texto.replace(re, "");
   texto = texto.replace(ABERTURA_ORFA, "");
   return texto
+    // Rótulo do catálogo de ações copiado do prompt ("1 lançar:",
+    // "realizar prevista:"). Só faz sentido junto de um bloco, e o
+    // bloco já saiu.
+    .replace(ROTULO_DE_ACAO, "")
     // "Ações:" costumava introduzir os blocos; sem eles fica pendurado.
     .replace(/\n\s*(Ações|Acoes|Ação|Acao)\s*:\s*$/i, "")
     .replace(/\n{3,}/g, "\n\n")
@@ -800,7 +809,12 @@ function ChatTab({ user, dark }) {
     <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, background: bg }}>
       {/* Mensagens */}
       <div style={{ flex: 1, overflowY: "auto", padding: "12px 16px", display: "flex", flexDirection: "column", gap: 10 }}>
-        {messages.map((msg, i) => (
+        {messages.map((msg, i) => {
+          const texto = cleanContent(msg.content);
+          // A resposta pode ter vindo so com o bloco de acao: o card
+          // logo abaixo ja diz tudo, uma bolha vazia so confunde.
+          if (msg.role === "assistant" && !texto) return null;
+          return (
           <motion.div key={i} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} style={{ display: "flex", gap: 10, flexDirection: msg.role === "user" ? "row-reverse" : "row" }}>
             {msg.role === "assistant" && (
               <div style={{ width: 28, height: 28, borderRadius: 10, background: "linear-gradient(135deg,#7c3aed,#4f46e5)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 2 }}>
@@ -819,12 +833,13 @@ function ChatTab({ user, dark }) {
                 fontSize: "0.85rem", lineHeight: 1.55,
               }}>
                 <ReactMarkdown className="prose prose-sm dark:prose-invert max-w-none prose-p:my-1" style={{ color: "inherit" }}>
-                  {cleanContent(msg.content)}
+                  {texto}
                 </ReactMarkdown>
               </div>
             </div>
           </motion.div>
-        ))}
+          );
+        })}
 
         <AnimatePresence>
           {pendingAction && (
