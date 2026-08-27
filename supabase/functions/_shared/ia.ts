@@ -23,6 +23,12 @@ type Provedor = {
   env: string;
   /** Em ordem de preferência dentro do provedor. */
   modelos: string[];
+  /**
+   * Quanto esperar antes de ceder a vez, em ms. Vem da latência medida
+   * de cada um, não de um número redondo: com prazo único o provedor
+   * rápido esperava pelo lento e o pior caso chegou a 8,3s.
+   */
+  prazo: number;
 };
 
 /**
@@ -47,6 +53,8 @@ export const PROVEDORES: Provedor[] = [
     endpoint: "https://api.groq.com/openai/v1/chat/completions",
     env: "GROQ_API_KEY",
     modelos: ["openai/gpt-oss-120b", "openai/gpt-oss-20b"],
+    // 120b leva 2 a 3s; 20b, 0,6s. Recusa por cota volta em ~30ms.
+    prazo: 6000,
   },
   {
     nome: "gemini",
@@ -58,6 +66,30 @@ export const PROVEDORES: Provedor[] = [
     // passou de 30s. Reserva que não chega a tempo não é reserva, e
     // ainda gasta o orçamento dos provedores seguintes.
     modelos: ["gemini-3.5-flash-lite"],
+    // Bom, responde em ~1s, mas é instável. Os 4s são um meio-termo
+    // deliberado: com o crédito do HF esgotado, este é o ÚNICO backup de
+    // pé, e cortá-lo cedo troca uma resposta em 3s por uma falha em 3s.
+    // Se o Cerebras voltar, dá para apertar de novo.
+    prazo: 4000,
+  },
+  {
+    nome: "huggingface",
+    endpoint: "https://router.huggingface.co/v1/chat/completions",
+    env: "HF_TOKEN",
+    // Primeiro backup de verdade depois do Gemini. O `gpt-oss-20b` daqui
+    // é o MESMO modelo que a Groq serve e responde em ~965ms medidos,
+    // então a queda troca de casa sem mudar o feitio da resposta.
+    //
+    // Fica à frente de OpenRouter e Cerebras porque esses dois só sabem
+    // recusar hoje (429 e 402): deixar o HF atrás deles seria proteger o
+    // crédito no lugar errado — quando Groq e Gemini falham juntos, ou
+    // este atende ou o Finn não responde.
+    //
+    // O plano gratuito dá US$ 0,10/mês, o que não sustenta o app como
+    // principal. Acompanhar em huggingface.co/settings/billing.
+    modelos: ["openai/gpt-oss-20b", "meta-llama/Llama-3.3-70B-Instruct"],
+    // gpt-oss-20b em 965ms; o Llama, 2,5 a 3,6s.
+    prazo: 5000,
   },
   {
     nome: "openrouter",
@@ -67,6 +99,8 @@ export const PROVEDORES: Provedor[] = [
     // raciocínio: os de raciocínio vazam o `<think>` dentro da resposta,
     // que foi o motivo de o qwen ter sido descartado na Groq.
     modelos: ["google/gemma-4-31b-it:free", "z-ai/glm-5.2:free"],
+    // Hoje só recusa (429), e a recusa volta em ~300ms.
+    prazo: 3000,
   },
   {
     nome: "cerebras",
@@ -78,17 +112,8 @@ export const PROVEDORES: Provedor[] = [
     // sem atrapalhar: 402 apenas pula para o próximo. Se o billing for
     // resolvido, volta a funcionar sem mexer no código.
     modelos: ["gpt-oss-120b"],
-  },
-  {
-    nome: "huggingface",
-    endpoint: "https://router.huggingface.co/v1/chat/completions",
-    env: "HF_TOKEN",
-    // Última linha: o plano gratuito dá US$ 0,10/mês em créditos, o que
-    // não sustenta o app. Fica aqui para o dia em que todo o resto
-    // falhar ao mesmo tempo — e depois da Cerebras porque o 402 dela é
-    // instantâneo e não custa nada, enquanto cada chamada daqui gasta
-    // crédito de verdade.
-    modelos: ["Qwen/Qwen3.6-27B-Instruct", "meta-llama/Llama-3.3-70B-Instruct"],
+    // 402 instantâneo enquanto o billing não for resolvido.
+    prazo: 3000,
   },
 ];
 
@@ -146,7 +171,6 @@ function contaBloqueada(status: number): boolean {
  * O orçamento total fica muito abaixo dos 45s que a tela espera, para a
  * falha chegar como mensagem em vez de conexão pendurada.
  */
-const PRAZO_POR_TENTATIVA = 6000;
 const PRAZO_TOTAL = 20000;
 
 /** Rótulo curto do que aconteceu numa tentativa. Seguro para sair da função. */
@@ -177,7 +201,7 @@ async function tentar(
   // Cede a vez se o provedor não responder no prazo. O `finally` limpa
   // o relógio para o timer não segurar a função de pé à toa.
   const limite = new AbortController();
-  const relogio = setTimeout(() => limite.abort(), PRAZO_POR_TENTATIVA);
+  const relogio = setTimeout(() => limite.abort(), provedor.prazo);
   try {
     resposta = await fetch(provedor.endpoint, {
       signal: limite.signal,
@@ -203,7 +227,7 @@ async function tentar(
     const abortou = (e as Error)?.name === "AbortError";
     return {
       tipo: "proximo_provedor",
-      detalhe: abortou ? `não respondeu em ${PRAZO_POR_TENTATIVA / 1000}s` : `falha de rede: ${(e as Error)?.message}`,
+      detalhe: abortou ? `não respondeu em ${provedor.prazo / 1000}s` : `falha de rede: ${(e as Error)?.message}`,
       limite: false,
     };
   } finally {

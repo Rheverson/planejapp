@@ -13,52 +13,52 @@ Leia o arquivo `PLANEJAPP_DOCS.md` antes de qualquer tarefa. Ele contém toda a 
 - **Stack:** React + Vite + Supabase + Stripe + Vercel
 - **IA:** Groq (`openai/gpt-oss-120b`) — não é a Claude API, apesar do nome Finn
 - **Provedores em cascata:** `supabase/functions/_shared/ia.ts` tenta
-  Groq → Gemini → OpenRouter → Cerebras → Hugging Face. Todos falam o protocolo OpenAI, então
-  trocar é só endpoint, chave e nome do modelo. Cada um é opcional: sem a chave
-  no ambiente é pulado. Cota, chave inválida, billing (402) ou 5xx pulam o
-  provedor inteiro; modelo fora do ar ou resposta vazia pulam só o modelo.
-  Nunca chame um provedor direto por `fetch` — use `chamarIA()`, senão aquele
-  caminho fica sem fallback (foi o caso do `whatsapp-bot`).
-- **Prazos:** 6s por tentativa (AbortController) e 20s de orçamento total,
-  abaixo dos 45s que a tela espera. Sem isso a cascata levou 38s para devolver
-  erro, porque `fetch` sem prazo deixa um provedor lento segurar a fila.
-  6s cobre com folga os tempos medidos (Groq 20b 0,6s, Gemini flash-lite ~1s,
-  Groq 120b 2–3s); quem passa disso está degradado, e esperar só atrasa o
-  próximo da fila. Alvo de UX: **resposta em 2–3s**. Medido em carga de 10
-  pedidos variados — mediana 1,8s, pior 3,3s, zero falhas.
-- **O gargalo é o TPM da Groq, não o número de provedores.** 8.000 tokens/min
-  a ~1.700 por mensagem dão ~4,7 mensagens/minuto; estourando isso, cai num
-  Gemini instável e a resposta passa de 7s. Enxugar o prompt é o que compra
-  velocidade: o molde saiu de 1.498 para 1.181 tokens e as mesmas 10 chamadas
-  passaram de 2 falhas para nenhuma. Medir antes de acrescentar regra ao
-  prompt.
-- **Diagnosticar falha da IA:** a resposta de erro do `ai-chat` traz
-  `tentativas` — provedor, modelo, rótulo curto e tempo de cada degrau. Foi
-  criada porque o log do Supabase estava com a ingestão parada justamente na
-  hora em que o Finn quebrou. Nunca inclui a mensagem do provedor, que carrega
-  id de organização e limites da conta.
+  Groq → Gemini → Hugging Face → OpenRouter → Cerebras. Todos falam o protocolo
+  OpenAI, então trocar é só endpoint, chave e nome do modelo. Cada um é
+  opcional: sem a chave no ambiente é pulado. Nunca chame um provedor direto
+  por `fetch` — use `chamarIA()`, senão aquele caminho fica sem fallback (foi o
+  caso do `whatsapp-bot`).
 - **429 é por MODELO, não por conta.** A Groq responde "Rate limit reached for
   model `openai/gpt-oss-120b`" e, no mesmo instante, o `gpt-oss-20b` atende em
   600ms. Por isso 429 tenta o próximo modelo da mesma casa antes de ceder a vez;
   só 401/402/403/5xx pulam o provedor inteiro. Tratar 429 como conta esgotada
   deixou o Finn sem IA tendo alternativa de pé.
-- **Estado dos provedores em 27/08/2026** (medido com um prompt do tamanho real,
-  ~1.700 tokens — medir com mensagem curta não diz nada sobre o uso de verdade,
-  e foi assim que um Gemini que não aguentava passou como aprovado):
+- **Prazo é por provedor, não único** (campo `prazo` em cada um), vindo da
+  latência medida: Groq 6s, Gemini 4s, HF 5s, OpenRouter e Cerebras 3s. Com um
+  prazo único de 6s o provedor rápido esperava pelo lento e o pior caso chegou
+  a 8,3s. Orçamento total de 20s, bem abaixo dos 45s que a tela espera.
+- **Desempenho medido** (uso realista, ~10s entre mensagens): mediana 1,3s,
+  pior 2,3s, zero falhas. Em rajada (14 chamadas seguidas) degrada, porque o
+  teto da Groq é por minuto — ver abaixo.
+- **O gargalo é o TPM da Groq, não o número de provedores.** 8.000 tokens/min a
+  ~1.400 por mensagem dão ~5,7 mensagens/minuto no app inteiro. Enxugar o
+  prompt é o que compra velocidade: o molde saiu de 1.498 para 1.181 tokens e
+  as mesmas 10 chamadas passaram de 2 falhas para nenhuma. Medir antes de
+  acrescentar regra ao prompt.
+- **Diagnosticar falha da IA:** a resposta de erro do `ai-chat` traz
+  `tentativas` — provedor, modelo, rótulo curto e tempo de cada degrau. Foi
+  criada porque o log do Supabase estava com a ingestão parada justamente na
+  hora em que o Finn quebrou. Nunca inclui a mensagem do provedor, que carrega
+  id de organização e limites da conta.
+- **Estado dos provedores em 27/08/2026** (medido com prompt do tamanho real —
+  medir com mensagem curta não diz nada, e foi assim que um Gemini incapaz de
+  aguentar o prompt do Finn passou como aprovado):
   - Groq — `openai/gpt-oss-120b` (2 a 3s) e `gpt-oss-20b` (600ms), cada um com
-    cota própria. 8.000 tokens/min e **200.000/dia** somando todos os usuários.
-  - Gemini — só `gemini-3.5-flash-lite`, que responde em ~1s. Os vizinhos foram
-    removidos: `gemini-flash-lite-latest` levou 20s e `gemini-3.5-flash` passou
-    de 30s. Reserva que não chega a tempo não é reserva.
+    cota própria. 8.000 tokens/min e 200.000/dia somando todos os usuários.
+  - Gemini — só `gemini-3.5-flash-lite` (~1s quando bom, mas instável). Os
+    vizinhos foram removidos: `gemini-flash-lite-latest` levou 20s e
+    `gemini-3.5-flash` passou de 30s. Cota em requisições (~1.000/dia).
+  - Hugging Face — `openai/gpt-oss-20b` (965ms, o MESMO modelo da Groq) e
+    `Llama-3.3-70B-Instruct` (2,5 a 3,6s). **Crédito esgotado:** o plano
+    gratuito dá US$ 0,10/mês e uma única sessão de testes o consumiu. Responde
+    402 até virar o mês. Serve como emergência, nunca como backup de verdade.
   - OpenRouter — modelos de preço zero, instruct e não de raciocínio (os de
-    raciocínio vazam `<think>` na resposta). Em 27/08 os dois devolveram 429:
-    o limite dos `:free` é baixo e compartilhado.
-  - Cerebras — 402 "Payment required" nos dois modelos da conta, apesar de o
-    painel listar 3M tokens/dia. A chave é válida (lista modelos); falta
-    billing. Volta sozinho quando for resolvido.
-  - Hugging Face — última linha, e só depois da Cerebras: o 402 dela é
-    instantâneo e de graça, enquanto cada chamada à HF gasta crédito de verdade.
-    O plano gratuito dá US$ 0,10/mês, que não sustenta o app.
+    raciocínio vazam `<think>` na resposta). Devolvem 429: o limite dos `:free`
+    é baixo e compartilhado entre todos os usuários da plataforma.
+  - Cerebras — 402 "Payment required" nos dois modelos, apesar de o painel
+    listar 3M tokens/dia e 90.000/min. A chave é válida (lista modelos); falta
+    billing. **É o que resolveria o gargalo de vez:** 11x o TPM da Groq,
+    servindo o mesmo gpt-oss-120b.
 - **Nomes de modelo saem de linha sem aviso:** os `gemini-2.5-*` já respondem
   404 "no longer available to new users". Conferir contra o `/models` do
   provedor antes de fixar um nome — a cascata pula o que não existe, mas um
