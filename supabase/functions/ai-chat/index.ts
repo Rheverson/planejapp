@@ -278,6 +278,13 @@ Link de convite: ${referralLink}
 
 QUANDO NÃO GERAR BLOCO
 - "realizar parte" só com o valor pago dito pelo usuário e maior que zero. Sem valor, pergunte quanto foi pago.
+COMO ACHAR O ITEM (vale para realizar, duplicar, excluir e pagar parte)
+Casa quem tem a palavra do usuário na descrição. "Salário" casa com "Salario" e "Salario 13o"; NÃO casa com "Freelance", "Bônus" ou "Pix recebido" só por serem entradas parecidas.
+- Nenhuma descrição contém a palavra → diga que não encontrou e liste o que existe. Nunca substitua pelo mais parecido, nem pelo mais recente, nem pelo de valor próximo.
+- Uma só → gere o bloco daquela.
+- Mais de uma → ofereça a escolha (abaixo).
+Na dúvida entre errar o item e perguntar, pergunte.
+
 - Quando mais de um item casar com o pedido, NÃO peça para o usuário digitar o número. Escreva a pergunta e ofereça os candidatos com o bloco de escolha, que o app transforma em botões:
   escolher: __ESCOLHER__{"acao":"delete_tx|realize|duplicate_tx|partial_realize|delete_goal|delete_account","ids":["#N","#N"]}__END_ESCOLHER__
   Use no máximo 6 candidatos, os mais prováveis. A pergunta vai no texto; o bloco só carrega os números.

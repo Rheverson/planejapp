@@ -130,6 +130,13 @@ const regexBloco = ([abre, fecha]) =>
 
 const RECORTES = BLOCOS_DE_ACAO.map(regexBloco);
 
+// Qualquer bloco no formato do protocolo, mesmo desconhecido: NOME em
+// caixa alta, corpo JSON e fecho END_. Nao depende de o app conhecer o
+// marcador, que foi o que deixou DUPLICATE_TX vazar quando o servidor
+// saiu na frente.
+const BLOCO_DESCONHECIDO =
+  /[*]*_{0,2}[A-Z][A-Z_]{2,30}_{0,2}[*]*\s*\{[\s\S]*?\}\s*[*]*_{0,2}END_[A-Z_]{1,30}_{0,2}[*]*/g;
+
 // Sobra de bloco cortado pelo limite de tokens: a abertura aparece e o
 // fecha nunca chega. Sem isto o pedaco fica visivel na tela.
 const ABERTURA_ORFA = new RegExp(
@@ -145,6 +152,7 @@ export function cleanContent(content) {
   if (!content) return "";
   let texto = String(content);
   for (const re of RECORTES) texto = texto.replace(re, "");
+  texto = texto.replace(BLOCO_DESCONHECIDO, "");
   texto = texto.replace(ABERTURA_ORFA, "");
   return texto
     // Rótulo do catálogo de ações copiado do prompt ("1 lançar:",

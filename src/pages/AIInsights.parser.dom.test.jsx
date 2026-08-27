@@ -141,3 +141,47 @@ describe("todo bloco conhecido some do texto", () => {
     });
   }
 });
+
+describe("bloco que o app nao conhece tambem nao vaza", () => {
+  // O caso real: a Edge Function foi publicada antes do app. O servidor
+  // ja mandava __DUPLICATE_TX__ e o app ainda nao sabia recorta-lo, entao
+  // o JSON com o UUID apareceu na tela do usuario.
+  it("remove a resposta exata que apareceu na tela", () => {
+    const t = limpo(
+      'Vou duplicar a entrada de R$255 do freelance #437.' +
+      '\n__DUPLICATE_TX__{"id":"4132d84a-8587-4af5-885a-2da9c76e553e"}__END_DUPLICATE__'
+    );
+    expect(t).toBe("Vou duplicar a entrada de R$255 do freelance #437.");
+    expect(t).not.toContain("DUPLICATE");
+    expect(t).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-/i);
+  });
+
+  it("remove um marcador que ainda nao existe", () => {
+    const t = limpo('Texto. __AGENDAR_PAGAMENTO__{"id":"x","dia":5}__END_AGENDAR__');
+    expect(t).toBe("Texto.");
+  });
+
+  it("remove marcador inventado pelo modelo", () => {
+    const t = limpo('Texto. __TRANSFERIR_TUDO__{"para":"y"}__END_TRANSFERIR__');
+    expect(t).toBe("Texto.");
+  });
+
+  it("pega tambem sem underscore e em negrito", () => {
+    expect(limpo('Texto. AGENDAR{"a":1}END_AGENDAR')).toBe("Texto.");
+    expect(limpo('Texto. **AGENDAR**{"a":1}**END_AGENDAR**')).toBe("Texto.");
+  });
+
+  it("nao engole negrito legitimo do markdown", () => {
+    const t = "Seu **maior gasto** foi moradia: R$ 2.400 (34% da renda).";
+    expect(limpo(t)).toBe(t);
+  });
+
+  it("nao engole texto com chaves ou sigla em caixa alta", () => {
+    const casos = [
+      "O CDB rende 110% do CDI.",
+      "Guarde 20% da renda. IPCA no periodo: 4,5%.",
+      "Sua meta LAZER esta em 80%.",
+    ];
+    for (const c of casos) expect(limpo(c)).toBe(c);
+  });
+});
