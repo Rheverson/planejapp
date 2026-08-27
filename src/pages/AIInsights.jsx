@@ -394,7 +394,10 @@ function ChatTab({ user, dark }) {
 
     (async () => {
       const colunas = alvo.tabela === "transactions"
-        ? "id, description, amount, date, category, is_realized, account_id, accounts(name)"
+        // O embed precisa dizer QUAL chave usar: transactions aponta
+        // para accounts duas vezes (account_id e transfer_account_id),
+        // e sem o nome da FK o PostgREST devolve PGRST201 (ambíguo).
+        ? "id, description, amount, date, category, is_realized, account_id, accounts!transactions_account_id_fkey(name)"
         : alvo.tabela === "goals"
           ? "id, name, target_amount, type, category"
           : "id, name, type, initial_balance";
