@@ -26,23 +26,20 @@ type Provedor = {
 };
 
 /**
- * Ordem de tentativa.
+ * Ordem de tentativa. Cada provedor foi conferido contra a conta real
+ * em 27/08/2026 (função `diag-ia`, removida depois): a lista de modelos
+ * de cada um foi lida do próprio /models, não suposta.
  *
- * 1. **Groq** — é onde o prompt do Finn foi afinado e medido.
- *    Cota gratuita: 8.000 tokens/min e 200.000/dia.
- * 2. **Cerebras** — serve o MESMO `gpt-oss-120b`. Trocar para cá muda a
- *    infraestrutura, não o modelo, então a resposta continua com o
- *    mesmo feitio. Cota gratuita bem maior (~1M tokens/dia), mas com
- *    limite baixo por minuto (~5 req/min) e janela de contexto menor —
- *    boa para absorver o estouro diário da Groq, não para pico.
- * 3. **Gemini** — modelo diferente, último recurso. A cota é contada em
- *    requisições por dia (~1.000 no Flash-Lite), não em tokens, o que
- *    complementa bem os dois primeiros.
+ * 1. **Groq** — onde o prompt do Finn foi afinado e medido. Os dois
+ *    modelos respondem. Cota: 8.000 tokens/min e 200.000/dia.
+ * 2. **Gemini** — cota contada em requisições por dia (~1.000 no
+ *    flash-lite), o que complementa bem um limite de tokens.
+ * 3. **Cerebras** — serve o mesmo gpt-oss-120b da Groq, mas hoje
+ *    responde 402 nesta conta.
  *
- * Os limites de plano gratuito mudam sem aviso; os números acima são
- * referência do momento em que isto foi escrito, não contrato. O que o
- * código garante é que, seja qual for o limite, o próximo da fila
- * assume.
+ * Limites de plano gratuito mudam sem aviso, e nomes de modelo saem de
+ * linha — foi o que derrubou os `gemini-2.5-*`. O que o código garante
+ * é que, seja qual for o motivo, o próximo da fila assume.
  */
 export const PROVEDORES: Provedor[] = [
   {
@@ -52,16 +49,24 @@ export const PROVEDORES: Provedor[] = [
     modelos: ["openai/gpt-oss-120b", "openai/gpt-oss-20b"],
   },
   {
-    nome: "cerebras",
-    endpoint: "https://api.cerebras.ai/v1/chat/completions",
-    env: "CEREBRAS_API_KEY",
-    modelos: ["gpt-oss-120b"],
-  },
-  {
     nome: "gemini",
     endpoint: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
     env: "GEMINI_API_KEY",
-    modelos: ["gemini-2.5-flash-lite", "gemini-2.5-flash"],
+    // Os `gemini-2.5-*` respondem 404 "no longer available to new
+    // users". O primeiro nome é a versão corrente; o `-latest` fica
+    // atrás dele para o dia em que a corrente também sair de linha.
+    modelos: ["gemini-3.5-flash-lite", "gemini-flash-lite-latest", "gemini-3.5-flash"],
+  },
+  {
+    nome: "cerebras",
+    endpoint: "https://api.cerebras.ai/v1/chat/completions",
+    env: "CEREBRAS_API_KEY",
+    // Serve o MESMO gpt-oss-120b da Groq, então seria a troca mais
+    // suave — mas em 27/08/2026 esta conta recebe 402 "Payment
+    // required": o tal free tier não vale para ela. Fica em último,
+    // sem atrapalhar: 402 apenas pula para o próximo. Se o billing for
+    // resolvido, volta a funcionar sem mexer no código.
+    modelos: ["gpt-oss-120b"],
   },
 ];
 
