@@ -295,8 +295,38 @@ aberta — estas ficaram para depois e **não** estão feitas:
 | 9 | Camada `src/data/` com paginação + lazy do vendor-charts | ❌ 7 telas ainda baixam o histórico inteiro |
 | 10 | Separar responsabilidades em `AIInsights.jsx` | ❌ segue com ~950 linhas |
 | 11 | LGPD: exportar dados e excluir conta | ❌ nenhum dos dois existe |
-| 12 | Testes de RLS, Edge Functions, webhook, Stripe, E2E | 🔄 72 testes, todos de função pura |
+| 12 | Testes de RLS, Edge Functions, webhook, Stripe, E2E | 🔄 107 testes (79 de função pura + 28 de componente) |
 | 13 | Baseline do schema | ⏸️ **PENDENTE — NECESSITA BASELINE DO SCHEMA** (exige Docker) |
+
+---
+
+## Card de confirmação do Finn — integridade (27/08/2026)
+
+O card de exclusão mostrava **R$ 0,00** e descrição vazia enquanto a exclusão
+acertava o registro certo: confirmação e execução falavam de coisas diferentes.
+
+**Causa** — o bloco que a IA devolve carrega só o id (`__DELETE_TX__{"id":"…"}`).
+O card lia `action.description` e `fmt(action.amount)`, e `fmt` termina em
+`format(v || 0)`. Presente desde o commit inicial da tela (`996e14c`); atingia
+`delete_tx`, `realize`, `partial_realize`, `delete_goal` e `delete_account`.
+
+**Correção**
+- O card é montado a partir da **linha real** buscada por id, com filtro de
+  `user_id` somado à RLS. Sem registro em mãos ele não afirma nada: mostra
+  "Carregando lançamento…" ou avisa que não localizou, e o *Confirmar* fica travado.
+- O registro carrega o id do alvo (`paraId`). Entre um card e o próximo havia
+  uma janela de um render em que o estado ainda era o do card anterior — o card
+  agora recusa registro que não seja da ação em tela.
+- `podeExecutar` só libera com `paraId`, `status` e `dados.id` batendo com a ação.
+- Os `delete`/`update` passaram a conferir as linhas afetadas via `.select()`:
+  o app não diz mais "excluída" quando o filtro não casou com nada.
+- Área de toque dos botões do card: 40px → 44px.
+
+**Verificado** — sessão real no navegador (desktop e 360×640/360×360), sete
+valores de R$ 0,01 a R$ 10.000,50, seis formas de pedir a exclusão (nenhum id
+inventado; pedidos ambíguos viram pergunta), e concorrência com o registro
+apagado por fora após o card abrir → recusa correta, sem falsa confirmação e
+sem stack trace na tela.
 
 ---
 
