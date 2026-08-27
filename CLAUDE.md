@@ -11,7 +11,13 @@ Leia o arquivo `PLANEJAPP_DOCS.md` antes de qualquer tarefa. Ele contém toda a 
 - **Landing:** https://planejapp.com.br
 - **Repositório:** https://github.com/Rheverson/planejapp.git
 - **Stack:** React + Vite + Supabase + Stripe + Vercel
-- **IA:** Groq (`llama-3.3-70b-versatile`) — não é a Claude API, apesar do nome Finn
+- **IA:** Groq (`openai/gpt-oss-120b`) — não é a Claude API, apesar do nome Finn
+- **Cota da IA (plano gratuito):** 8.000 tokens/minuto **e 200.000 tokens/dia**,
+  somando todos os usuários. Cada mensagem custa ~1.800 de entrada, então o teto
+  é de **~100 mensagens por dia no app inteiro**. O limite diário é o que aperta:
+  ao estourar, o Finn responde a mensagem neutra de indisponibilidade. Medir o
+  custo antes de engordar o prompt do `ai-chat` — o `console.log` da função
+  registra "N entrada + M saída" a cada chamada.
 - **Dono:** Rheverson Gois
 
 ---
