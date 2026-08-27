@@ -2,6 +2,7 @@ import { useIsDark } from "@/design/useTheme";
 import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { X, CheckCircle2, SplitSquareHorizontal, Calendar } from "lucide-react";
+import { useFecharModal, CAMADAS } from "@/hooks/useFecharModal";
 
 const fmt = (v) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
 
@@ -15,6 +16,9 @@ export default function RealizarPrevisaoModal({ transaction, onConfirm, onClose 
   const [modo, setModo]                     = useState(null);
   const [valorParcial, setValorParcial]     = useState("");
   const [dataRealizacao, setDataRealizacao] = useState(todayStr());
+
+  // Esc, botão voltar do Android e trava de rolagem do fundo
+  useFecharModal(true, onClose);
 
   const valorFinal = modo === "total" ? Number(transaction.amount) : parseFloat(valorParcial) || 0;
   const restante   = Number(transaction.amount) - valorFinal;
@@ -45,7 +49,7 @@ export default function RealizarPrevisaoModal({ transaction, onConfirm, onClose 
   return (
     <motion.div
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", backdropFilter: "blur(4px)", zIndex: 50, display: "flex", alignItems: "flex-end", justifyContent: "center", paddingBottom: 64 }}
+      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", backdropFilter: "blur(4px)", zIndex: CAMADAS.modal, display: "flex", alignItems: "flex-end", justifyContent: "center", paddingBottom: 0 }}
       onClick={onClose}
     >
       <motion.div

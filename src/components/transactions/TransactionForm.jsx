@@ -11,6 +11,7 @@ import { useQuery } from "@tanstack/react-query";
 import { addMonths, format } from "date-fns";
 import { supabase } from "@/lib/supabase";
 import { calcularMesFatura } from "@/domain/financas";
+import { useFecharModal, CAMADAS } from "@/hooks/useFecharModal";
 
 const frequencyOptions = [
   { value: "monthly", label: "Mensal"  },
@@ -52,6 +53,9 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
   const [recurringEndDate, setRecurringEndDate] = useState(initialData?.recurring_end_date || "");
   const [showSuggestion, setShowSuggestion]     = useState(false);
   const [erroValor, setErroValor]               = useState("");
+
+  // Esc, botão voltar do Android e trava de rolagem do fundo
+  useFecharModal(true, onClose);
 
   const { data: creditCards = [] } = useQuery({
     queryKey: ["credit_cards", user?.id],
@@ -158,7 +162,7 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
     <motion.div
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       onClick={onClose}
-      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", backdropFilter: "blur(6px)", zIndex: 50, display: "flex", alignItems: "flex-end", justifyContent: "center", paddingBottom: 64 }}
+      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", backdropFilter: "blur(6px)", zIndex: CAMADAS.modal, display: "flex", alignItems: "flex-end", justifyContent: "center", paddingBottom: 0 }}
     >
       <motion.div
         initial={{ y: 100, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 100, opacity: 0 }}

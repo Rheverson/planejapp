@@ -144,16 +144,43 @@ export default function Home() {
     () => localStorage.getItem("referral_banner_dismissed") !== "true"
   );
 
+  // Convite de indicação: aparece sozinho a cada 2 horas.
+  //
+  // Ele abria 3 segundos depois da Home montar, sem olhar para o que o
+  // usuário estava fazendo. No celular isso caía em cima de quem tinha
+  // acabado de tocar em "Entrada" ou "Saída": o convite (z-index 999)
+  // cobria o formulário de transação (z-index 50) e engolia o toque no X
+  // e no botão de salvar — o formulário virava uma armadilha.
+  //
+  // Agora ele espera a tela ficar livre. Como não marca o horário ao
+  // adiar, o convite não é perdido: aparece assim que der.
+  const algumFormularioAberto = showTransactionForm || showTransferForm;
+
   useEffect(() => {
     if (isViewingSharedProfile) return;
+    if (algumFormularioAberto) return;
+
     const KEY = "last_referral_shown";
     const last = localStorage.getItem(KEY);
-    const now = Date.now();
-    if (!last || now - parseInt(last) > 2 * 60 * 60 * 1000) {
-      const t = setTimeout(() => { setShowReferralModal(true); localStorage.setItem(KEY, now.toString()); }, 3000);
-      return () => clearTimeout(t);
-    }
-  }, [isViewingSharedProfile]);
+    const agora = Date.now();
+    if (last && agora - parseInt(last) <= 2 * 60 * 60 * 1000) return;
+
+    const t = setTimeout(() => {
+      // Confere de novo na hora de abrir: o usuário pode ter tocado em
+      // "Entrada" durante os 3 segundos de espera.
+      setShowTransactionForm((formAberto) => {
+        setShowTransferForm((transfAberta) => {
+          if (!formAberto && !transfAberta) {
+            setShowReferralModal(true);
+            localStorage.setItem(KEY, Date.now().toString());
+          }
+          return transfAberta;
+        });
+        return formAberto;
+      });
+    }, 3000);
+    return () => clearTimeout(t);
+  }, [isViewingSharedProfile, algumFormularioAberto]);
 
   const { data: accounts = [], isLoading: carregandoContas } = useQuery({
     queryKey: ["accounts", activeOwnerId],
