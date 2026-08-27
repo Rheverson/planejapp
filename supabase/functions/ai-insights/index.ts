@@ -242,7 +242,10 @@ Responda APENAS com JSON válido:
     if (!resposta.ok) {
       console.error('Groq falhou:', resposta.motivo, resposta.detalhe)
       return new Response(
-        JSON.stringify({ error: resposta.detalhe, motivo: resposta.motivo }),
+        // O detalhe da Groq traz id da organização, nome do modelo e
+        // limites da conta. Fica no log do servidor; para fora vai só o
+        // motivo, que é o que o app precisa para escolher a mensagem.
+        JSON.stringify({ error: "ia_indisponivel", motivo: resposta.motivo }),
         { status: resposta.motivo === "limite" ? 429 : 503,
           headers: { ...corsHeaders, "Content-Type": "application/json" } },
       )
@@ -270,7 +273,10 @@ Responda APENAS com JSON válido:
 
   } catch (err) {
     console.error("Erro:", err)
-    return new Response(JSON.stringify({ error: err.message }), {
+    // Nunca devolver a mensagem crua da exceção: ela pode carregar
+    // trecho de prompt, cabeçalho ou identificador interno.
+    console.error("Erro inesperado:", err?.message ?? err)
+    return new Response(JSON.stringify({ error: "erro_inesperado" }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" }
     })

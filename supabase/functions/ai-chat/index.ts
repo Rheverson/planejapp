@@ -13,7 +13,26 @@ serve(async (req) => {
     if (auth.response) return auth.response
     const userId = auth.user.id
 
-    const { message, history } = await req.json()
+    const corpo = await req.json().catch(() => ({}))
+    const message = typeof corpo?.message === "string" ? corpo.message.trim() : ""
+    // `history` já veio como string em teste; qualquer coisa que não
+    // seja lista é descartada em vez de derrubar a função.
+    const history = Array.isArray(corpo?.history) ? corpo.history : []
+
+    // Sem pergunta não há o que responder — e não faz sentido gastar
+    // uma chamada da cota gratuita para descobrir isso.
+    if (!message) {
+      return new Response(
+        JSON.stringify({ error: "mensagem_vazia" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      )
+    }
+    if (message.length > 2000) {
+      return new Response(
+        JSON.stringify({ error: "mensagem_longa" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      )
+    }
 
     const supabase = adminClient()
 
@@ -76,9 +95,19 @@ serve(async (req) => {
     // volta para o UUID real antes de chegar ao app.
     const mapaIds = new Map<string, string>()
     const apelido = (id: string) => {
-      const curto = String(id).slice(0, 8)
-      mapaIds.set(curto, id)
-      return curto
+      const completo = String(id)
+      // Dois registros do mesmo usuário podem começar com os mesmos 8
+      // caracteres. É raro, mas se acontecesse o segundo sobrescreveria
+      // o primeiro no mapa e uma exclusão apagaria o registro errado.
+      // Aqui o apelido cresce até ficar único.
+      for (let tamanho = 8; tamanho <= completo.length; tamanho++) {
+        const curto = completo.slice(0, tamanho)
+        const jaUsado = mapaIds.get(curto)
+        if (!jaUsado) { mapaIds.set(curto, completo); return curto }
+        if (jaUsado === completo) return curto
+      }
+      mapaIds.set(completo, completo)
+      return completo
     }
 
     const dinheiro = (v: any) => `R$${Number(v || 0).toFixed(2)}`
@@ -183,6 +212,13 @@ AÇÕES — gere o bloco no fim da resposta, usando o #id da lista acima:
 9 convidar: __SEND_INVITE__{"email":"","name":""}__END_INVITE__
 Link de convite: ${referralLink}
 
+ANTES DE EXCLUIR OU CANCELAR — pare e pergunte, sem gerar bloco, se:
+- "conta" puder ser conta bancária OU conta a pagar/despesa (é ambíguo em português). Ex: "exclui a Conta 2" → pergunte qual das duas.
+- mais de um item da lista casar com o que o usuário descreveu → pergunte qual, citando os candidatos.
+- nenhum item casar → diga que não encontrou. Nunca escolha o mais parecido.
+- o pedido não disser O QUE excluir ("exclui tudo", "pode apagar", "apaga aquilo") → pergunte o que exatamente.
+Só gere bloco de exclusão quando houver UM item claramente identificado.
+
 REGRAS
 - Pergunta ("posso gastar?", "quanto gastei?") NÃO gera bloco. Só texto.
 - Nunca invente outro tipo de bloco.
@@ -205,7 +241,10 @@ REGRAS
       // em vez de fingir que o Finn não entendeu a pergunta.
       console.error("Groq falhou:", resposta.motivo, resposta.detalhe)
       return new Response(
-        JSON.stringify({ error: resposta.detalhe, motivo: resposta.motivo }),
+        // O detalhe da Groq traz id da organização, nome do modelo e
+        // limites da conta. Fica no log do servidor; para fora vai só o
+        // motivo, que é o que o app precisa para escolher a mensagem.
+        JSON.stringify({ error: "ia_indisponivel", motivo: resposta.motivo }),
         { status: resposta.motivo === "limite" ? 429 : 503,
           headers: { ...corsHeaders, "Content-Type": "application/json" } },
       )
@@ -213,7 +252,7 @@ REGRAS
 
     // O modelo responde com o apelido curto; o app espera o UUID real.
     const respostaExpandida = resposta.texto.replace(
-      /"id"\s*:\s*"#?([0-9a-fA-F]{8})"/g,
+      /"id"\s*:\s*"#?([0-9a-fA-F-]{8,36})"/g,
       (original, curto) => {
         const completo = mapaIds.get(String(curto).toLowerCase())
         return completo ? `"id":"${completo}"` : original
@@ -226,7 +265,10 @@ REGRAS
 
   } catch (err) {
     console.error("Erro:", err)
-    return new Response(JSON.stringify({ error: err.message }), {
+    // Nunca devolver a mensagem crua da exceção: ela pode carregar
+    // trecho de prompt, cabeçalho ou identificador interno.
+    console.error("Erro inesperado:", err?.message ?? err)
+    return new Response(JSON.stringify({ error: "erro_inesperado" }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" }
     })

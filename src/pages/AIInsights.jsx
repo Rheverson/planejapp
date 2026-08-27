@@ -412,8 +412,27 @@ function ChatTab({ user, dark }) {
     }
   };
 
+  // O id de uma ação vem do texto gerado pelo modelo. A Edge Function
+  // traduz o apelido curto de volta para o UUID real, mas se o modelo
+  // inventar um apelido que não existe, o valor chega aqui pela metade.
+  // Sem esta checagem ele iria para o banco como filtro `id = "1a2b3c4d"`.
+  const ehUuid = (v) =>
+    typeof v === "string" &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
+
+  const ACOES_COM_ID = ["realize", "partial_realize", "delete_tx", "delete_goal", "delete_account"];
+
   const confirmAction = async () => {
     if (!pendingAction || confirmLoading || confirmingRef.current) return;
+
+    if (ACOES_COM_ID.includes(pendingAction._type) && !ehUuid(pendingAction.id)) {
+      setPendingAction(null);
+      setMessages(prev => [...prev, {
+        role: "assistant",
+        content: "🤔 Não consegui identificar com certeza qual item você quer. Pode dizer o nome exato?",
+      }]);
+      return;
+    }
     if (isViewingSharedProfile) {
       setPendingAction(null);
       setMessages(prev => [...prev, { role: "assistant", content: "Enquanto você está vendo um perfil compartilhado, eu não posso lançar nada — o registro iria para a sua própria conta. Volte para o seu perfil para eu executar isso." }]);
@@ -487,30 +506,58 @@ function ChatTab({ user, dark }) {
         setPendingAction(null);
         setMessages(prev => [...prev, { role: "assistant", content: `✅ **Pagamento parcial registrado!**\n\n💸 **${fmt(action.paid_amount)}** pago — restante: **${fmt(action.remaining_amount)}**` }]);
       } else if (action._type === "realize") {
-        const { error } = await supabase.from("transactions").update({ is_realized: true, date: confirmDate }).eq("id", action.id).eq("user_id", user.id);
+        const { data: alteradas, error } = await supabase.from("transactions")
+          .update({ is_realized: true, date: confirmDate })
+          .eq("id", action.id).eq("user_id", user.id).select("id");
         if (error) throw error;
+        if (!alteradas?.length) {
+          setPendingAction(null);
+          setMessages(prev => [...prev, { role: "assistant", content: "🤔 Não encontrei essa previsão. Pode conferir o nome?" }]);
+          return;
+        }
         setPendingAction(null);
         setMessages(prev => [...prev, { role: "assistant", content: `✅ **Pago!** ${action.description} marcado como realizado.` }]);
       } else if (action._type === "delete_tx") {
-        await supabase.from("transactions").delete().eq("id", action.id).eq("user_id", user.id);
+        // `.select()` devolve as linhas afetadas. Sem isso o app dizia
+        // "excluída" mesmo quando o filtro não casava com nada — por
+        // exemplo se o id apontasse para o registro de outro usuário.
+        const { data: apagadas } = await supabase.from("transactions")
+          .delete().eq("id", action.id).eq("user_id", user.id).select("id");
         setPendingAction(null);
-        setMessages(prev => [...prev, { role: "assistant", content: `🗑️ Transação excluída.` }]);
+        setMessages(prev => [...prev, {
+          role: "assistant",
+          content: apagadas?.length
+            ? `🗑️ Transação excluída.`
+            : `🤔 Não encontrei essa transação para excluir. Pode conferir o nome?`,
+        }]);
       } else if (action._type === "create_goal") {
         await supabase.from("goals").insert({ user_id: user.id, name: action.name, type: action.type, category: action.category, target_amount: action.target_amount, start_date: action.start_date, end_date: action.end_date });
         setPendingAction(null);
         setMessages(prev => [...prev, { role: "assistant", content: `✅ **Meta criada!** 🎯 ${action.name} — ${fmt(action.target_amount)}` }]);
       } else if (action._type === "delete_goal") {
-        await supabase.from("goals").delete().eq("id", action.id).eq("user_id", user.id);
+        const { data: apagadas } = await supabase.from("goals")
+          .delete().eq("id", action.id).eq("user_id", user.id).select("id");
         setPendingAction(null);
-        setMessages(prev => [...prev, { role: "assistant", content: `🗑️ Meta excluída.` }]);
+        setMessages(prev => [...prev, {
+          role: "assistant",
+          content: apagadas?.length
+            ? `🗑️ Meta excluída.`
+            : `🤔 Não encontrei essa meta para excluir.`,
+        }]);
       } else if (action._type === "create_account") {
         await supabase.from("accounts").insert({ user_id: user.id, name: action.name, type: action.type || "bank", initial_balance: action.initial_balance || 0, color: "bg-blue-500" });
         setPendingAction(null);
         setMessages(prev => [...prev, { role: "assistant", content: `✅ **Conta criada!** 🏦 ${action.name}` }]);
       } else if (action._type === "delete_account") {
-        await supabase.from("accounts").delete().eq("id", action.id).eq("user_id", user.id);
+        const { data: apagadas } = await supabase.from("accounts")
+          .delete().eq("id", action.id).eq("user_id", user.id).select("id");
         setPendingAction(null);
-        setMessages(prev => [...prev, { role: "assistant", content: `🗑️ Conta excluída.` }]);
+        setMessages(prev => [...prev, {
+          role: "assistant",
+          content: apagadas?.length
+            ? `🗑️ Conta excluída.`
+            : `🤔 Não encontrei essa conta para excluir.`,
+        }]);
       } else if (action._type === "send_invite") {
         // O assunto, o HTML e o link de indicação são montados no servidor.
         // O cliente não escolhe mais o conteúdo nem o remetente do e-mail.
