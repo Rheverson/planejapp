@@ -174,3 +174,51 @@ describe("meta e conta também vêm do registro real", () => {
     expect(screen.queryByText("R$ 0,00")).toBeNull();
   });
 });
+
+describe("concorrência — o registro tem que ser deste card", () => {
+  const registroDeOutraAcao = {
+    status: "ok",
+    paraId: OUTRO_ID,
+    dados: { id: OUTRO_ID, description: "Compra anterior", amount: 999.99, date: "2026-08-01" },
+  };
+
+  it("não exibe o registro que sobrou da ação anterior", () => {
+    // Entre um card e o próximo há um render em que `registro` ainda é o
+    // antigo: o efeito que busca a linha nova só roda depois. Sem amarra
+    // o card mostrava por um instante a descrição e o valor errados.
+    montar(acaoExcluir, registroDeOutraAcao);
+    expect(screen.queryByText("Compra anterior")).toBeNull();
+    expect(screen.queryByText("R$ 999,99")).toBeNull();
+    expect(botaoConfirmar().disabled).toBe(true);
+  });
+
+  it("bloqueia a execução com registro de outra ação", () => {
+    expect(podeExecutar(acaoExcluir, registroDeOutraAcao).ok).toBe(false);
+  });
+
+  it("registro carregando de outro alvo também trava o confirmar", () => {
+    montar(acaoExcluir, { status: "carregando", paraId: OUTRO_ID });
+    expect(botaoConfirmar().disabled).toBe(true);
+  });
+
+  it("segue liberando quando o registro é deste alvo", () => {
+    montar(acaoExcluir, registroReal);
+    expect(botaoConfirmar().disabled).toBe(false);
+    expect(screen.getByText("Teste de exclusão Finn")).toBeTruthy();
+  });
+
+  it("registro sem paraId não é aceito", () => {
+    const semDono = { status: "ok", dados: registroReal.dados };
+    expect(podeExecutar(acaoExcluir, semDono).motivo).toBe("registro_ausente");
+  });
+});
+
+describe("área de toque do card", () => {
+  it("botões têm 44px de altura", () => {
+    montar(acaoExcluir, registroReal);
+    for (const b of [/cancelar/i, /confirmar/i]) {
+      const botao = screen.getAllByRole("button").find((x) => b.test(x.textContent));
+      expect(botao.className.split(" ")).toContain("h-11");
+    }
+  });
+});

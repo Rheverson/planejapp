@@ -182,7 +182,8 @@ export function podeExecutar(action, registro) {
   if (!action) return { ok: false, motivo: "sem_acao" };
   if (!ACOES_SOBRE_REGISTRO[action._type]) return { ok: true };
   if (!ehUuid(action.id)) return { ok: false, motivo: "id_invalido" };
-  if (registro?.status !== "ok") return { ok: false, motivo: "registro_ausente" };
+  if (registro?.paraId !== action.id) return { ok: false, motivo: "registro_ausente" };
+  if (registro.status !== "ok") return { ok: false, motivo: "registro_ausente" };
   if (registro.dados?.id !== action.id) return { ok: false, motivo: "id_divergente" };
   return { ok: true };
 }
@@ -216,8 +217,10 @@ export function ActionCard({ action, registro, onConfirm, onCancel, confirmLoadi
   const Icon = cfg.icon;
   const needsAutoRealize = showAutoRealize && action.auto_realize === undefined;
   const precisaDoRegistro = !!ACOES_SOBRE_REGISTRO[action._type];
+  // Registro de outra ação não serve para montar este card.
+  const doAlvo = registro?.paraId === action.id ? registro : null;
   // Sem a linha real em mãos não há o que confirmar.
-  const registroPendente = precisaDoRegistro && registro?.status !== "ok";
+  const registroPendente = precisaDoRegistro && doAlvo?.status !== "ok";
 
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
@@ -230,10 +233,10 @@ export function ActionCard({ action, registro, onConfirm, onCancel, confirmLoadi
           {/* O bloco vindo da IA traz só o id. Enquanto a linha real não
               chega, nada é afirmado — antes daqui o card mostrava
               "Descrição: —" e "R$ 0,00", que era o `|| 0` do fmt. */}
-          {precisaDoRegistro && registro?.status === "carregando" && (
+          {precisaDoRegistro && doAlvo?.status === "carregando" && (
             <p className="text-sm text-gray-500 dark:text-gray-400 py-2">Carregando lançamento…</p>
           )}
-          {precisaDoRegistro && registro?.status === "ausente" && (
+          {precisaDoRegistro && doAlvo?.status === "ausente" && (
             <p className="text-sm text-red-600 dark:text-red-400 py-2">
               Não foi possível localizar este lançamento. Ele pode já ter sido removido.
             </p>
@@ -266,11 +269,11 @@ export function ActionCard({ action, registro, onConfirm, onCancel, confirmLoadi
             <div className="bg-violet-50 dark:bg-violet-900/20 rounded-xl px-3 py-2 text-xs text-violet-600 dark:text-violet-400 font-medium">📅 {action.months} previstas serão criadas a partir de {action.start_date}</div>
             <AutoRealizeToggle value={action.auto_realize} onChange={onSetAutoRealize} />
           </>)}
-          {action._type === "realize" && registro?.status === "ok" && (<>
-            <Row label="Descrição" value={registro.dados.description} />
-            <Row label="Valor" value={<span className="text-lg font-bold text-emerald-600">{fmt(registro.dados.amount)}</span>} />
-            <Row label="Vencimento" value={dataBr(registro.dados.date)} />
-            {registro.dados.accounts?.name && <Row label="Conta" value={registro.dados.accounts.name} />}
+          {action._type === "realize" && doAlvo?.status === "ok" && (<>
+            <Row label="Descrição" value={doAlvo.dados.description} />
+            <Row label="Valor" value={<span className="text-lg font-bold text-emerald-600">{fmt(doAlvo.dados.amount)}</span>} />
+            <Row label="Vencimento" value={dataBr(doAlvo.dados.date)} />
+            {doAlvo.dados.accounts?.name && <Row label="Conta" value={doAlvo.dados.accounts.name} />}
             <Row label="Realizar em" value={dataBr(action.date)} />
           </>)}
           {action._type === "partial_realize" && (<>
@@ -279,37 +282,37 @@ export function ActionCard({ action, registro, onConfirm, onCancel, confirmLoadi
             <Row label="Restante" value={<span className="text-base font-bold text-amber-600">{fmt(action.remaining_amount)}</span>} />
             <Row label="Data" value={action.date} />
           </>)}
-          {action._type === "delete_tx" && registro?.status === "ok" && (<>
-            <Row label="Descrição" value={registro.dados.description} />
-            <Row label="Valor" value={<span className="text-lg font-bold text-red-600">{fmt(registro.dados.amount)}</span>} />
-            <Row label="Data" value={dataBr(registro.dados.date)} />
-            {registro.dados.category && <Row label="Categoria" value={<span className="text-xs bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded-full capitalize">{registro.dados.category}</span>} />}
-            {registro.dados.accounts?.name && <Row label="Conta" value={registro.dados.accounts.name} />}
-            <Row label="Status" value={<span className={`text-xs font-medium px-2 py-0.5 rounded-full ${registro.dados.is_realized === false ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"}`}>{registro.dados.is_realized === false ? "📋 Previsto" : "✅ Realizado"}</span>} />
+          {action._type === "delete_tx" && doAlvo?.status === "ok" && (<>
+            <Row label="Descrição" value={doAlvo.dados.description} />
+            <Row label="Valor" value={<span className="text-lg font-bold text-red-600">{fmt(doAlvo.dados.amount)}</span>} />
+            <Row label="Data" value={dataBr(doAlvo.dados.date)} />
+            {doAlvo.dados.category && <Row label="Categoria" value={<span className="text-xs bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded-full capitalize">{doAlvo.dados.category}</span>} />}
+            {doAlvo.dados.accounts?.name && <Row label="Conta" value={doAlvo.dados.accounts.name} />}
+            <Row label="Status" value={<span className={`text-xs font-medium px-2 py-0.5 rounded-full ${doAlvo.dados.is_realized === false ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"}`}>{doAlvo.dados.is_realized === false ? "📋 Previsto" : "✅ Realizado"}</span>} />
             <p className="text-xs text-red-500 font-medium">⚠️ Esta ação não pode ser desfeita!</p>
           </>)}
           {action._type === "create_goal" && (<><Row label="Nome" value={action.name} /><Row label="Tipo" value={action.type === "expense" ? "📉 Limite de gasto" : action.type === "income" ? "📈 Meta de renda" : "💹 Investimento"} /><Row label="Valor" value={<span className="text-base font-bold text-violet-600">{fmt(action.target_amount)}</span>} /><Row label="Período" value={`${action.start_date} até ${action.end_date}`} /></>)}
-          {action._type === "delete_goal" && registro?.status === "ok" && (<>
-            <Row label="Meta" value={registro.dados.name} />
-            <Row label="Valor alvo" value={fmt(registro.dados.target_amount)} />
-            {registro.dados.category && <Row label="Categoria" value={<span className="capitalize">{registro.dados.category}</span>} />}
+          {action._type === "delete_goal" && doAlvo?.status === "ok" && (<>
+            <Row label="Meta" value={doAlvo.dados.name} />
+            <Row label="Valor alvo" value={fmt(doAlvo.dados.target_amount)} />
+            {doAlvo.dados.category && <Row label="Categoria" value={<span className="capitalize">{doAlvo.dados.category}</span>} />}
             <p className="text-xs text-red-500 font-medium">⚠️ Esta ação não pode ser desfeita!</p>
           </>)}
           {action._type === "create_account" && (<><Row label="Nome" value={action.name} /><Row label="Tipo" value={{ bank: "🏦 Bancária", digital: "📱 Digital", wallet: "👛 Carteira", investment: "📈 Investimento", other: "📦 Outro" }[action.type] || action.type} /><Row label="Saldo inicial" value={fmt(action.initial_balance)} /></>)}
-          {action._type === "delete_account" && registro?.status === "ok" && (<>
-            <Row label="Conta" value={registro.dados.name} />
-            <Row label="Saldo inicial" value={fmt(registro.dados.initial_balance)} />
+          {action._type === "delete_account" && doAlvo?.status === "ok" && (<>
+            <Row label="Conta" value={doAlvo.dados.name} />
+            <Row label="Saldo inicial" value={fmt(doAlvo.dados.initial_balance)} />
             <p className="text-xs text-red-500 font-medium">⚠️ A conta será removida mas as transações serão mantidas.</p>
           </>)}
           {action._type === "send_invite" && (<><Row label="Para" value={action.email} />{action.name && <Row label="Nome" value={action.name} />}</>)}
           {needsAutoRealize && (<p className="text-[10px] text-amber-600 dark:text-amber-400 text-center">👆 Escolha uma opção acima para confirmar</p>)}
         </div>
         <div className="flex gap-2 px-4 pb-4">
-          <button onClick={onCancel} className="flex-1 h-10 rounded-xl border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 text-sm font-medium flex items-center justify-center gap-1.5">
+          <button onClick={onCancel} className="flex-1 h-11 rounded-xl border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 text-sm font-medium flex items-center justify-center gap-1.5">
             <X className="w-3.5 h-3.5" /> Cancelar
           </button>
           <button onClick={onConfirm} disabled={confirmLoading || needsAutoRealize || registroPendente}
-            className={`flex-1 h-10 rounded-xl text-white text-sm font-medium flex items-center justify-center gap-1.5 disabled:opacity-50 ${["delete_tx","delete_goal","delete_account"].includes(action._type) ? "bg-red-500 hover:bg-red-600" : action._type === "realize" ? "bg-emerald-500 hover:bg-emerald-600" : "bg-gradient-to-r from-violet-600 to-indigo-600"}`}>
+            className={`flex-1 h-11 rounded-xl text-white text-sm font-medium flex items-center justify-center gap-1.5 disabled:opacity-50 ${["delete_tx","delete_goal","delete_account"].includes(action._type) ? "bg-red-500 hover:bg-red-600" : action._type === "realize" ? "bg-emerald-500 hover:bg-emerald-600" : "bg-gradient-to-r from-violet-600 to-indigo-600"}`}>
             {confirmLoading
               ? <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: "linear" }} className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full" />
               : <><Check className="w-3.5 h-3.5" /> Confirmar</>}
