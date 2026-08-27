@@ -134,16 +134,20 @@ function contaBloqueada(status: number): boolean {
  * erro: o `fetch` espera indefinidamente, então um provedor lento
  * segurava os outros e o usuário ficava olhando para o nada.
  *
- * O caminho feliz (Groq com cota) responde em 2 a 4 segundos. Os 15s
- * por tentativa são para o provedor lento: com o prompt real, de ~1.700
- * tokens, o Gemini não cabia em 9s e era cortado sempre — prazo curto
- * demais transforma um backup que funciona em espera jogada fora.
+ * Medido com o prompt real (~1.700 tokens): Groq gpt-oss-20b 0,6s,
+ * Gemini flash-lite ~1s, Groq gpt-oss-120b 2 a 3s. Os 6s cobrem os três
+ * com folga larga.
  *
- * O orçamento total fica abaixo dos 45s que a tela do app espera, para
- * a falha chegar como mensagem em vez de conexão pendurada.
+ * Quem passa de 6s está degradado, e esperar não melhora a resposta —
+ * só atrasa o próximo da fila, que provavelmente atenderia antes. Os
+ * provedores que recusam por cota ou billing respondem em menos de meio
+ * segundo, então o pior caso real fica bem abaixo do orçamento total.
+ *
+ * O orçamento total fica muito abaixo dos 45s que a tela espera, para a
+ * falha chegar como mensagem em vez de conexão pendurada.
  */
-const PRAZO_POR_TENTATIVA = 15000;
-const PRAZO_TOTAL = 38000;
+const PRAZO_POR_TENTATIVA = 6000;
+const PRAZO_TOTAL = 20000;
 
 /** Rótulo curto do que aconteceu numa tentativa. Seguro para sair da função. */
 export type Tentativa = { provedor: string; modelo: string; resultado: string; ms: number };
@@ -183,7 +187,9 @@ async function tentar(
         model: modelo,
         messages: mensagens,
         temperature: opcoes.temperature ?? 0.2,
-        max_tokens: opcoes.maxTokens ?? 500,
+        // As respostas do Finn medidas ficaram entre 46 e 202 tokens; o
+        // teto antigo de 500 só alongava o pior caso e gastava cota.
+        max_tokens: opcoes.maxTokens ?? 350,
         // Os gpt-oss são modelos de raciocínio: por padrão gastam parte
         // do orçamento de saída "pensando" antes de escrever, e com o
         // teto baixo do plano gratuito a resposta voltava vazia. O Finn

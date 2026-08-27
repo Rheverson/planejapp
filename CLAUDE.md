@@ -19,12 +19,19 @@ Leia o arquivo `PLANEJAPP_DOCS.md` antes de qualquer tarefa. Ele contém toda a 
   provedor inteiro; modelo fora do ar ou resposta vazia pulam só o modelo.
   Nunca chame um provedor direto por `fetch` — use `chamarIA()`, senão aquele
   caminho fica sem fallback (foi o caso do `whatsapp-bot`).
-- **Prazos:** 15s por tentativa (AbortController) e 38s de orçamento total,
+- **Prazos:** 6s por tentativa (AbortController) e 20s de orçamento total,
   abaixo dos 45s que a tela espera. Sem isso a cascata levou 38s para devolver
   erro, porque `fetch` sem prazo deixa um provedor lento segurar a fila.
-  15s não é exagero: o Gemini não cabe em 9s com o prompt real de ~1.700
-  tokens, e prazo curto demais transforma um backup que funciona em espera
-  jogada fora.
+  6s cobre com folga os tempos medidos (Groq 20b 0,6s, Gemini flash-lite ~1s,
+  Groq 120b 2–3s); quem passa disso está degradado, e esperar só atrasa o
+  próximo da fila. Alvo de UX: **resposta em 2–3s**. Medido em carga de 10
+  pedidos variados — mediana 1,8s, pior 3,3s, zero falhas.
+- **O gargalo é o TPM da Groq, não o número de provedores.** 8.000 tokens/min
+  a ~1.700 por mensagem dão ~4,7 mensagens/minuto; estourando isso, cai num
+  Gemini instável e a resposta passa de 7s. Enxugar o prompt é o que compra
+  velocidade: o molde saiu de 1.498 para 1.181 tokens e as mesmas 10 chamadas
+  passaram de 2 falhas para nenhuma. Medir antes de acrescentar regra ao
+  prompt.
 - **Diagnosticar falha da IA:** a resposta de erro do `ai-chat` traz
   `tentativas` — provedor, modelo, rótulo curto e tempo de cada degrau. Foi
   criada porque o log do Supabase estava com a ingestão parada justamente na
