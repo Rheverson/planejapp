@@ -25,6 +25,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { useEffect, Suspense } from 'react';
 import { initPushNotifications } from '@/lib/pushNotifications';
+import ErrorBoundary from '@/lib/ErrorBoundary';
 
 const { Pages, Layout, mainPage } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
@@ -202,6 +203,7 @@ const AuthenticatedApp = () => {
 
 function App() {
   return (
+    <ErrorBoundary>
     <Router>
       <ReferralCapture />
       <Routes>
@@ -226,6 +228,7 @@ function App() {
       </Routes>
       <Toaster />
     </Router>
+    </ErrorBoundary>
   );
 }
 

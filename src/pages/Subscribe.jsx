@@ -1,3 +1,4 @@
+import { mensagemDeErro } from "@/lib/erros";
 import React, { useState, useEffect } from "react";
 import { useAuth } from "@/lib/AuthContext";
 import { supabase } from "@/lib/supabase";
@@ -64,7 +65,7 @@ export default function Subscribe() {
       if (!data?.url) throw new Error("URL não retornada");
       window.location.href = data.url;
     } catch (err) {
-      toast.error("Erro: " + err.message);
+      toast.error(mensagemDeErro(err));
     } finally { setLoading(false); }
   };
 

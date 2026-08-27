@@ -22,7 +22,7 @@ export async function initPushNotifications() {
     await PushNotifications.register();
 
     PushNotifications.addListener('registration', async (token) => {
-      console.log('Push token:', token.value);
+      // token de push não é registrado em log: identifica o dispositivo do usuário
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 

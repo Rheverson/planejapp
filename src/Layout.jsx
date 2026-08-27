@@ -186,11 +186,11 @@ export default function Layout({ children, currentPageName }) {
                   style={{ background: isActive ? (darkMode ? "rgba(29,78,216,0.15)" : "rgba(29,78,216,0.08)") : "transparent" }}>
                   <item.icon
                     className="w-5 h-5 transition-colors duration-300"
-                    style={{ color: isActive ? (darkMode ? "#60a5fa" : "#1d4ed8") : (darkMode ? "#3a4259" : "#9ca3af") }}
+                    style={{ color: isActive ? (darkMode ? "#60a5fa" : "#1d4ed8") : (darkMode ? "#7c8aa6" : "#5b6472") }}
                   />
                 </div>
                 <span className="text-[10px] mt-0.5 transition-all duration-300"
-                  style={{ color: isActive ? (darkMode ? "#60a5fa" : "#1d4ed8") : (darkMode ? "#3a4259" : "#9ca3af"), fontWeight: isActive ? 700 : 400 }}>
+                  style={{ color: isActive ? (darkMode ? "#60a5fa" : "#1d4ed8") : (darkMode ? "#7c8aa6" : "#5b6472"), fontWeight: isActive ? 700 : 400 }}>
                   {item.name}
                 </span>
               </Link>
@@ -200,7 +200,7 @@ export default function Layout({ children, currentPageName }) {
           {/* Finn */}
           <div className="flex flex-col items-center justify-end pb-1 relative">
             <span className="text-[10px] font-bold mb-0.5 transition-colors duration-300"
-              style={{ color: isAIActive ? "#60a5fa" : (darkMode ? "#3a4259" : "#9ca3af") }}>
+              style={{ color: isAIActive ? "#60a5fa" : (darkMode ? "#7c8aa6" : "#5b6472") }}>
               Finn
             </span>
             <motion.button
@@ -237,10 +237,10 @@ export default function Layout({ children, currentPageName }) {
                 <div className="p-1.5 rounded-xl transition-all duration-300"
                   style={{ background: isActive ? (darkMode ? "rgba(29,78,216,0.15)" : "rgba(29,78,216,0.08)") : "transparent" }}>
                   <item.icon className="w-5 h-5 transition-colors duration-300"
-                    style={{ color: isActive ? (darkMode ? "#60a5fa" : "#1d4ed8") : (darkMode ? "#3a4259" : "#9ca3af") }} />
+                    style={{ color: isActive ? (darkMode ? "#60a5fa" : "#1d4ed8") : (darkMode ? "#7c8aa6" : "#5b6472") }} />
                 </div>
                 <span className="text-[10px] mt-0.5 transition-all duration-300"
-                  style={{ color: isActive ? (darkMode ? "#60a5fa" : "#1d4ed8") : (darkMode ? "#3a4259" : "#9ca3af"), fontWeight: isActive ? 700 : 400 }}>
+                  style={{ color: isActive ? (darkMode ? "#60a5fa" : "#1d4ed8") : (darkMode ? "#7c8aa6" : "#5b6472"), fontWeight: isActive ? 700 : 400 }}>
                   {item.name}
                 </span>
               </Link>

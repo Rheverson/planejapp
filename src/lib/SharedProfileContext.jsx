@@ -21,7 +21,7 @@ export const SharedProfileProvider = ({ children }) => {
   }, [user?.id]);
 
   const switchProfile = (profileData) => {
-    console.log('📌 switchProfile chamado com:', profileData);
+    
     setActiveProfile(profileData);
     if (user?.id) {
       localStorage.setItem(`activeProfile_${user.id}`, JSON.stringify(profileData));
@@ -29,7 +29,7 @@ export const SharedProfileProvider = ({ children }) => {
   };
 
   const switchToOwnProfile = () => {
-    console.log('📌 switchToOwnProfile chamado');
+    
     setActiveProfile(null);
     if (user?.id) {
       localStorage.removeItem(`activeProfile_${user.id}`);

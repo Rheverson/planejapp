@@ -134,3 +134,28 @@
   .hide-scrollbar::-webkit-scrollbar { display: none; }
   .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 }
+/* ============================================================
+   Acessibilidade — itens 7.3 e 7.6 da auditoria
+   ============================================================ */
+@layer base {
+  /* Foco visível: os inputs usavam outline:none sem substituto, então
+     a navegação por teclado ficava sem indicação de posição. */
+  :focus-visible {
+    outline: 2px solid hsl(217 91% 60%);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+
+  /* O app anima praticamente todo elemento, incluindo um pulso infinito
+     no botão do Finn. Quem pede menos movimento no sistema recebe menos. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}

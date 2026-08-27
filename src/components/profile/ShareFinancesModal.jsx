@@ -238,14 +238,14 @@ export default function ShareFinancesModal({ onSubmit, onClose }) {
             </label>
             <div style={{ background: subBg, borderRadius: 14, padding: "0 14px", border: `1px solid ${dark ? "rgba(255,255,255,0.05)" : "rgba(17,24,39,0.05)"}` }}>
               <PermissionRow
-                title="Ver transações e contas"
+                title="Ver transações e contas" aria-label="Ver transações e contas"
                 description="Permite visualizar extratos e saldos"
                 checked={formData.permissions.view_transactions}
                 onChange={(v) => updatePermission("view_transactions", v)}
                 disabled={loading} dark={dark}
               />
               <PermissionRow
-                title="Adicionar registros"
+                title="Adicionar registros" aria-label="Adicionar registros"
                 description="Permite criar novas receitas ou despesas"
                 checked={formData.permissions.add_transactions}
                 onChange={(v) => updatePermission("add_transactions", v)}
@@ -253,7 +253,7 @@ export default function ShareFinancesModal({ onSubmit, onClose }) {
               />
               <div style={{ padding: "12px 0" }}>
                 <PermissionRow
-                  title="Editar registros"
+                  title="Editar registros" aria-label="Editar registros"
                   description="Permite editar transações existentes"
                   checked={formData.permissions.edit_transactions}
                   onChange={(v) => updatePermission("edit_transactions", v)}

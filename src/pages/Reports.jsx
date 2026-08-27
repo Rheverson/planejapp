@@ -384,7 +384,7 @@ export default function Reports() {
               </div>
 
               {/* Evolução 6 meses */}
-              <Card title="Evolução — últimos 6 meses">
+              <Card title="Evolução — últimos 6 meses" aria-label="Evolução — últimos 6 meses">
                 <div className="px-2 pb-4" style={{ height: 180 }}>
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={last6Months} barSize={10} barGap={2}>
@@ -405,7 +405,7 @@ export default function Reports() {
 
               {/* Top gastos */}
               {topExpenses.length > 0 && (
-                <Card title="Maiores gastos do mês">
+                <Card title="Maiores gastos do mês" aria-label="Maiores gastos do mês">
                   <div className="divide-y divide-gray-50 dark:divide-gray-700">
                     {topExpenses.map((t, i) => (
                       <div key={t.id} className="flex items-center gap-3 px-4 py-3">
@@ -427,10 +427,10 @@ export default function Reports() {
           {/* ── DESPESAS ──────────────────────────────────────── */}
           {activeTab === "expenses" && (
             <motion.div key="expenses" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-4">
-              <Card title="Por categoria">
+              <Card title="Por categoria" aria-label="Por categoria">
                 <DonutChart data={expenseByCategory} total={expense} />
               </Card>
-              <Card title="Detalhamento">
+              <Card title="Detalhamento" aria-label="Detalhamento">
                 {expenseByCategory.length === 0 ? (
                   <p className="text-center text-sm text-gray-400 py-8">Sem despesas no período</p>
                 ) : (
@@ -457,7 +457,7 @@ export default function Reports() {
                   </div>
                 )}
               </Card>
-              <Card title="Tendência de saídas">
+              <Card title="Tendência de saídas" aria-label="Tendência de saídas">
                 <div className="px-2 pb-4" style={{ height: 160 }}>
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={last6Months}>
@@ -476,10 +476,10 @@ export default function Reports() {
           {/* ── RECEITAS ──────────────────────────────────────── */}
           {activeTab === "income" && (
             <motion.div key="income" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-4">
-              <Card title="Por categoria">
+              <Card title="Por categoria" aria-label="Por categoria">
                 <DonutChart data={incomeByCategory} total={income} />
               </Card>
-              <Card title="Detalhamento">
+              <Card title="Detalhamento" aria-label="Detalhamento">
                 {incomeByCategory.length === 0 ? (
                   <p className="text-center text-sm text-gray-400 py-8">Sem receitas no período</p>
                 ) : (
@@ -506,7 +506,7 @@ export default function Reports() {
                   </div>
                 )}
               </Card>
-              <Card title="Tendência de entradas">
+              <Card title="Tendência de entradas" aria-label="Tendência de entradas">
                 <div className="px-2 pb-4" style={{ height: 160 }}>
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={last6Months}>
@@ -547,7 +547,7 @@ export default function Reports() {
                       </div>
                     ))}
                   </div>
-                  <Card title="Progresso das metas">
+                  <Card title="Progresso das metas" aria-label="Progresso das metas">
                     {goalsWithProgress.map(goal => <GoalBar key={goal.id} goal={goal} />)}
                   </Card>
                 </>

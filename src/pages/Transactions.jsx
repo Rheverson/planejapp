@@ -1,3 +1,4 @@
+import { mensagemDeErro } from "@/lib/erros";
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthContext";
@@ -139,7 +140,7 @@ export default function Transactions() {
       setShowForm(false);
       toast.success(data?.is_recurring ? "Recorrência criada!" : "Transação criada!");
     },
-    onError: (err) => toast.error("Erro: " + err.message),
+    onError: (err) => toast.error(mensagemDeErro(err)),
   });
 
   const updateMutation = useMutation({
@@ -167,7 +168,7 @@ export default function Transactions() {
       }
     },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["transactions", activeOwnerId] }); setEditTransaction(null); setShowForm(false); setRecurringModal(null); toast.success("Atualizado!"); },
-    onError: (err) => toast.error("Erro: " + err.message),
+    onError: (err) => toast.error(mensagemDeErro(err)),
   });
 
   const deleteMutation = useMutation({
@@ -193,7 +194,7 @@ export default function Transactions() {
       }
     },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["transactions", activeOwnerId] }); setDeleteId(null); setRecurringModal(null); toast.success("Excluído!"); },
-    onError: (err) => toast.error("Erro: " + err.message),
+    onError: (err) => toast.error(mensagemDeErro(err)),
   });
 
   // ✅ realizarMutation corrigido — usa dataRealizacao do modal
@@ -235,7 +236,7 @@ export default function Transactions() {
       setRealizarPrevisao(null);
       toast.success("Realização registrada!");
     },
-    onError: (err) => toast.error("Erro: " + (err.message || JSON.stringify(err))),
+    onError: (err) => toast.error(mensagemDeErro(err, "registrar a realizacao")),
   });
 
   const duplicarMutation = useMutation({
@@ -259,7 +260,7 @@ export default function Transactions() {
       if (error) throw error;
     },
     onSuccess: (_, { meses }) => { queryClient.invalidateQueries({ queryKey: ["transactions", activeOwnerId] }); toast.success(`Duplicado em ${meses.length} ${meses.length === 1 ? "mês" : "meses"}!`); },
-    onError: (err) => toast.error("Erro: " + err.message),
+    onError: (err) => toast.error(mensagemDeErro(err)),
   });
 
   const handleEdit = (t) => {
@@ -457,12 +458,13 @@ export default function Transactions() {
                 style={{ flex: 1, background: "none", border: "none", outline: "none", color: "#ffffff", fontSize: "0.82rem", fontFamily: "'Outfit',sans-serif" }}
               />
               {searchQuery && (
-                <button onClick={() => setSearchQuery("")} style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.5)", display: "flex" }}>
+                <button onClick={() => setSearchQuery("")} aria-label="Limpar busca" style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.5)", display: "flex" }}>
                   <X size={13} />
                 </button>
               )}
             </div>
             <button onClick={() => setShowAdvanced(!showAdvanced)}
+              aria-label="Filtros avançados" aria-expanded={showAdvanced}
               style={{ width: 38, height: 38, borderRadius: 12, flexShrink: 0, background: showAdvanced || hasAdvFilters ? "#ffffff" : "rgba(255,255,255,0.12)", border: `1px solid ${showAdvanced || hasAdvFilters ? "transparent" : "rgba(255,255,255,0.15)"}`, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", position: "relative", transition: "all .2s" }}>
               <SlidersHorizontal size={15} color={showAdvanced || hasAdvFilters ? "#1d4ed8" : "rgba(255,255,255,0.9)"} />
               {hasAdvFilters && <div style={{ position: "absolute", top: -4, right: -4, width: 10, height: 10, background: "#f59e0b", borderRadius: "50%", border: "2px solid #1e3a8a" }} />}
@@ -478,7 +480,7 @@ export default function Transactions() {
               </button>
             ))}
             {/* Botão sort — discreto, no final das pills */}
-            <button onClick={() => setShowSort(true)}
+            <button onClick={() => setShowSort(true)} aria-label="Ordenar lista"
               style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 4, padding: "4px 10px", borderRadius: 999, fontSize: "0.73rem", fontWeight: 600, fontFamily: "'Outfit',sans-serif", background: (sortBy !== "date" || sortDir !== "desc") ? "#ffffff" : "rgba(255,255,255,0.13)", color: (sortBy !== "date" || sortDir !== "desc") ? "#1d4ed8" : "rgba(255,255,255,0.9)", border: (sortBy !== "date" || sortDir !== "desc") ? "none" : "0.5px solid rgba(255,255,255,0.18)", cursor: "pointer", transition: "all .2s" }}>
               <ArrowUpDown size={11} />
               {sortBy === "date" ? "Ordenar" : sortBy === "amount" ? "Valor" : sortBy === "category" ? "Categoria" : "Descrição"}
@@ -586,7 +588,7 @@ export default function Transactions() {
         ) : (
           <EmptyState
             icon={TrendingUp}
-            title="Nenhuma transação"
+            title="Nenhuma transação" aria-label="Nenhuma transação"
             description={searchQuery || hasAdvFilters ? "Tente ajustar os filtros." : "Período sem dados."}
             action={canAdd && !searchQuery && !hasAdvFilters ? "Adicionar" : undefined}
             onAction={() => canAdd && setShowForm(true)}
@@ -598,6 +600,7 @@ export default function Transactions() {
       {canAdd && (
         <motion.button whileTap={{ scale: 0.88 }} whileHover={{ scale: 1.06 }}
           onClick={() => { setEditTransaction(null); setShowForm(true); }}
+          aria-label="Adicionar transação"
           style={{ position: "fixed", bottom: 88, right: 20, width: 52, height: 52, background: "linear-gradient(135deg,#1d4ed8,#3730a3)", border: "none", borderRadius: "50%", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 0 24px rgba(29,78,216,0.5),0 4px 14px rgba(0,0,0,0.25)", zIndex: 40 }}>
           <Plus size={21} color="#fff" />
         </motion.button>
@@ -637,7 +640,7 @@ export default function Transactions() {
                 <h2 style={{ fontFamily: "'Cabinet Grotesk', sans-serif", fontWeight: 800, fontSize: "0.95rem", color: dark ? "#e8edf5" : "#0f172a", margin: 0 }}>
                   Ordenar por
                 </h2>
-                <button onClick={() => setShowSort(false)} style={{ width: 28, height: 28, borderRadius: 8, border: "none", background: dark ? "rgba(255,255,255,0.06)" : "#f1f5f9", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
+                <button onClick={() => setShowSort(false)} aria-label="Fechar" style={{ width: 28, height: 28, borderRadius: 8, border: "none", background: dark ? "rgba(255,255,255,0.06)" : "#f1f5f9", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
                   <X size={14} color={dark ? "#6b7a96" : "#64748b"} />
                 </button>
               </div>

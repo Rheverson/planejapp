@@ -1,3 +1,4 @@
+import { mensagemDeErro } from "@/lib/erros";
 import React, { useState, useMemo, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
@@ -25,6 +26,7 @@ import CashFlowProjection from "@/components/financial/CashFlowProjection";
 import MonthComparison from "@/components/financial/MonthComparison";
 import BudgetManager from "@/components/financial/BudgetManager";
 import { calcularTotaisDeSaldo, calcularKPIsMes, gerarOcorrenciasRecorrentes } from "@/domain/financas";
+import { Skeleton, SkeletonKPI, SkeletonLinha, SkeletonKeyframes } from "@/components/common/Skeleton";
 
 const fmt = (v) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
@@ -162,13 +164,13 @@ export default function Home() {
     }
   }, [isViewingSharedProfile]);
 
-  const { data: accounts = [] } = useQuery({
+  const { data: accounts = [], isLoading: carregandoContas } = useQuery({
     queryKey: ["accounts", activeOwnerId],
     queryFn: async () => { const { data, error } = await supabase.from("accounts").select("*").eq("user_id", activeOwnerId).order("name"); if (error) throw error; return data; },
     enabled: !!activeOwnerId,
   });
 
-  const { data: transactions = [] } = useQuery({
+  const { data: transactions = [], isLoading: carregandoTransacoes } = useQuery({
     queryKey: ["transactions", activeOwnerId],
     queryFn: async () => { const { data, error } = await supabase.from("transactions").select("*").eq("user_id", activeOwnerId).order("date", { ascending: false }); if (error) throw error; return data; },
     enabled: !!activeOwnerId,
@@ -192,13 +194,13 @@ export default function Home() {
       return data;
     },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["transactions"] }); queryClient.invalidateQueries({ queryKey: ["accounts"] }); setShowTransactionForm(false); toast.success("Transação adicionada!"); },
-    onError: (err) => toast.error("Erro ao salvar: " + err.message),
+    onError: (err) => toast.error(mensagemDeErro(err, "salvar a transacao")),
   });
 
   const createTransferMutation = useMutation({
     mutationFn: async ({ fromAccountId, toAccountId, amount, date, description }) => { const { error } = await supabase.from("transactions").insert([{ description: description || "Transferência", amount: parseFloat(amount), type: "transfer", account_id: fromAccountId, transfer_account_id: toAccountId, date, is_realized: true, user_id: activeOwnerId }]); if (error) throw error; },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["transactions"] }); setShowTransferForm(false); toast.success("Transferência realizada!"); },
-    onError: (err) => toast.error("Erro: " + err.message),
+    onError: (err) => toast.error(mensagemDeErro(err)),
   });
 
   const monthStart = startOfMonth(selectedDate);
@@ -225,6 +227,7 @@ export default function Home() {
     [transactions, accounts, selectedDate, totalBalance]
   );
 
+  const carregando = carregandoContas || carregandoTransacoes;
   const expenseCount  = monthTransactions.filter(t=>t.type==="expense"&&t.is_realized!==false).length;
   const recentTx = monthTransactions.slice(0, 5);
 
@@ -240,6 +243,7 @@ export default function Home() {
 
   return (
     <div style={{ minHeight: "100vh", background: bg, paddingBottom: 96, fontFamily: "'Outfit', sans-serif" }}>
+      <SkeletonKeyframes />
 
       {/* ── HEADER ──────────────────────────────────────────── */}
       <div style={{ position: "relative", overflow: "hidden" }}>
@@ -279,7 +283,7 @@ export default function Home() {
               <p style={{ fontSize: "0.62rem", fontWeight: 600, color: "rgba(255,255,255,0.55)", textTransform: "uppercase", letterSpacing: "0.12em" }}>
                 Saldo em conta
               </p>
-              <button onClick={toggle} style={{
+              <button onClick={toggle} aria-label={hidden ? "Mostrar valores" : "Ocultar valores"} aria-pressed={hidden} style={{
                 background: "rgba(255,255,255,0.1)", border: "none", borderRadius: 6,
                 padding: "3px 7px", cursor: "pointer", display: "flex", alignItems: "center",
               }}>
@@ -287,15 +291,20 @@ export default function Home() {
               </button>
             </div>
 
-            <motion.p key={String(hidden)} initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}
-              style={{
-                fontFamily: "'Cabinet Grotesk', sans-serif",
-                fontSize: "clamp(2.2rem, 8vw, 3rem)",
-                fontWeight: 900, color: "#ffffff",
-                letterSpacing: "-0.035em", lineHeight: 1,
-              }}>
-              {hidden ? "R$ ••••••" : fmt(totalBalance)}
-            </motion.p>
+            {carregando ? (
+              <Skeleton width={200} height={44} radius={10} dark
+                style={{ background: "linear-gradient(90deg, rgba(255,255,255,0.10) 25%, rgba(255,255,255,0.20) 37%, rgba(255,255,255,0.10) 63%)", backgroundSize: "400% 100%" }} />
+            ) : (
+              <motion.p key={String(hidden)} initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}
+                style={{
+                  fontFamily: "'Cabinet Grotesk', sans-serif",
+                  fontSize: "clamp(2.2rem, 8vw, 3rem)",
+                  fontWeight: 900, color: "#ffffff",
+                  letterSpacing: "-0.035em", lineHeight: 1,
+                }}>
+                {hidden ? "R$ ••••••" : fmt(totalBalance)}
+              </motion.p>
+            )}
 
             {totalInvested > 0 && (
               <p style={{ fontSize: "0.72rem", color: "rgba(255,255,255,0.5)", marginTop: 8, display: "flex", alignItems: "center", gap: 5 }}>
@@ -343,10 +352,17 @@ export default function Home() {
 
         {/* KPIs */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-          <KPICard title="Entradas"    value={kpis.entradas}    color="green"  hidden={hidden} dark={dark} to={`/Transactions?filter=income&month=${format(selectedDate,"yyyy-MM")}`} />
-          <KPICard title="Saídas"      value={kpis.saidas}   color="red"    hidden={hidden} dark={dark} to={`/Transactions?filter=expense&month=${format(selectedDate,"yyyy-MM")}`} />
-          <KPICard title="Resultado do Mês" value={kpis.resultadoDoMes} color={kpis.resultadoDoMes>=0?"blue":"red"}   subtitle="Mês atual"     hidden={hidden} dark={dark} to={`/Transactions?filter=realized&month=${format(selectedDate,"yyyy-MM")}`} />
-          <KPICard title="Projeção Final do Mês"    value={kpis.projecaoFinal} color={kpis.projecaoFinal>=0?"violet":"red"} subtitle="Mês completo" hidden={hidden} dark={dark} to={`/Transactions?filter=planned&month=${format(selectedDate,"yyyy-MM")}`} />
+          {carregando ? (
+            <>
+              <SkeletonKPI dark={dark} /><SkeletonKPI dark={dark} />
+              <SkeletonKPI dark={dark} /><SkeletonKPI dark={dark} />
+            </>
+          ) : (<>
+          <KPICard title="Entradas" aria-label="Entradas"    value={kpis.entradas}    color="green"  hidden={hidden} dark={dark} to={`/Transactions?filter=income&month=${format(selectedDate,"yyyy-MM")}`} />
+          <KPICard title="Saídas" aria-label="Saídas"      value={kpis.saidas}   color="red"    hidden={hidden} dark={dark} to={`/Transactions?filter=expense&month=${format(selectedDate,"yyyy-MM")}`} />
+          <KPICard title="Resultado do Mês" aria-label="Resultado do Mês" value={kpis.resultadoDoMes} color={kpis.resultadoDoMes>=0?"blue":"red"}   subtitle="Mês atual" aria-label="Mês atual"     hidden={hidden} dark={dark} to={`/Transactions?filter=realized&month=${format(selectedDate,"yyyy-MM")}`} />
+          <KPICard title="Projeção Final do Mês" aria-label="Projeção Final do Mês"    value={kpis.projecaoFinal} color={kpis.projecaoFinal>=0?"violet":"red"} subtitle="Mês completo" aria-label="Mês completo" hidden={hidden} dark={dark} to={`/Transactions?filter=planned&month=${format(selectedDate,"yyyy-MM")}`} />
+          </>)}
         </div>
 
         {/* Score financeiro */}
@@ -429,12 +445,14 @@ export default function Home() {
               Ver todas <ChevronRight size={12} />
             </Link>
           </div>
-          {recentTx.length > 0 ? (
+          {carregando ? (
+            <div><SkeletonLinha dark={dark} /><SkeletonLinha dark={dark} /><SkeletonLinha dark={dark} /></div>
+          ) : recentTx.length > 0 ? (
             <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
               {recentTx.map((t,i) => <TransactionItem key={t.id} transaction={t} delay={i*0.04} compact />)}
             </div>
           ) : (
-            <EmptyState icon={Wallet} title="Nenhuma transação" description="Adicione sua primeira entrada ou saída." action="Adicionar" onAction={() => setShowTransactionForm(true)} />
+            <EmptyState icon={Wallet} title="Nenhuma transação" aria-label="Nenhuma transação" description="Adicione sua primeira entrada ou saída." action="Adicionar" onAction={() => setShowTransactionForm(true)} />
           )}
         </motion.div>
       </div>
@@ -443,6 +461,7 @@ export default function Home() {
       {canAdd && (
         <motion.button whileTap={{ scale:0.88 }} whileHover={{ scale:1.06 }}
           onClick={() => setShowTransactionForm(true)}
+          aria-label="Adicionar transação"
           style={{
             position:"fixed", bottom:88, right:20,
             width:52, height:52,

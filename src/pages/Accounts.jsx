@@ -1,3 +1,4 @@
+import { mensagemDeErro } from "@/lib/erros";
 import React, { useState, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthContext";
@@ -203,7 +204,7 @@ export default function Accounts() {
       return data;
     },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["accounts"] }); setShowForm(false); toast.success("Conta criada!"); },
-    onError: (err) => toast.error("Erro: " + err.message),
+    onError: (err) => toast.error(mensagemDeErro(err)),
   });
 
   const updateMutation = useMutation({
@@ -212,7 +213,7 @@ export default function Accounts() {
       if (error) throw error;
     },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["accounts"] }); setEditAccount(null); setShowForm(false); toast.success("Conta atualizada!"); },
-    onError: (err) => toast.error("Erro: " + err.message),
+    onError: (err) => toast.error(mensagemDeErro(err)),
   });
 
   const deleteMutation = useMutation({
@@ -221,7 +222,7 @@ export default function Accounts() {
       if (error) throw error;
     },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["accounts"] }); setDeleteId(null); toast.success("Conta removida!"); },
-    onError: (err) => toast.error("Erro: " + err.message),
+    onError: (err) => toast.error(mensagemDeErro(err)),
   });
 
   const accountBalances = useMemo(() => {
@@ -336,7 +337,7 @@ export default function Accounts() {
             {accounts.length === 0 && (
               <EmptyState
                 icon={Wallet}
-                title="Nenhuma conta cadastrada"
+                title="Nenhuma conta cadastrada" aria-label="Nenhuma conta cadastrada"
                 description="Adicione suas contas para começar."
                 action="Adicionar Conta"
                 onAction={() => setShowForm(true)}

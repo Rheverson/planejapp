@@ -120,27 +120,27 @@ export default function TransactionItem({ transaction, accounts = [], creditCard
         {hasActions && (
           <div className="flex items-center justify-end gap-1 px-3 pb-2 border-t border-gray-50 dark:border-gray-700 pt-1.5">
             {!isRealized && onRegistrar && (
-              <button type="button" onClick={() => onRegistrar(transaction)} title="Registrar"
-                className="flex items-center gap-1 px-2 py-1 rounded-lg bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 transition-colors">
+              <button type="button" onClick={() => onRegistrar(transaction)} title="Registrar" aria-label={`Registrar ${transaction.description}`}
+                className="flex items-center gap-1 px-3 py-2 rounded-lg bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 transition-colors">
                 <CheckCheck className="w-3.5 h-3.5 text-blue-600" />
                 <span className="text-xs text-blue-600 font-medium">Registrar</span>
               </button>
             )}
             {onDuplicar && !isTransfer && (
-              <button type="button" onClick={() => setShowDuplicar(true)} title="Duplicar"
-                className="w-7 h-7 rounded-lg bg-gray-50 dark:bg-gray-700 flex items-center justify-center hover:bg-gray-100 transition-colors">
+              <button type="button" onClick={() => setShowDuplicar(true)} title="Duplicar" aria-label={`Duplicar ${transaction.description}`}
+                className="w-9 h-9 rounded-lg bg-gray-50 dark:bg-gray-700 flex items-center justify-center hover:bg-gray-100 transition-colors">
                 <Copy className="w-3.5 h-3.5 text-gray-500" />
               </button>
             )}
             {onEdit && !isTransfer && (
-              <button type="button" onClick={() => onEdit(transaction)} title="Editar"
-                className="w-7 h-7 rounded-lg bg-gray-50 dark:bg-gray-700 flex items-center justify-center hover:bg-gray-100 transition-colors">
+              <button type="button" onClick={() => onEdit(transaction)} title="Editar" aria-label={`Editar ${transaction.description}`}
+                className="w-9 h-9 rounded-lg bg-gray-50 dark:bg-gray-700 flex items-center justify-center hover:bg-gray-100 transition-colors">
                 <Pencil className="w-3.5 h-3.5 text-gray-500" />
               </button>
             )}
             {onDelete && (
-              <button type="button" onClick={() => onDelete(transaction.id)} title="Excluir"
-                className="w-7 h-7 rounded-lg bg-red-50 dark:bg-red-900/20 flex items-center justify-center hover:bg-red-100 transition-colors">
+              <button type="button" onClick={() => onDelete(transaction.id)} title="Excluir" aria-label={`Excluir ${transaction.description}`}
+                className="w-9 h-9 rounded-lg bg-red-50 dark:bg-red-900/20 flex items-center justify-center hover:bg-red-100 transition-colors">
                 <Trash2 className="w-3.5 h-3.5 text-red-500" />
               </button>
             )}

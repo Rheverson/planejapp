@@ -17,6 +17,7 @@ export default function MonthSelector({ selectedDate, onChange }) {
       <motion.button
         whileTap={{ scale: 0.9 }}
         onClick={handlePrevMonth}
+        aria-label="Mês anterior"
         className="p-2 hover:bg-gray-100 rounded-full transition-colors"
       >
         <ChevronLeft className="w-5 h-5 text-white-600" />
@@ -34,6 +35,7 @@ export default function MonthSelector({ selectedDate, onChange }) {
       <motion.button
         whileTap={{ scale: 0.9 }}
         onClick={handleNextMonth}
+        aria-label="Próximo mês"
         className="p-2 hover:bg-gray-100 rounded-full transition-colors"
       >
         <ChevronRight className="w-5 h-5 text-white-600" />

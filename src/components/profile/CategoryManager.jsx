@@ -1,3 +1,4 @@
+import { mensagemDeErro } from "@/lib/erros";
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/lib/AuthContext";
@@ -47,7 +48,7 @@ export default function CategoryManager({ onClose }) {
       setNewName("");
       toast.success("Categoria criada!");
     },
-    onError: (err) => toast.error("Erro: " + err.message)
+    onError: (err) => toast.error(mensagemDeErro(err))
   });
 
   const deleteMutation = useMutation({
@@ -59,7 +60,7 @@ export default function CategoryManager({ onClose }) {
       queryClient.invalidateQueries({ queryKey: ['categories', user?.id] });
       toast.success("Categoria removida!");
     },
-    onError: (err) => toast.error("Erro: " + err.message)
+    onError: (err) => toast.error(mensagemDeErro(err))
   });
 
   const filtered = categories.filter(c => c.type === activeTab);

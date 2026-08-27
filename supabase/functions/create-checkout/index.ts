@@ -16,94 +16,95 @@ const json = (data: unknown, status = 200) =>
   })
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders })
-  }
+  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders })
 
   try {
-    // ── Autenticação ─────────────────────────────────────
     const authHeader = req.headers.get("Authorization")
-    if (!authHeader) {
-      return json({ error: "Não autorizado. Faça login novamente." }, 401)
-    }
+    if (!authHeader) return json({ error: "Nao autorizado." }, 401)
 
     const supabaseUser = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_ANON_KEY")!,
       { global: { headers: { Authorization: authHeader } } }
     )
-
     const { data: { user }, error: userError } = await supabaseUser.auth.getUser()
-    if (userError || !user) {
-      return json({ error: "Sessão expirada. Faça login novamente." }, 401)
-    }
+    if (userError || !user) return json({ error: "Sessao expirada." }, 401)
 
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     )
 
-    // ── Dados da requisição ──────────────────────────────
-    let userId: string, email: string, referralCode: string | null
+    let userId: string, email: string, referralCode: string | null, promoCode: string | null, trialDays: number
     try {
       const body = await req.json()
       userId = body.userId
       email = body.email
       referralCode = body.referralCode || null
+      promoCode = body.promoCode ? body.promoCode.toUpperCase().trim() : null
+      trialDays = typeof body.trialDays === 'number' && body.trialDays > 0 ? body.trialDays : 30
     } catch {
-      return json({ error: "Dados inválidos na requisição." }, 400)
+      return json({ error: "Dados invalidos." }, 400)
     }
 
-    if (!userId || !email) {
-      return json({ error: "Dados do usuário incompletos." }, 400)
+    if (!userId || !email) return json({ error: "Dados incompletos." }, 400)
+
+    // ── Valida promoCode se enviado ────────────────────────
+    if (promoCode) {
+      const { data: promo, error: promoErr } = await supabaseAdmin
+        .from("promo_codes")
+        .select("id, trial_days, is_used, is_multiuse, expires_at")
+        .eq("code", promoCode)
+        .single()
+
+      if (promoErr || !promo) return json({ error: "Codigo promocional invalido." }, 400)
+      // ✅ Códigos multiuso (EVENTO2026) não são bloqueados por is_used.
+      // Antes, bastava esse campo virar true uma vez para o código do
+      // evento parar de funcionar para todo mundo.
+      if (!promo.is_multiuse && promo.is_used) return json({ error: "Codigo ja utilizado." }, 400)
+      if (new Date(promo.expires_at) < new Date()) return json({ error: "Codigo expirado." }, 400)
+      trialDays = promo.trial_days
     }
 
-    // ── Verifica assinatura ativa ────────────────────────
+    // ── Verifica assinatura ativa ─────────────────────────
     const { data: existingSub, error: subError } = await supabaseAdmin
       .from("subscriptions")
       .select("stripe_customer_id, status")
       .eq("user_id", userId)
       .maybeSingle()
 
-    if (subError) {
-      console.error("Erro ao verificar assinatura:", subError)
-      return json({ error: "Erro ao verificar sua assinatura. Tente novamente." }, 500)
-    }
+    if (subError) return json({ error: "Erro ao verificar assinatura." }, 500)
+    if (existingSub && ['active', 'trialing'].includes(existingSub.status))
+      return json({ error: "Voce ja possui uma assinatura ativa." }, 400)
 
-    if (existingSub && ['active', 'trialing'].includes(existingSub.status)) {
-      return json({ error: "Você já possui uma assinatura ativa." }, 400)
-    }
-
-    // ── Cria ou reutiliza customer no Stripe ─────────────
+    // ── Cria ou reutiliza customer no Stripe ──────────────
     let customerId = existingSub?.stripe_customer_id
-
     if (!customerId) {
       try {
-        const customer = await stripe.customers.create({
-          email,
-          metadata: { userId }
-        })
+        const customer = await stripe.customers.create({ email, metadata: { userId } })
         customerId = customer.id
-
         const { error: insertError } = await supabaseAdmin
           .from("subscriptions")
           .insert({
             user_id: userId,
             stripe_customer_id: customerId,
             status: "incomplete",
+            promo_code: promoCode || null,
           })
-
-        if (insertError) {
-          console.error("Erro ao salvar customer:", insertError)
-        }
-      } catch (stripeErr) {
-        console.error("Erro ao criar customer no Stripe:", stripeErr)
-        return json({ error: "Erro ao configurar pagamento. Tente novamente." }, 500)
+        if (insertError) console.error("Erro ao salvar customer:", insertError)
+      } catch (err) {
+        console.error("Erro ao criar customer:", err)
+        return json({ error: "Erro ao configurar pagamento." }, 500)
       }
+    } else if (promoCode) {
+      await supabaseAdmin
+        .from("subscriptions")
+        .update({ promo_code: promoCode })
+        .eq("user_id", userId)
     }
 
-    // ── Processa código de indicação ─────────────────────
-    if (referralCode) {
+    // ── Processa referral ─────────────────────────────────
+    if (referralCode && !promoCode) {
       try {
         const { data: referrer } = await supabaseAdmin
           .from("profiles")
@@ -111,11 +112,7 @@ serve(async (req) => {
           .eq("referral_code", referralCode.toUpperCase())
           .maybeSingle()
 
-        if (!referrer) {
-          console.log("Código de indicação inválido:", referralCode)
-        } else if (referrer.id === userId) {
-          console.log("Auto-indicação ignorada para:", userId)
-        } else {
+        if (referrer && referrer.id !== userId) {
           const { data: existingReferral } = await supabaseAdmin
             .from("referrals")
             .select("id")
@@ -131,34 +128,19 @@ serve(async (req) => {
                 referral_code: referralCode.toUpperCase(),
                 status: "pending",
               })
-
-            if (referralError) {
-              if (!referralError.message.includes('duplicate') && !referralError.code?.includes('23505')) {
-                console.error("Erro ao salvar referral:", referralError)
-              }
-            } else {
-              console.log("Referral criado:", referrer.id, "->", userId)
-
+            if (!referralError) {
               try {
                 await supabaseAdmin.functions.invoke('send-notification', {
-                  body: {
-                    user_id: referrer.id,
-                    title: '🎉 Alguém usou seu código!',
-                    body: 'Um novo amigo se cadastrou com seu código. Aguardando o primeiro pagamento para ativar seu desconto!'
-                  }
+                  body: { user_id: referrer.id, title: 'Alguem usou seu codigo!', body: 'Um amigo se cadastrou com seu codigo de indicacao!' }
                 })
-              } catch (notifErr) {
-                console.error("Erro ao enviar notificação de indicação:", notifErr)
-              }
+              } catch (e) { console.error(e) }
             }
           }
         }
-      } catch (referralErr) {
-        console.error("Erro inesperado no referral:", referralErr)
-      }
+      } catch (err) { console.error("Erro no referral:", err) }
     }
 
-    // ── Cria sessão de checkout ──────────────────────────
+    // ── Cria sessao de checkout ───────────────────────────
     let session
     try {
       session = await stripe.checkout.sessions.create({
@@ -167,41 +149,28 @@ serve(async (req) => {
         locale: "pt-BR",
         line_items: [{ price: Deno.env.get("STRIPE_PRICE_ID")!, quantity: 1 }],
         mode: "subscription",
-        // ✅ CORREÇÃO: não cobra nada durante o trial
-        payment_method_collection: "if_required",
+        payment_method_collection: "always", // ✅ cartao obrigatorio
         subscription_data: {
-          trial_period_days: 30,
-          trial_settings: {
-            end_behavior: {
-              missing_payment_method: "cancel"
-            }
-          }
+          trial_period_days: trialDays,
+          trial_settings: { end_behavior: { missing_payment_method: "cancel" } }
         },
         success_url: `${Deno.env.get("APP_URL")}/subscription-success`,
         cancel_url: `${Deno.env.get("APP_URL")}/subscribe`,
       })
     } catch (stripeErr: any) {
-      console.error("Erro ao criar sessão Stripe:", stripeErr)
-
+      console.error("Erro Stripe:", stripeErr)
       if (stripeErr.code === 'resource_missing') {
-        await supabaseAdmin
-          .from("subscriptions")
-          .update({ stripe_customer_id: null })
-          .eq("user_id", userId)
-        return json({ error: "Erro de configuração. Tente novamente." }, 500)
+        await supabaseAdmin.from("subscriptions").update({ stripe_customer_id: null }).eq("user_id", userId)
+        return json({ error: "Erro de configuracao. Tente novamente." }, 500)
       }
-
-      return json({ error: "Erro ao iniciar pagamento. Tente novamente em instantes." }, 500)
+      return json({ error: "Erro ao iniciar pagamento." }, 500)
     }
 
-    if (!session?.url) {
-      return json({ error: "Erro ao gerar link de pagamento. Tente novamente." }, 500)
-    }
-
+    if (!session?.url) return json({ error: "Erro ao gerar link." }, 500)
     return json({ url: session.url })
 
   } catch (err: any) {
     console.error("Erro inesperado:", err)
-    return json({ error: "Erro inesperado. Tente novamente em instantes." }, 500)
+    return json({ error: "Erro inesperado." }, 500)
   }
 })

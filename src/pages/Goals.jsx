@@ -1,3 +1,4 @@
+import { mensagemDeErro } from "@/lib/erros";
 import React, { useMemo, useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthContext";
@@ -79,7 +80,7 @@ export default function Goals() {
       if (error) throw error;
     },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["goals", ownerId] }); setShowForm(false); toast.success("Meta criada!"); },
-    onError: (err) => toast.error("Erro: " + err.message),
+    onError: (err) => toast.error(mensagemDeErro(err)),
   });
 
   const updateMutation = useMutation({
@@ -89,7 +90,7 @@ export default function Goals() {
       if (error) throw error;
     },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["goals", ownerId] }); setEditGoal(null); setShowForm(false); toast.success("Meta atualizada!"); },
-    onError: (err) => toast.error("Erro: " + err.message),
+    onError: (err) => toast.error(mensagemDeErro(err)),
   });
 
   const deleteMutation = useMutation({
@@ -99,7 +100,7 @@ export default function Goals() {
       if (error) throw error;
     },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["goals", ownerId] }); setDeleteId(null); toast.success("Meta excluída!"); },
-    onError: (err) => toast.error("Erro: " + err.message),
+    onError: (err) => toast.error(mensagemDeErro(err)),
   });
 
   // O progresso vem do módulo de domínio. Antes havia uma segunda
@@ -256,7 +257,7 @@ export default function Goals() {
           <div style={{ background: cardBg, border: `1px solid ${cardBrd}`, borderRadius: 16, padding: "24px", boxShadow: shadow }}>
             <EmptyState
               icon={Target}
-              title="Nenhuma meta ativa"
+              title="Nenhuma meta ativa" aria-label="Nenhuma meta ativa"
               description="Crie metas para acompanhar seu progresso financeiro."
               action={canAddGoals ? "Criar Meta" : undefined}
               onAction={canAddGoals ? () => setShowForm(true) : undefined}
@@ -266,17 +267,17 @@ export default function Goals() {
 
         {/* Investimentos */}
         {!goalsLoading && !goalsError && investmentGoals.length > 0 && (
-          <Section title="Investimentos" icon={PiggyBank} iconColor={dark ? "#a78bfa" : "#6d28d9"} goals={investmentGoals} />
+          <Section title="Investimentos" aria-label="Investimentos" icon={PiggyBank} iconColor={dark ? "#a78bfa" : "#6d28d9"} goals={investmentGoals} />
         )}
 
         {/* Metas de saídas */}
         {!goalsLoading && !goalsError && expenseGoals.length > 0 && (
-          <Section title="Metas de saídas" icon={TrendingDown} iconColor={dark ? "#e85d5d" : "#dc2626"} goals={expenseGoals} />
+          <Section title="Metas de saídas" aria-label="Metas de saídas" icon={TrendingDown} iconColor={dark ? "#e85d5d" : "#dc2626"} goals={expenseGoals} />
         )}
 
         {/* Metas de entradas */}
         {!goalsLoading && !goalsError && incomeGoals.length > 0 && (
-          <Section title="Metas de entradas" icon={TrendingUp} iconColor={dark ? "#2ecc8a" : "#059669"} goals={incomeGoals} />
+          <Section title="Metas de entradas" aria-label="Metas de entradas" icon={TrendingUp} iconColor={dark ? "#2ecc8a" : "#059669"} goals={incomeGoals} />
         )}
 
         {/* Metas encerradas */}

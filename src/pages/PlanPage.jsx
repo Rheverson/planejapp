@@ -1,3 +1,4 @@
+import { mensagemDeErro } from "@/lib/erros";
 import React, { useState } from "react";
 import { useAuth } from "@/lib/AuthContext";
 import { supabase } from "@/lib/supabase";
@@ -138,7 +139,7 @@ export default function PlanPage() {
       setShowCancel(false);
       toast.success("Assinatura cancelada. Acesso mantido até " + endDate + " 🗓️");
     },
-    onError: (err) => toast.error("Erro ao cancelar: " + err.message),
+    onError: (err) => toast.error(mensagemDeErro(err, "cancelar a assinatura")),
   });
 
   // Abre o Stripe Customer Portal para gerenciar cobrança

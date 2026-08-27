@@ -1,3 +1,4 @@
+import { mensagemDeErro } from "@/lib/erros";
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { CreditCard, Plus, X, ChevronRight, Calendar, AlertCircle, CheckCircle, Clock, Wallet } from "lucide-react";
@@ -332,7 +333,7 @@ export default function CreditCardManager({ selectedDate }) {
       setShowForm(false); setEditCard(null);
       toast.success(editCard ? "Cartão atualizado!" : "Cartão adicionado!");
     },
-    onError: (err) => toast.error("Erro: " + err.message),
+    onError: (err) => toast.error(mensagemDeErro(err)),
   });
 
   const [payingInvoice, setPayingInvoice] = useState(null); // { card, total, invoiceMonth, dueDate }
