@@ -36,7 +36,7 @@ const fmt = (v) =>
 // ── KPI Card ─────────────────────────────────────────────────
 // Light: white card + shadow + colored accent on left
 // Dark:  tinted card + colored border
-function KPICard({ title, value, color, subtitle, hidden, to, dark }) {
+function KPICard({ title, value, color, subtitle, subvalor, subrotulo, hidden, to, dark }) {
   const palettes = {
     green:  { val: dark ? "#2ecc8a" : "#059669", bar: dark ? "rgba(46,204,138,0.5)"  : "#10b981", tint: "rgba(46,204,138,0.06)"  },
     red:    { val: dark ? "#e85d5d" : "#dc2626", bar: dark ? "rgba(232,93,93,0.5)"   : "#ef4444", tint: "rgba(232,93,93,0.06)"   },
@@ -79,6 +79,16 @@ function KPICard({ title, value, color, subtitle, hidden, to, dark }) {
       }}>
         {hidden ? "R$ ••••" : fmt(value)}
       </p>
+      {/* Valor secundário: o que já aconteceu, abaixo do previsto.
+          Segue o modo privacidade junto com o valor principal. */}
+      {subvalor !== undefined && (
+        <p style={{ fontSize: "0.66rem", color: dark ? "#6b7a96" : "#9ca3af", marginTop: 5 }}>
+          {subrotulo || "realizado"}{" "}
+          <span style={{ fontWeight: 700, color: hidden ? (dark ? "#3a4259" : "#d1d5db") : (dark ? "#e8edf5" : "#374151") }}>
+            {hidden ? "R$ ••••" : fmt(subvalor)}
+          </span>
+        </p>
+      )}
       {subtitle && (
         <p style={{ fontSize: "0.62rem", color: dark ? "#6b7a96" : "#9ca3af", marginTop: 4 }}>
           {subtitle}
@@ -391,9 +401,9 @@ export default function Home() {
               <SkeletonKPI dark={dark} /><SkeletonKPI dark={dark} />
             </>
           ) : (<>
-          <KPICard title="Entradas" aria-label="Entradas"    value={kpis.entradas}    color="green"  hidden={hidden} dark={dark} to={`/Transactions?filter=income&month=${format(selectedDate,"yyyy-MM")}`} />
-          <KPICard title="Saídas" aria-label="Saídas"      value={kpis.saidas}   color="red"    hidden={hidden} dark={dark} to={`/Transactions?filter=expense&month=${format(selectedDate,"yyyy-MM")}`} />
-          <KPICard title="Resultado do Mês" aria-label="Resultado do Mês" value={kpis.resultadoDoMes} color={kpis.resultadoDoMes>=0?"blue":"red"}   subtitle="Mês atual" aria-label="Mês atual"     hidden={hidden} dark={dark} to={`/Transactions?filter=realized&month=${format(selectedDate,"yyyy-MM")}`} />
+          <KPICard title="Entradas Previstas" aria-label="Entradas previstas do mês" value={kpis.entradas} color="green" subvalor={kpis.entradasRealizadas} subrotulo="já entrou" hidden={hidden} dark={dark} to={`/Transactions?filter=income&month=${format(selectedDate,"yyyy-MM")}`} />
+          <KPICard title="Saídas Previstas" aria-label="Saídas previstas do mês" value={kpis.saidas} color="red" subvalor={kpis.saidasRealizadas} subrotulo="já saiu" hidden={hidden} dark={dark} to={`/Transactions?filter=expense&month=${format(selectedDate,"yyyy-MM")}`} />
+          <KPICard title="Resultado Realizado do Mês" aria-label="Resultado realizado do mês" value={kpis.resultadoDoMes} color={kpis.resultadoDoMes>=0?"blue":"red"} subtitle="só o que já aconteceu" hidden={hidden} dark={dark} to={`/Transactions?filter=realized&month=${format(selectedDate,"yyyy-MM")}`} />
           <KPICard title="Projeção Final do Mês" aria-label="Projeção Final do Mês"    value={kpis.projecaoFinal} color={kpis.projecaoFinal>=0?"violet":"red"} subtitle="Mês completo" aria-label="Mês completo" hidden={hidden} dark={dark} to={`/Transactions?filter=planned&month=${format(selectedDate,"yyyy-MM")}`} />
           </>)}
         </div>
