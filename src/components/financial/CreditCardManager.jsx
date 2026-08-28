@@ -329,45 +329,20 @@ export default function CreditCardManager({ selectedDate }) {
   const [payingInvoice, setPayingInvoice] = useState(null); // { card, total, invoiceMonth, dueDate }
 
   const payInvoiceMutation = useMutation({
-    mutationFn: async ({ card, total, invoiceMonth }) => {
-      // 1. Cria transação de débito na conta vinculada ao cartão
-      if (!card.account_id) throw new Error("Cartão sem conta vinculada para pagamento.");
-      const { data: debito, error: txError } = await supabase.from("transactions").insert([{
-        user_id: activeOwnerId,
-        description: `Pagamento fatura ${card.name} ${invoiceMonth}`,
-        amount: total,
-        type: "expense",
-        category: "faturas",
-        account_id: card.account_id,
-        date: format(new Date(), "yyyy-MM-dd"),
-        is_realized: true,
-        notes: `Fatura ${invoiceMonth}`,
-      }]).select("id");
-      if (txError) throw txError;
-
-      // 2. Marca as compras da fatura como pagas.
-      //
-      // Se nada for marcado, a fatura já tinha sido paga em outro lugar
-      // e o débito acima viraria cobrança em duplicidade. Desfaz antes
-      // de avisar — deixar para o usuário perceber seria pior.
-      const { data: marcadas, error: updateError } = await supabase.from("transactions")
-        .update({ is_realized: true })
-        .eq("user_id", activeOwnerId)
-        .eq("credit_card_id", card.id)
-        .eq("invoice_month", invoiceMonth)
-        .select("id");
-      if (updateError) throw updateError;
-
-      if (!marcadas || marcadas.length === 0) {
-        const idDebito = debito?.[0]?.id;
-        if (idDebito) {
-          await supabase.from("transactions").delete()
-            .eq("id", idDebito).eq("user_id", activeOwnerId);
-        }
-        throw new NadaAfetado(
-          "Esta fatura já constava como paga. Nenhum débito foi lançado.",
-        );
-      }
+    mutationFn: async ({ card, invoiceMonth }) => {
+      // Uma chamada, uma transação no banco. O índice único
+      // (credit_card_id, month) garante um pagamento por fatura mesmo
+      // com duas abas clicando junto — antes daqui, as duas criavam
+      // débito e o usuário era cobrado em dobro.
+      const { data, error } = await supabase.rpc("pagar_fatura", {
+        p_credit_card_id: card.id,
+        p_invoice_month: invoiceMonth,
+      });
+      if (error) throw error;
+      // A função devolve o motivo quando não pagou; quem perdeu a
+      // corrida recebe "já foi paga", não um débito extra.
+      if (!data?.ok) throw new NadaAfetado(data?.mensagem || "Não foi possível pagar esta fatura.");
+      return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["transactions"] });

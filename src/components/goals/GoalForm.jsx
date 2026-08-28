@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -53,7 +53,19 @@ export default function GoalForm({ goal, accounts = [], onSubmit, onClose }) {
   const categories = allCategories.filter(c => c.type === type).map(c => c.name);
   const investmentAccounts = accounts.filter(a => a.type === 'investment');
 
+  // Duplo clique criava dois lançamentos: o formulário não sabe quando a
+  // gravação termina, então o segundo clique passava direto. A ref é
+  // síncrona de propósito — com `useState`, dois cliques no mesmo tick
+  // leem o valor antigo e os dois passam.
+  const enviando = useRef(false);
+
   const handleSubmit = (e) => {
+    if (enviando.current) return;
+    enviando.current = true;
+    // Se a gravação falhar, o modal continua aberto e o usuário precisa
+    // poder tentar de novo.
+    setTimeout(() => { enviando.current = false; }, 4000);
+
     e.preventDefault();
     onSubmit({
       name: name || category, type, category,

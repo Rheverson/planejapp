@@ -1,6 +1,10 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { adminClient, cors, preflight, requireUser } from "../_shared/auth.ts"
 import { chamarIA } from "../_shared/ia.ts"
+import {
+  hojeBrasilia, detectarPeriodo, periodoDoMes, calcularTotais,
+  somarMeses, mesDe, nomeDoMes,
+} from "../_shared/financeiro.ts"
 
 serve(async (req) => {
   const pre = preflight(req)
@@ -36,11 +40,14 @@ serve(async (req) => {
 
     const supabase = adminClient()
 
-    const now = new Date()
+    // Horário de Brasília, não UTC: `toISOString()` já virou o dia entre
+    // 21h e meia-noite daqui, e no fim do mês isso jogava "quanto gastei
+    // este mês" para o mês seguinte.
+    const nowStr = hojeBrasilia()
+    const now = new Date(`${nowStr}T12:00:00`)
     const startDate = `${now.getFullYear() - 1}-01-01`
     const endDate = `${now.getFullYear() + 1}-12-31`
-    const nowStr = now.toISOString().slice(0, 10)
-    const currentMonthStr = nowStr.slice(0, 7)
+    const currentMonthStr = mesDe(nowStr)
 
     const [transactionsRes, accountsRes, goalsRes, profileRes] = await Promise.all([
       supabase.from("transactions").select("*").eq("user_id", userId).gte("date", startDate).lte("date", endDate).neq("type", "transfer").order("date", { ascending: true }),
@@ -145,6 +152,24 @@ serve(async (req) => {
       .map(([m, d]) => `${m} +${d.income.toFixed(0)} -${d.expense.toFixed(0)}`)
       .join(' | ')
 
+    // ── Números prontos, calculados aqui ────────────────────────────
+    //
+    // O período sai da própria pergunta: "em julho" vira julho, "mês
+    // passado" vira o anterior, e sem pista nenhuma é o mês corrente.
+    // Quem decide as datas é este código, não o modelo — deixar isso a
+    // cargo dele foi o que fez "quanto recebi" somar julho com agosto.
+    const periodoDaPergunta = detectarPeriodo(message, nowStr)
+    const totaisPergunta = calcularTotais(transactions as any, periodoDaPergunta)
+    const totaisMes      = calcularTotais(transactions as any, periodoDoMes(currentMonthStr))
+    const totaisAnterior = calcularTotais(transactions as any, periodoDoMes(somarMeses(currentMonthStr, -1)))
+
+    const linhaTotais = (rotulo: string, t: typeof totaisMes) =>
+      `${rotulo}: entrou ${dinheiro(t.entradasRealizadas)}, saiu ${dinheiro(t.saidasRealizadas)}`
+      + `, resultado ${dinheiro(t.resultado)}`
+      + (t.entradasPrevistas || t.saidasPrevistas
+          ? ` | ainda previsto: +${dinheiro(t.entradasPrevistas)} / -${dinheiro(t.saidasPrevistas)}`
+          : "")
+
     const currentMonthByCategory: Record<string, number> = {}
     transactions
       .filter((t: any) => t.is_realized !== false && t.type === 'expense' && t.date.startsWith(currentMonthStr))
@@ -220,6 +245,51 @@ serve(async (req) => {
       .reduce((soma: number, t: any) => soma + parseFloat(t.amount), 0)
     const projecaoFim = totalBalance + previstasEntram - previstasSaem
 
+    // ── Homônimos: tudo que a pergunta pode estar apontando ─────────
+    //
+    // "Remove mercado" ia apagar o Mercado errado: existiam dois (ago
+    // R$650, jul R$800), mas o contexto leva só as 8 realizadas mais
+    // recentes e o de julho ficava de fora. O modelo não escolheu mal —
+    // ele via um só. Aqui todos os xarás entram, numa seção própria.
+    const IRRELEVANTES = new Set([
+      "quanto","gastei","recebi","tenho","apaga","apagar","exclui","excluir","remove","remover",
+      "deleta","deletar","paga","pagar","paguei","realiza","realizar","marca","marcar","cria",
+      "criar","edita","editar","altera","alterar","duplica","duplicar","minha","meu","meus",
+      "minhas","este","esta","esse","essa","aquele","aquela","para","com","dos","das","por",
+      "que","uma","umas","uns","nao","sim","tudo","todos","todas","mes","ano","dia","hoje",
+      "ontem","conta","contas","valor","reais","real","transacao","lancamento","despesa",
+      "receita","entrada","saida",
+    ])
+    const semAcento = (v: string) =>
+      String(v || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+
+    const palavrasDaPergunta = semAcento(message)
+      .split(/[^a-z0-9]+/)
+      .filter((p) => p.length >= 4 && !IRRELEVANTES.has(p))
+
+    const porDescricao: Record<string, any[]> = {}
+    if (palavrasDaPergunta.length) {
+      transactions.forEach((t: any) => {
+        if (!palavrasDaPergunta.some((p) => semAcento(t.description).includes(p))) return
+        const k = semAcento(t.description)
+        ;(porDescricao[k] = porDescricao[k] || []).push(t)
+      })
+    }
+
+    const homonimos = Object.values(porDescricao)
+      .filter((grupo) => grupo.length > 1)
+      .flat()
+      .sort((a: any, b: any) => b.date.localeCompare(a.date))
+      .slice(0, 10)
+
+    const blocoHomonimos = homonimos
+      .map((t: any) => ({ t, n: numTx(t) }))
+      .filter(({ n }) => n !== null)
+      .map(({ t, n }) =>
+        `#${n} ${diaMes(t.date)} ${t.type === "income" ? "+" : "-"}${dinheiro(t.amount)} ${t.description}`
+        + `${t.category ? ` [${t.category}]` : ""}${t.is_realized === false ? " (previsto)" : ""}`)
+      .join("\n")
+
     // Só os nomes: o ID de cada conta já aparece na lista acima.
     const accountNames = accounts.map((a: any) => a.name).join(', ')
     const referralLink = `https://www.planejapp.com.br/subscribe?ref=${profile?.referral_code || ''}`
@@ -230,7 +300,18 @@ serve(async (req) => {
 
 COMO RESPONDER
 2 a 5 frases, sempre com número: valor, % da renda e o próximo passo com prazo. Só os dados abaixo — não estime. Havendo linhas nas listas, nunca diga que não há registros. Compare com a média de 3 meses ou a meta. Cite o número do item (#3) junto da descrição. Sem jargão nem dicas prontas.
-NUNCA SOME AGREGADO COM DETALHE: "GASTOS DO MÊS" já é o total por categoria; PREVISTAS e REALIZADAS detalham as mesmas quantias. Somar conta o dinheiro duas vezes.
+NÃO FAÇA CONTA. Os totais abaixo já vêm somados e conferidos pelo sistema. Leia o número — não some as listas. Elas existem só para você identificar um lançamento específico; somá-las conta o mesmo dinheiro duas vezes e dá resultado errado.
+Perguntou "quanto gastei/recebi/sobrou"? Responda com o número de NÚMEROS DO PERÍODO — ele já corresponde ao período que o usuário quis dizer.
+
+NÚMEROS DO PERÍODO — ${periodoDaPergunta.rotulo}
+${linhaTotais("Neste período", totaisPergunta)}
+Lançamentos no período: ${totaisPergunta.quantidade}
+${totaisPergunta.maiorDespesa ? `Maior despesa: ${totaisPergunta.maiorDespesa.descricao} ${dinheiro(totaisPergunta.maiorDespesa.valor)} em ${diaMes(totaisPergunta.maiorDespesa.data)}` : "Nenhuma despesa realizada no período."}
+Por categoria: ${totaisPergunta.porCategoria.map((c) => `${c.categoria} ${dinheiro(c.valor)}`).join(", ") || "nenhuma"}
+
+PARA COMPARAR
+${linhaTotais(nomeDoMes(currentMonthStr), totaisMes)}
+${linhaTotais(nomeDoMes(somarMeses(currentMonthStr, -1)), totaisAnterior)}
 
 CONTAS
 ${accountsSummary}
@@ -240,7 +321,11 @@ A receber ${dinheiro(previstasEntram)} | A pagar ${dinheiro(previstasSaem)} | Pr
 MESES: ${monthlySummary || 'sem dados'}
 GASTOS DO MÊS: ${Object.entries(currentMonthByCategory).map(([c, v]) => `${c} ${(v as number).toFixed(0)}`).join(', ') || 'nenhum'}
 
-PREVISTAS
+${blocoHomonimos ? `ATENÇÃO — MAIS DE UM LANÇAMENTO COM ESSE NOME
+${blocoHomonimos}
+O que o usuário pediu casa com TODOS os de cima. É proibido escolher um por conta própria: ofereça a lista com __ESCOLHER__, citando número, valor e data de cada.
+
+` : ''}PREVISTAS
 ${upcomingDetailed || 'nenhuma'}
 
 REALIZADAS

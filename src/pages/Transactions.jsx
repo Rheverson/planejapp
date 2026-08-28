@@ -22,7 +22,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { gerarOcorrenciasRecorrentes } from "@/domain/financas";
+import { gerarOcorrenciasRecorrentes, paraCentavos, paraReais } from "@/domain/financas";
 import { escreverVerificando, AVISOS } from "@/lib/escrita";
 
 const CATEGORIES = [
@@ -405,9 +405,12 @@ export default function Transactions() {
   const summary = useMemo(() => {
     const invIds = new Set(accounts.filter(a => a.type === "investment").map(a => a.id));
     const tx = filteredTransactions.filter(t => !invIds.has(t.account_id));
-    const income  = tx.filter(t => t.type === "income").reduce((s,t) => s + Number(t.amount), 0);
-    const expense = tx.filter(t => t.type === "expense").reduce((s,t) => s + Number(t.amount), 0);
-    return { income, expense, balance: income - expense };
+    // Centavos, como no resto do app: em float, cem lançamentos de
+    // R$ 0,01 não somavam exatamente R$ 1,00.
+    const cent = (itens) => itens.reduce((acc, t) => acc + paraCentavos(t.amount), 0);
+    const income  = paraReais(cent(tx.filter(t => t.type === "income")));
+    const expense = paraReais(cent(tx.filter(t => t.type === "expense")));
+    return { income, expense, balance: paraReais(paraCentavos(income) - paraCentavos(expense)) };
   }, [filteredTransactions, accounts]);
 
   const FILTERS = [
@@ -466,7 +469,7 @@ export default function Transactions() {
             {[
               { label: "Entradas", value: summary.income,  color: "#2ecc8a" },
               { label: "Saídas",   value: summary.expense, color: "#e85d5d" },
-              { label: "Saldo",    value: summary.balance, color: summary.balance >= 0 ? "#ffffff" : "#e85d5d" },
+              { label: "Resultado", value: summary.balance, color: summary.balance >= 0 ? "#ffffff" : "#e85d5d" },
             ].flatMap((item, i) => [
               i > 0 ? <div key={`sep-${i}`} style={{ background: "rgba(255,255,255,0.15)" }} /> : null,
               <div key={item.label} style={{ padding: "9px 6px", textAlign: "center" }}>

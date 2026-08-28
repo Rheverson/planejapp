@@ -1,5 +1,5 @@
 import { useIsDark } from "@/design/useTheme";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, TrendingUp, TrendingDown, Repeat, Zap } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -86,7 +86,19 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
   const handleTypeChange         = (val) => { setType(val); setCategory(""); setShowSuggestion(false); };
   const handleAcceptSuggestion   = () => { setCategory(suggestion); setShowSuggestion(false); };
 
+  // Duplo clique criava dois lançamentos: o formulário não sabe quando a
+  // gravação termina, então o segundo clique passava direto. A ref é
+  // síncrona de propósito — com `useState`, dois cliques no mesmo tick
+  // leem o valor antigo e os dois passam.
+  const enviando = useRef(false);
+
   const handleSubmit = (e) => {
+    if (enviando.current) return;
+    enviando.current = true;
+    // Se a gravação falhar, o modal continua aberto e o usuário precisa
+    // poder tentar de novo.
+    setTimeout(() => { enviando.current = false; }, 4000);
+
     e.preventDefault();
 
     // O banco tem CHECK (amount > 0). Sem esta guarda, digitar 0 passava
