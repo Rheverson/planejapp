@@ -20,7 +20,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { calcularSaldosPorConta, calcularTotaisDeSaldo } from "@/domain/financas";
+import { calcularSaldosPorConta, calcularTotaisDeSaldo, contasAtivas, ehContaAtiva } from "@/domain/financas";
 import { escreverVerificando, AVISOS } from "@/lib/escrita";
 
 const iconMap    = { bank: Building2, wallet: Wallet, digital: Smartphone, investment: TrendingUp, other: MoreHorizontal };
@@ -222,17 +222,37 @@ export default function Accounts() {
     onError: (err) => toast.error(mensagemDeErro(err)),
   });
 
-  const deleteMutation = useMutation({
+  // Arquivar, nunca apagar.
+  //
+  // O DELETE físico já tinha custado o histórico uma vez (o FK era
+  // CASCADE). Trocar para SET NULL parou a perda de dados e criou outro
+  // problema: a conta sumia do patrimônio e os lançamentos dela ficavam
+  // no fluxo para sempre, então o mês anterior deixava de fechar.
+  //
+  // Arquivada, a conta continua inteira no cálculo — `initial_balance`,
+  // movimentos, tudo. Ela só sai das listas e dos seletores, que é o que
+  // o usuário quer dizer com "excluir".
+  const arquivarMutation = useMutation({
     mutationFn: async (id) => {
-      // As transações da conta são preservadas: o FK é SET NULL desde
-      // 28/08. Antes disso, este delete apagava o histórico inteiro.
       await escreverVerificando(
-        supabase.from("accounts").delete()
+        supabase.from("accounts").update({ is_active: false })
           .eq("id", id).eq("user_id", activeOwnerId),
         AVISOS.contaAusente,
       );
     },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["accounts"] }); setDeleteId(null); toast.success("Conta removida!"); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["accounts"] }); setDeleteId(null); toast.success("Conta encerrada!"); },
+    onError: (err) => toast.error(mensagemDeErro(err)),
+  });
+
+  const reativarMutation = useMutation({
+    mutationFn: async (id) => {
+      await escreverVerificando(
+        supabase.from("accounts").update({ is_active: true })
+          .eq("id", id).eq("user_id", activeOwnerId),
+        AVISOS.contaAusente,
+      );
+    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["accounts"] }); toast.success("Conta reativada!"); },
     onError: (err) => toast.error(mensagemDeErro(err)),
   });
 
@@ -248,6 +268,15 @@ export default function Accounts() {
           contasComuns: regularAccounts, contasInvestimento: investmentAccounts } =
     useMemo(() => calcularTotaisDeSaldo(accounts, transactions), [accounts, transactions]);
 
+  // Os totais acima somam TUDO, inclusive as arquivadas — é isso que
+  // mantém o patrimônio contínuo quando o usuário encerra uma conta.
+  // As listas abaixo mostram só as ativas, e as encerradas ganham seção
+  // própria: assim o que está na tela continua somando o número do topo,
+  // em vez de aparecer um saldo consolidado sem origem visível.
+  const contasVisiveis = contasAtivas(regularAccounts);
+  const investVisiveis = contasAtivas(investmentAccounts);
+  const encerradas     = accounts.filter((a) => !ehContaAtiva(a));
+
   // O diálogo precisa dizer quantos lançamentos ficam sem conta; sem
   // isso o usuário confirma no escuro.
   const contaParaExcluir = accounts.find(a => a.id === deleteId) || null;
@@ -261,13 +290,13 @@ export default function Accounts() {
   const handleSubmit = (data) =>
     editAccount ? updateMutation.mutate({ id: editAccount.id, data }) : createMutation.mutate(data);
 
-  const AccountRow = ({ account, index }) => {
+  const AccountRow = ({ account, index, arquivada = false }) => {
     const Icon    = iconMap[account.type] || Wallet;
     const balance = accountBalances[account.id] || 0;
     return (
       <motion.div
         initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.06 }}
-        className="bg-white dark:bg-gray-800 rounded-2xl p-4 border border-gray-100 dark:border-gray-700 cursor-pointer"
+        className={`bg-white dark:bg-gray-800 rounded-2xl p-4 border border-gray-100 dark:border-gray-700 cursor-pointer${arquivada ? " opacity-60" : ""}`}
         onClick={() => setSelectedAccount(account)}
       >
         <div className="flex items-center gap-3">
@@ -282,15 +311,25 @@ export default function Accounts() {
             <p className={`text-base font-medium ${balance >= 0 ? "text-gray-900 dark:text-white" : "text-red-600 dark:text-red-400"}`}>
               {fmt(balance)}
             </p>
-            {canManage && (
+            {canManage && !arquivada && (
               <div className="flex gap-1 justify-end mt-1" onClick={e => e.stopPropagation()}>
                 <button onClick={() => { setEditAccount(account); setShowForm(true); }}
+                  aria-label={`Editar ${account.name}`}
                   className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors">
                   <Edit2 className="w-3.5 h-3.5 text-gray-400" />
                 </button>
                 <button onClick={() => setDeleteId(account.id)}
+                  aria-label={`Encerrar ${account.name}`}
                   className="p-1 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors">
                   <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                </button>
+              </div>
+            )}
+            {canManage && arquivada && (
+              <div className="flex gap-1 justify-end mt-1" onClick={e => e.stopPropagation()}>
+                <button onClick={() => reativarMutation.mutate(account.id)}
+                  className="text-xs font-medium text-violet-600 dark:text-violet-400 px-2 py-0.5 rounded-lg hover:bg-violet-50 dark:hover:bg-violet-900/20 transition-colors">
+                  Reativar
                 </button>
               </div>
             )}
@@ -365,7 +404,7 @@ export default function Accounts() {
         {/* Aba: Contas */}
         {activeTab === "accounts" && (
           <>
-            {accounts.length === 0 && (
+            {contasVisiveis.length === 0 && investVisiveis.length === 0 && encerradas.length === 0 && (
               <EmptyState
                 icon={Wallet}
                 title="Nenhuma conta cadastrada" aria-label="Nenhuma conta cadastrada"
@@ -374,24 +413,41 @@ export default function Accounts() {
                 onAction={() => setShowForm(true)}
               />
             )}
-            {regularAccounts.length > 0 && (
+            {contasVisiveis.length > 0 && (
               <div>
                 <p className="text-xs font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-2 px-1">
                   Contas
                 </p>
                 <div className="space-y-2.5">
-                  {regularAccounts.map((acc, i) => <AccountRow key={acc.id} account={acc} index={i} />)}
+                  {contasVisiveis.map((acc, i) => <AccountRow key={acc.id} account={acc} index={i} />)}
                 </div>
               </div>
             )}
-            {investmentAccounts.length > 0 && (
+            {investVisiveis.length > 0 && (
               <div>
                 <p className="text-xs font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-2 px-1">
                   Investimentos
                 </p>
                 <div className="space-y-2.5">
-                  {investmentAccounts.map((acc, i) => <AccountRow key={acc.id} account={acc} index={i} />)}
+                  {investVisiveis.map((acc, i) => <AccountRow key={acc.id} account={acc} index={i} />)}
                 </div>
+              </div>
+            )}
+            {/* Encerradas: continuam no saldo consolidado do topo, então
+                precisam continuar visíveis em algum lugar. Escondê-las
+                por completo criaria um total sem origem na tela — a
+                mesma divergência silenciosa que já custou caro aqui. */}
+            {encerradas.length > 0 && (
+              <div>
+                <p className="text-xs font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-2 px-1">
+                  Encerradas
+                </p>
+                <div className="space-y-2.5">
+                  {encerradas.map((acc, i) => <AccountRow key={acc.id} account={acc} index={i} arquivada />)}
+                </div>
+                <p className="text-[0.68rem] text-gray-400 dark:text-gray-500 mt-2 px-1">
+                  Não recebem lançamentos novos, mas continuam no saldo e no histórico.
+                </p>
               </div>
             )}
           </>
@@ -438,16 +494,17 @@ export default function Accounts() {
       <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Excluir {contaParaExcluir?.name || "conta"}?</AlertDialogTitle>
+            <AlertDialogTitle>Encerrar {contaParaExcluir?.name || "conta"}?</AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="space-y-1.5">
-                <p>A conta sai da carteira. Esta ação não pode ser desfeita.</p>
+                <p>A conta sai das listas e não recebe lançamentos novos. Você pode reativá-la quando quiser.</p>
                 {txDaConta > 0 && (
                   <p>
                     <strong>
                       {txDaConta} {txDaConta === 1 ? "lançamento continua" : "lançamentos continuam"} no histórico
                     </strong>
-                    {" "}— apenas sem conta vinculada. Nenhum valor é apagado.
+                    {" "}— {txDaConta === 1 ? "vinculado a ela, como sempre esteve" : "vinculados a ela, como sempre estiveram"}.
+                    Seus meses anteriores continuam fechando.
                   </p>
                 )}
               </div>
@@ -455,8 +512,8 @@ export default function Accounts() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={() => deleteMutation.mutate(deleteId)} className="bg-red-600 hover:bg-red-700">
-              Excluir
+            <AlertDialogAction onClick={() => arquivarMutation.mutate(deleteId)} className="bg-red-600 hover:bg-red-700">
+              Encerrar
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

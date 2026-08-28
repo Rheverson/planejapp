@@ -11,7 +11,7 @@ import { useSharedProfile } from "@/lib/SharedProfileContext";
 import { toast } from "sonner";
 import { format, parseISO, startOfMonth, endOfMonth, addMonths } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { calcularMesFatura } from "@/domain/financas";
+import { calcularMesFatura, contasAtivas } from "@/domain/financas";
 
 const fmt = (v) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v || 0);
 
@@ -227,7 +227,7 @@ function CreditCardForm({ onClose, onSave, accounts, dark, initialData }) {
             <select value={accountId} onChange={e=>setAccountId(e.target.value)}
               style={{...inputStyle,appearance:"none",cursor:"pointer"}}>
               <option value="">Selecione uma conta...</option>
-              {accounts.filter(a=>a.type!=="investment").map(a=>(
+              {contasAtivas(accounts).filter(a=>a.type!=="investment").map(a=>(
                 <option key={a.id} value={a.id}>{a.name}</option>
               ))}
             </select>

@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { X, ArrowLeftRight } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useFecharModal, CAMADAS } from "@/hooks/useFecharModal";
+import { contasAtivas } from "@/domain/financas";
 
 const today = new Date().toISOString().split("T")[0];
 
@@ -62,7 +63,9 @@ export default function TransferForm({ accounts, onSubmit, onClose }) {
   };
 
   // Filtra contas disponíveis para destino (exclui a de origem)
-  const toAccounts = accounts.filter(a => a.id !== fromAccountId);
+  // Conta arquivada não recebe transferência nova, mas segue nos cálculos.
+  const ativas = contasAtivas(accounts);
+  const toAccounts = ativas.filter(a => a.id !== fromAccountId);
 
   return (
     <motion.div
@@ -130,7 +133,7 @@ export default function TransferForm({ accounts, onSubmit, onClose }) {
                   <SelectValue placeholder="Origem" />
                 </SelectTrigger>
                 <SelectContent>
-                  {accounts.map(acc => <SelectItem key={acc.id} value={acc.id}>🏦 {acc.name}</SelectItem>)}
+                  {ativas.map(acc => <SelectItem key={acc.id} value={acc.id}>🏦 {acc.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>

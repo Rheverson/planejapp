@@ -756,6 +756,16 @@ function ChatTab({ user, dark }) {
         setPendingAction(null);
         let accountId = action.account_id || null;
         if (!accountId && action.account_name) { const { data: accs } = await supabase.from("accounts").select("id").eq("user_id", user.id).ilike("name", `%${action.account_name}%`).limit(1); accountId = accs?.[0]?.id || null; }
+        // Sem conta o lancamento nasce orfao: entra nas Saidas do mes e
+        // nao sai de conta nenhuma. Em vez de gravar assim, pergunta.
+        if (!accountId) {
+          const { data: lista } = await supabase.from("accounts")
+            .select("name").eq("user_id", user.id).eq("is_active", true).order("name");
+          const nomes = (lista || []).map(a => `• **${a.name}**`).join("\n");
+          setMessages(prev => [...prev, { role: "assistant", content:
+            `❓ De qual conta?\n\n${nomes}\n\nRepita o pedido dizendo a conta.` }]);
+          return;
+        }
         const { error } = await supabase.from("transactions").insert({ user_id: user.id, type: action.type, amount: action.amount, description: action.description, category: action.category, account_id: accountId, date: confirmDate, is_realized: action.is_realized ?? true, auto_realize: action.is_realized === false ? (action.auto_realize ?? false) : null });
         if (error) throw error;
         const autoMsg = action.is_realized === false && action.auto_realize ? " · registro automático ativado ✅" : "";
@@ -779,6 +789,17 @@ function ChatTab({ user, dark }) {
             .eq("user_id", user.id).ilike("name", `%${action.account_name}%`).limit(1);
           accountId = accs?.[0]?.id || null;
         }
+        // Sem conta o lancamento nasce orfao: entra nas Saidas do mes e
+        // nao sai de conta nenhuma. Em vez de gravar assim, pergunta.
+        if (!accountId) {
+          const { data: lista } = await supabase.from("accounts")
+            .select("name").eq("user_id", user.id).is("archived_at", null).order("name");
+          const nomes = (lista || []).map(a => `• **${a.name}**`).join("\n");
+          setMessages(prev => [...prev, { role: "assistant", content:
+            `❓ De qual conta?\n\n${nomes}\n\nRepita o pedido dizendo a conta.` }]);
+          return;
+        }
+
 
         const inicio = action.start_date || getBrasiliaDate();
         const meses = Math.min(Math.abs(parseInt(action.months, 10) || 12), MAX_OCORRENCIAS);
@@ -908,14 +929,17 @@ function ChatTab({ user, dark }) {
         setPendingAction(null);
         setMessages(prev => [...prev, { role: "assistant", content: `✅ **Conta criada!** 🏦 ${action.name}` }]);
       } else if (action._type === "delete_account") {
-        const { data: apagadas } = await supabase.from("accounts")
-          .delete().eq("id", action.id).eq("user_id", user.id).select("id");
+        // Arquiva, não apaga — mesma regra da Carteira. Apagar a conta
+        // tiraria o saldo dela do patrimônio e deixaria os lançamentos
+        // no fluxo, quebrando o fechamento de todos os meses anteriores.
+        const { data: encerradas } = await supabase.from("accounts")
+          .update({ is_active: false }).eq("id", action.id).eq("user_id", user.id).select("id");
         setPendingAction(null);
         setMessages(prev => [...prev, {
           role: "assistant",
-          content: apagadas?.length
-            ? `🗑️ Conta excluída.`
-            : `🤔 Não encontrei essa conta para excluir.`,
+          content: encerradas?.length
+            ? `📦 Conta encerrada. Ela sai das listas, e o histórico e o saldo continuam intactos.`
+            : `🤔 Não encontrei essa conta para encerrar.`,
         }]);
       } else if (action._type === "send_invite") {
         // O assunto, o HTML e o link de indicação são montados no servidor.

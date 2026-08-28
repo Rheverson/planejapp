@@ -110,6 +110,31 @@ export function noMes(t, dataReferencia) {
   return chaveMes(t?.date) === chaveMes(dataReferencia);
 }
 
+/**
+ * Conta arquivada (`is_active = false`).
+ *
+ * Excluir conta destruiria o histórico; arquivar tira ela da frente sem
+ * tirar da conta. A regra que sustenta isso: arquivada CONTINUA em todo
+ * cálculo — saldo, patrimônio, KPI, fluxo. Ela some apenas das listas e
+ * dos seletores, para não receber lançamento novo.
+ *
+ * Se um dia alguém filtrar arquivadas antes de `calcularSaldosPorConta`,
+ * o patrimônio cai de um mês para o outro sem nada ter acontecido, e
+ * todo mês anterior deixa de fechar.
+ *
+ * `!== false` e não `=== true`: linha antiga pode ter nulo, e nulo é
+ * ativa (a coluna nasceu com default true). Mesmo critério de
+ * `ehRealizada`.
+ */
+export function ehContaAtiva(conta) {
+  return conta?.is_active !== false;
+}
+
+/** Só as contas que o usuário ainda usa — para listas e seletores. */
+export function contasAtivas(contas) {
+  return lista(contas).filter(ehContaAtiva);
+}
+
 /** Conjunto de ids das contas de investimento. */
 export function idsInvestimento(contas) {
   return new Set(lista(contas).filter((c) => c.type === "investment").map((c) => c.id));
