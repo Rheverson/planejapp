@@ -107,3 +107,8 @@ comment on function public.pagar_fatura(uuid, text, date) is
   'Paga a fatura de um cartão numa única transação. O índice único '
   '(credit_card_id, month) garante um pagamento por fatura mesmo com '
   'requisições simultâneas.';
+
+-- `revoke ... from anon` não basta: o Supabase concede EXECUTE via
+-- PUBLIC (ALTER DEFAULT PRIVILEGES) e o papel anon herda dali. O
+-- advisor pegou isto logo depois da primeira versão desta migration.
+revoke execute on function public.pagar_fatura(uuid, text, date) from public;

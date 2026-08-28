@@ -352,6 +352,18 @@ Três achados são de alterações minhas: `congelar_ref` sem `search_path`,
 
 ---
 
+## Rodada P1 (28/08/2026)
+
+Corrigidos com causa raiz, teste e prova: os dois erros de cálculo do Finn
+(backend passa a calcular, modelo só lê), a ambiguidade em exclusões (contexto
+cego, não desobediência), a duplicidade no pagamento de fatura (agora atômica
+no banco), o duplo clique nos formulários e a nomenclatura de "Saldo".
+
+O 401 dos crons **não se confirmou**: reproduzindo a chamada, HTTP 200 nas
+três funções. Detalhes em `QA_FUNCIONAL.md`.
+
+---
+
 ## Riscos residuais aceitos
 
 | Item | Motivo |

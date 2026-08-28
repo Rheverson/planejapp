@@ -204,3 +204,89 @@ confiança mesmo quando o banco está íntegro.
 Não é 🟠 porque nenhum deles perde dado nem é irreversível, e o caminho
 crítico — dinheiro entrando, saindo e sendo somado — está correto e conferido
 contra o banco.
+
+
+---
+
+# Rodada de correção P1 (28/08/2026)
+
+Correção dos problemas funcionais do QA, com causa raiz, teste e prova.
+Produção intacta: 816 transações, 20 contas, 7 cartões, 10 metas antes e
+depois. Commits `a7f3b92` em diante.
+
+## Finn — os dois erros de cálculo
+
+**Causa raiz:** o prompt mandava listas e o modelo somava. Pior: as listas
+misturavam meses (as 8 realizadas mais recentes podiam vir de julho e agosto),
+e `nowStr` usava `toISOString()`, que é UTC — entre 21h e meia-noite de
+Brasília o dia já virou lá, e no fim do mês a pergunta caía no mês seguinte.
+
+**Solução:** `supabase/functions/_shared/financeiro.ts`. O backend calcula e o
+modelo lê. Inclui camada de período: "em julho" vira julho, "mês passado" vira
+o anterior, sem pista nenhuma é o mês corrente. Quem decide as datas é o
+código. E `hojeBrasilia()` no lugar do UTC.
+
+| Pergunta | Antes | Agora | Real |
+|---|---|---|---|
+| "Quanto gastei este mês?" | R$ 3.160 | **R$ 3.300** | R$ 3.300 |
+| "Quanto recebi?" | R$ 14.030 | **R$ 7.030** | R$ 7.030 |
+| "Quanto gastei em julho?" | — | **R$ 2.600** | R$ 2.600 |
+
+**Teste:** 33 casos em `src/domain/finn-financeiro.test.js`, incluindo os dois
+valores exatos que estavam errados, 13 formulações de período, centavos, mês
+vazio, cartão e transferência.
+
+## Finn — ambiguidade em exclusões
+
+**Causa raiz:** não era desobediência, era cegueira. Existiam dois "Mercado"
+(ago R$ 650, jul R$ 800), mas o contexto leva só as 8 realizadas mais
+recentes — o de julho ficava de fora e o modelo via um só.
+
+**Solução:** o backend detecta homônimos a partir das palavras da pergunta e
+manda todos numa seção própria do prompt.
+
+**Prova ao vivo:** "Remove mercado" passou a oferecer os dois (#3 12/08 R$ 650
+e #17 12/07 R$ 800) com bloco `__ESCOLHER__`.
+
+## Pagamento de fatura — duplicidade
+
+**Causa raiz:** a sequência insere-débito → marca-compras nunca poderia ser
+segura no cliente. Entre uma e outra existe uma janela, e duas abas passam por
+ela. A verificação de linhas afetadas da rodada anterior só cobria o caso de
+zero linhas — não este.
+
+**Solução:** `pagar_fatura()` faz tudo numa transação do Postgres, e o índice
+único `(credit_card_id, month)` decide quem venceu. A tabela
+`credit_card_invoices`, que existia vazia desde sempre, virou a trava.
+
+**Prova:** 3 requisições simultâneas → **1 pagamento de R$ 350**, duas
+recusadas com "já foi paga". Quarta tentativa idem. Isolamento: A pagando
+fatura de B recebe 403; anônimo recebe 401.
+
+## Duplo clique
+
+Trava por ref síncrona nos três formulários. `useState` não serve: dois
+cliques no mesmo tick leem o valor antigo e ambos passam.
+
+## Crons — o 401 não se confirmou
+
+**Reproduzindo a chamada do cron** contra `send-scheduled-notifications`,
+`send-daily-email` e `send-bill-reminders`: **HTTP 200 nas três**
+(`{"ok":true,"users":2}` e `{"ok":true,"sent":0}`). Os 9 jobs HTTP mandam o
+header de autenticação. O 401 visto no QA era evento isolado, anterior à
+correção de autenticação — **minha conclusão anterior estava errada**.
+
+`notifications` e `notification_log` seguem vazias porque nenhuma das quatro
+funções escreve nelas. São tabelas órfãs, não sinal de falha.
+
+## Cartão
+
+A regra correta já estava implementada: a UI **não oferece exclusão de cartão**
+e já filtra `is_active = true`. O erro de FK só aparece via API. Falta apenas a
+tela de arquivar — registrado como pendência, não implementado nesta rodada.
+
+## Nomenclatura
+
+"Saldo" em Transações era o resultado do período; a Home usa a mesma palavra
+para dinheiro disponível. Virou "Resultado", e a soma passou de float para
+centavos.
