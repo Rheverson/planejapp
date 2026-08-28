@@ -6,6 +6,7 @@ import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthContext";
 import { toast } from "sonner";
+import { useFecharModal } from "@/hooks/useFecharModal";
 
 const RELATIONSHIP_TYPES = [
   "Esposo(a)", "Namorado(a)", "Noivo(a)", "Irmão(ã)", "Pai/Mãe", "Filho(a)", "Outro"
@@ -28,6 +29,8 @@ function PermissionRow({ title, description, checked, onChange, disabled, dark }
 }
 
 export default function ShareFinancesModal({ onSubmit, onClose }) {
+  // Esc, botão voltar do Android e trava de rolagem do fundo.
+  useFecharModal(true, onClose);
   const { user } = useAuth();
   const dark = useIsDark();
   const [loading, setLoading]               = useState(false);

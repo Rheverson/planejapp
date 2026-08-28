@@ -18,7 +18,7 @@ import {
   TrendingUp, TrendingDown, Target, Wallet, BarChart2
 } from "lucide-react";
 import { useMonth } from "@/lib/MonthContext";
-import { transacoesDoMes, ehRealizada, calcularSobraDoMes, calcularTaxaPoupanca, calcularProgressoMeta } from "@/domain/financas";
+import { transacoesDoMes, ehRealizada, calcularSobraDoMes, calcularTaxaPoupanca, calcularProgressoMeta, paraCentavos, paraReais } from "@/domain/financas";
 import MonthSelector from "@/components/common/MonthSelector";
 
 const CATEGORY_COLORS = {
@@ -253,8 +253,15 @@ export default function Reports() {
     [transactions, accounts, selectedDate]
   );
 
-  const income  = useMemo(() => monthTx.filter(t => t.type === "income").reduce((s, t) => s + Number(t.amount), 0),  [monthTx]);
-  const expense = useMemo(() => monthTx.filter(t => t.type === "expense").reduce((s, t) => s + Number(t.amount), 0), [monthTx]);
+  // Somado em centavos, como o resto do app. Em float, cem lançamentos
+  // de R$ 0,01 não davam exatamente R$ 1,00 — e esta tela existe para
+  // conferir números.
+  const income  = useMemo(
+    () => paraReais(monthTx.filter(t => t.type === "income").reduce((acc, t) => acc + paraCentavos(t.amount), 0)),
+    [monthTx]);
+  const expense = useMemo(
+    () => paraReais(monthTx.filter(t => t.type === "expense").reduce((acc, t) => acc + paraCentavos(t.amount), 0)),
+    [monthTx]);
   const balance = income - expense;
 
   // "Sobra do mês" ≠ "taxa de poupança". Esta tela mostrava a sobra
@@ -344,11 +351,11 @@ export default function Reports() {
         {/* Resumo rápido no header */}
         <div className="flex gap-4 px-5 pb-4">
           <div className="flex-1 text-center">
-            <p className="text-xs text-slate-400 mb-1">Entradas</p>
+            <p className="text-xs text-slate-400 mb-1">Entradas realizadas</p>
             <p className="text-lg font-bold text-emerald-300">{fmt(income)}</p>
           </div>
           <div className="flex-1 text-center border-x border-white/10">
-            <p className="text-xs text-slate-400 mb-1">Saídas</p>
+            <p className="text-xs text-slate-400 mb-1">Saídas realizadas</p>
             <p className="text-lg font-bold text-red-300">{fmt(expense)}</p>
           </div>
           <div className="flex-1 text-center">

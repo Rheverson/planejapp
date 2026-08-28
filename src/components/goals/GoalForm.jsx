@@ -9,6 +9,7 @@ import { format, addMonths, addYears } from "date-fns";
 import { useAuth } from "@/lib/AuthContext";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
+import { useFecharModal } from "@/hooks/useFecharModal";
 
 const today = new Date().toISOString().split("T")[0];
 
@@ -22,6 +23,8 @@ const presetPeriods = [
 ];
 
 export default function GoalForm({ goal, accounts = [], onSubmit, onClose }) {
+  // Esc, botão voltar do Android e trava de rolagem do fundo.
+  useFecharModal(true, onClose);
   const { user } = useAuth();
 
   const { data: allCategories = [] } = useQuery({

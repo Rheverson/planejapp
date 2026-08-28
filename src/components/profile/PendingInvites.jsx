@@ -6,6 +6,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/AuthContext';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
+import { useFecharModal } from "@/hooks/useFecharModal";
 
 const relationshipLabels = {
   esposo_a: "Esposo(a)", namorado_a: "Namorado(a)", noivo_a: "Noivo(a)",
@@ -15,6 +16,8 @@ const relationshipLabels = {
 };
 
 export default function PendingInvites({ onClose }) {
+  // Esc, botão voltar do Android e trava de rolagem do fundo.
+  useFecharModal(true, onClose);
   const { user } = useAuth();
   const dark = useIsDark();
   const queryClient = useQueryClient();

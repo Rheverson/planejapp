@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { X, Building2, Wallet, Smartphone, TrendingUp, MoreHorizontal } from "lucide-react";
+import { useFecharModal } from "@/hooks/useFecharModal";
 
 const accountTypes = [
   { value: "bank",       label: "Conta Bancária", icon: Building2    },
@@ -20,6 +21,8 @@ const colors = [
 ];
 
 export default function AccountForm({ onSubmit, onClose, account = null }) {
+  // Esc, botão voltar do Android e trava de rolagem do fundo.
+  useFecharModal(true, onClose);
   const [formData, setFormData] = useState({
     name:            account?.name            || "",
     type:            account?.type            || "bank",

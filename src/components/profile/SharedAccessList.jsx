@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/AuthContext';
 import { toast } from 'sonner';
 import ShareFinancesModal from './ShareFinancesModal';
+import { useFecharModal } from "@/hooks/useFecharModal";
 
 const relationshipLabels = {
   'Esposo(a)': 'Esposo(a)', 'Namorado(a)': 'Namorado(a)', 'Noivo(a)': 'Noivo(a)',
@@ -142,6 +143,8 @@ function ShareCard({ share, onDelete, isDeleting, dark }) {
 }
 
 export default function SharedAccessList({ onClose }) {
+  // Esc, botão voltar do Android e trava de rolagem do fundo.
+  useFecharModal(true, onClose);
   const { user } = useAuth();
   const dark = useIsDark();
   const queryClient = useQueryClient();
