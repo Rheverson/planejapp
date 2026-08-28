@@ -222,13 +222,20 @@ Data de hoje: ${today}` },
 
     } else {
       const acc = userAccounts.find((a: any) => a.name.toLowerCase().includes((p.account_name || '').toLowerCase()))
+      // Sem conta o lancamento nasce orfao: entra nas Saidas do mes e nao
+      // sai de conta nenhuma, entao o relatorio passa a dizer que saiu
+      // mais do que o patrimonio mostra. Melhor perguntar que gravar
+      // errado -- o mesmo criterio do formulario e do Finn.
+      if (!acc) {
+        return twilioReply(`❌ Nao entendi de qual conta. Suas contas: ${accountsList}`)
+      }
       const { error } = await supabase.from('transactions').insert({
         user_id,
         type: p.type,
         amount: p.amount,
         description: p.description,
         category: p.category,
-        account_id: acc?.id || null,
+        account_id: acc.id,
         date: p.date,
         is_realized: p.is_realized ?? true
       })

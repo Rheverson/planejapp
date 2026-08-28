@@ -10,7 +10,7 @@ import { useAuth } from "@/lib/AuthContext";
 import { useQuery } from "@tanstack/react-query";
 import { addMonths, format } from "date-fns";
 import { supabase } from "@/lib/supabase";
-import { calcularMesFatura } from "@/domain/financas";
+import { calcularMesFatura, contasAtivas } from "@/domain/financas";
 import { useFecharModal, CAMADAS } from "@/hooks/useFecharModal";
 
 const frequencyOptions = [
@@ -53,6 +53,7 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
   const [recurringEndDate, setRecurringEndDate] = useState(initialData?.recurring_end_date || "");
   const [showSuggestion, setShowSuggestion]     = useState(false);
   const [erroValor, setErroValor]               = useState("");
+  const [erroCarteira, setErroCarteira]         = useState("");
 
   // Esc, botão voltar do Android e trava de rolagem do fundo
   useFecharModal(true, onClose);
@@ -70,6 +71,9 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
     if (initialData?.credit_card_id) return "cc_" + initialData.credit_card_id;
     return initialData?.account_id || "";
   });
+
+  // Conta arquivada não recebe lançamento novo, mas segue nos cálculos.
+  const ativas = contasAtivas(accounts);
 
   const selectedCard = walletId.startsWith("cc_")
     ? creditCards.find(cc => cc.id === walletId.replace("cc_", ""))
@@ -106,9 +110,29 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
     const valor = parseFloat(amount);
     if (!Number.isFinite(valor) || valor <= 0) {
       setErroValor("Informe um valor maior que zero.");
+      enviando.current = false;
       return;
     }
     setErroValor("");
+
+    // De onde saiu (ou entrou) o dinheiro. Sem isto o lançamento nasce
+    // órfão: entra nas Saídas do mês e não sai de conta nenhuma, porque
+    // `calcularSaldosPorConta` faz `if (!t.account_id) return`. O
+    // relatório passa a dizer que saiu mais do que o patrimônio mostra.
+    //
+    // Eram 26 assim em produção, R$ 5.550,16, e NENHUMA veio de exclusão
+    // de conta -- todas nasceram com este campo em branco. Cinco eram
+    // recorrentes e viraram 19 linhas sozinhas.
+    if (!walletId) {
+      setErroCarteira(
+        type === "expense"
+          ? "Escolha de onde saiu o dinheiro: uma conta ou um cartão."
+          : "Escolha em qual conta o dinheiro entrou.",
+      );
+      enviando.current = false;
+      return;
+    }
+    setErroCarteira("");
 
     if (description && category) confirmCategory(category, description);
     let invoiceMonth = null;
@@ -275,20 +299,21 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
               </Select>
             </div>
             <div>
-              <label style={labelStyle}>Carteira</label>
+              <label style={labelStyle}>Carteira *</label>
               <Select value={walletId} onValueChange={v => {
                 setWalletId(v);
+                setErroCarteira("");
                 if (!v.startsWith("cc_")) setAccountId(v);
                 else setAccountId("");
               }}>
-                <SelectTrigger style={{ height: 40, borderRadius: 12, background: walletId.startsWith("cc_") ? (type==="expense"?"rgba(139,92,246,0.08)":inputBg) : inputBg, border: `1px solid ${walletId.startsWith("cc_")?"rgba(139,92,246,0.4)":inputBrd}`, fontSize: "0.82rem", color: text, fontFamily: "'Outfit',sans-serif" }}>
+                <SelectTrigger style={{ height: 40, borderRadius: 12, background: walletId.startsWith("cc_") ? (type==="expense"?"rgba(139,92,246,0.08)":inputBg) : inputBg, border: `1px solid ${erroCarteira ? "#e85d5d" : walletId.startsWith("cc_")?"rgba(139,92,246,0.4)":inputBrd}`, fontSize: "0.82rem", color: text, fontFamily: "'Outfit',sans-serif" }}>
                   <SelectValue placeholder="Selecione" />
                 </SelectTrigger>
                 <SelectContent>
-                  {accounts.length > 0 && (
+                  {ativas.length > 0 && (
                     <>
                       <SelectItem value="__sep_acc__" disabled style={{fontSize:"0.65rem",color:"#9ca3af",fontWeight:600}}>🏦 CONTAS</SelectItem>
-                      {accounts.map(acc => <SelectItem key={acc.id} value={acc.id}>🏦 {acc.name}</SelectItem>)}
+                      {ativas.map(acc => <SelectItem key={acc.id} value={acc.id}>🏦 {acc.name}</SelectItem>)}
                     </>
                   )}
                   {type === "expense" && creditCards.length > 0 && (
@@ -299,6 +324,11 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
                   )}
                 </SelectContent>
               </Select>
+              {erroCarteira && (
+                <p role="alert" style={{ fontSize: "0.72rem", color: "#e85d5d", marginTop: 6 }}>
+                  {erroCarteira}
+                </p>
+              )}
             </div>
           </div>
 
