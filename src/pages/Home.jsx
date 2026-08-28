@@ -55,6 +55,7 @@ function KPICard({ title, value, color, subtitle, subvalor, subrotulo, hidden, t
       overflow: "hidden",
       boxShadow: dark ? "none" : "0 1px 2px rgba(17,24,39,0.03), 0 4px 16px rgba(17,24,39,0.04)",
       transition: "transform .15s, box-shadow .2s",
+      height: "100%",
     }}>
       {/* Accent bar vertical à esquerda — só modo claro */}
       {!dark && (
@@ -96,7 +97,7 @@ function KPICard({ title, value, color, subtitle, subvalor, subrotulo, hidden, t
       )}
     </div>
   );
-  if (to) return <Link to={to} style={{ textDecoration: "none" }}>{inner}</Link>;
+  if (to) return <Link to={to} style={{ textDecoration: "none", display: "block", height: "100%" }}>{inner}</Link>;
   return inner;
 }
 
