@@ -330,6 +330,28 @@ sem stack trace na tela.
 
 ---
 
+## 3ª rodada — auditoria de produto (28/08/2026)
+
+Relatório completo em **`AUDITORIA_PRODUTO.md`**. Classificação: 🟠 precisa
+correções. Nenhum código foi alterado nessa apuração.
+
+O achado que bloqueia: **excluir uma conta apaga todas as transações dela**
+(`transactions_account_id_fkey ON DELETE CASCADE`), enquanto o card do Finn
+afirma "as transações serão mantidas". Confirmado por teste: 3 transações
+viraram 0. Perda de dado financeiro irreversível, com a interface prometendo
+o contrário.
+
+Outros pontos de peso: `isError` não tratado em nenhuma das 9 páginas;
+16 arquivos dizem "sucesso" sem conferir linhas afetadas; `Accounts.jsx`
+reimplementa o saldo e ignora a regra do cartão; `vendor-charts` (411 KB)
+baixado por todos na carga inicial; 0 testes de RLS, API ou E2E.
+
+Três achados são de alterações minhas: `congelar_ref` sem `search_path`,
+4 migrations aplicadas sem arquivo local, e a correção de modal ter coberto
+3 de 12 modais.
+
+---
+
 ## Riscos residuais aceitos
 
 | Item | Motivo |
