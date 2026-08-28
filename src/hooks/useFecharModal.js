@@ -70,4 +70,19 @@ export const CAMADAS = {
   cartaoFlutuante: 40,
   modal: 1000,
   avisoDoSistema: 1100,
+  // Lista suspensa (Select). O Radix a renderiza num portal preso ao
+  // <body> -- irmao do modal, nao filho dele -- entao ela nao herda a
+  // camada do modal e precisa de um numero proprio, acima dele.
+  //
+  // Com o z-50 que vinha do shadcn a lista era pintada ATRAS da folha do
+  // modal: medido com elementFromPoint sobre uma opcao, quem estava por
+  // cima era um <input> do proprio formulario. Como o Radix desliga o
+  // pointer-events do resto da pagina, o toque ate chegava na opcao --
+  // as cegas, sem a lista aparecer. Quem abre lista de dentro de modal
+  // fica por cima.
+  //
+  // So virou problema quando o modal subiu de 50 para 1000 (467ef59,
+  // para vencer o modal de indicacao em 999). Antes os dois empatavam em
+  // 50 e o portal ganhava por vir depois no DOM.
+  listaSuspensa: 1200,
 };
