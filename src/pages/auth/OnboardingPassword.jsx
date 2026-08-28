@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, Navigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
@@ -25,8 +25,18 @@ export default function OnboardingPassword() {
   const [loading, setLoading]           = useState(false);
 
   const { email="", name="", goal="" } = location.state || {};
-  if (!email || !name || !goal) { navigate("/login"); return null; }
 
+  // A saída antecipada ficava AQUI, antes do `useMemo` abaixo. Duas
+  // coisas erradas numa linha só:
+  //
+  // 1. Hook depois de `return` condicional. React exige a mesma ordem de
+  //    hooks em todo render; um render que sai antes e outro que segue
+  //    quebram a lista e derrubam a tela com "Rendered fewer hooks than
+  //    expected". O `react-hooks/rules-of-hooks` acusava isso.
+  // 2. `navigate()` durante a renderização é efeito colateral no meio do
+  //    render — o jeito declarativo é devolver <Navigate>.
+  //
+  // Agora todos os hooks rodam sempre, e a saída virou valor de retorno.
   const v = useMemo(() => ({
     len:     password.length >= 8,
     upper:   /[A-Z]/.test(password),
@@ -37,6 +47,9 @@ export default function OnboardingPassword() {
   const valid   = Object.values(v).every(Boolean);
   const match   = password && confirm && password === confirm;
   const canSend = valid && match && !loading;
+
+  // Sem os dados dos passos anteriores não há o que cadastrar.
+  if (!email || !name || !goal) return <Navigate to="/login" replace />;
 
   const handleSignUp = async (e) => {
     e.preventDefault();
