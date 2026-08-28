@@ -33,8 +33,6 @@ export default function MonthComparison({ transactions, accounts, selectedDate }
   const subBg  = dark ? "#12151c" : "#f9fafb";
 
   const { current, previous, topDiffs } = useMemo(() => {
-    const investIds = new Set(accounts.filter(a => a.type === "investment").map(a => a.id));
-
     const currStart = startOfMonth(selectedDate);
     const currEnd   = endOfMonth(selectedDate);
     const prevStart = startOfMonth(subMonths(selectedDate, 1));
@@ -46,9 +44,10 @@ export default function MonthComparison({ transactions, accounts, selectedDate }
 
     const filter = (txs, s, e) => txs.filter(t =>
       inRange(t, s, e) &&
+      // Fora só transferência — o tipo da conta não decide se um gasto
+      // é gasto.
       t.type !== "transfer" &&
-      t.is_realized !== false &&
-      !investIds.has(t.account_id)
+      t.is_realized !== false
     );
 
     const currTxs = filter(transactions, currStart, currEnd);

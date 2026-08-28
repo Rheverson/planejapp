@@ -92,7 +92,11 @@ describe("calcularTotaisDeSaldo", () => {
 });
 
 describe("transacoesDoMes", () => {
-  it("exclui transferências e contas de investimento", () => {
+  // Este teste afirmava "exclui transferências E contas de
+  // investimento", fixando a regra que se provou errada em 28/08: uma
+  // despesa paga da caixinha sumia do relatório. O que sai é só a
+  // transferência — ver investimento-operacional.test.js.
+  it("exclui transferências, mas mantém movimento de conta de investimento", () => {
     const lista = transacoesDoMes(
       [
         tx({ type: "income", amount: 100 }),
@@ -102,7 +106,9 @@ describe("transacoesDoMes", () => {
       CONTAS,
       "2026-08-15"
     );
-    expect(lista).toHaveLength(1);
+    expect(lista).toHaveLength(2);
+    expect(lista.some((t) => t.type === "transfer")).toBe(false);
+    expect(lista.some((t) => t.account_id === "inv")).toBe(true);
   });
 
   it("inclui despesa sem conta vinculada", () => {

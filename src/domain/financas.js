@@ -170,19 +170,38 @@ export function calcularTotaisDeSaldo(contas, transacoes) {
 
 /**
  * Transações que compõem os números de um mês.
- * Exclui transferências (movimentação interna, não é entrada nem saída)
- * e movimentos de contas de investimento — que são poupança, não gasto.
+ *
+ * Exclui apenas transferências: mover dinheiro entre contas próprias não
+ * é entrada nem saída, é a mesma quantia mudando de lugar.
+ *
+ * O TIPO DA CONTA NÃO ENTRA NESTA DECISÃO. Até 28/08/2026 esta função
+ * também descartava tudo que passasse por conta de investimento, com a
+ * justificativa de que "é poupança, não gasto". A intenção era não
+ * contar aporte como despesa — mas aporte é `transfer`, já excluído pela
+ * linha acima. O filtro era redundante para o que pretendia e apagava o
+ * que não previa: uma despesa real paga com o dinheiro que estava na
+ * caixinha (imposto, taxa, compra) sumia do relatório.
+ *
+ * O caso que revelou isto: "Imposto de Renda" de R$ 354,17 debitado da
+ * conta Caixinhas — despesa realizada, sem transferência e sem cartão —
+ * aparecia para o Finn e não para a Home. Em produção havia 11 despesas
+ * (R$ 4.562,22) e 3 entradas (R$ 282,65) invisíveis desde abril.
+ *
+ * Conta de investimento é onde o dinheiro está, não o que foi feito com
+ * ele. Quem mede aporte é `calcularTaxaPoupanca`; quem mede patrimônio é
+ * `calcularTotaisDeSaldo`. Ambas continuam usando `idsInvestimento`, e
+ * devem mesmo.
  *
  * Despesas sem conta vinculada (`account_id` nulo) entram: são gastos
  * reais que o usuário registrou sem escolher a conta.
  */
+// `contas` não é mais lido — fica na assinatura para não quebrar os
+// chamadores. Removê-lo é limpeza para outra rodada.
+// `contas` não é mais lido — fica na assinatura para não quebrar os
+// chamadores. Removê-lo é limpeza para outra rodada.
 export function transacoesDoMes(transacoes, contas, dataReferencia) {
-  const investimento = idsInvestimento(contas);
   return lista(transacoes).filter(
-    (t) =>
-      t.type !== "transfer" &&
-      !investimento.has(t.account_id) &&
-      noMes(t, dataReferencia)
+    (t) => t.type !== "transfer" && noMes(t, dataReferencia)
   );
 }
 

@@ -403,8 +403,10 @@ export default function Transactions() {
   }, [filteredTransactions, sortBy, sortDir]);
 
   const summary = useMemo(() => {
-    const invIds = new Set(accounts.filter(a => a.type === "investment").map(a => a.id));
-    const tx = filteredTransactions.filter(t => !invIds.has(t.account_id));
+    // Antes daqui esta tela tinha a própria cópia da regra e descartava
+    // tudo que passasse por conta de investimento — inclusive despesas
+    // reais. Agora o recorte é o do domínio: fora só transferência.
+    const tx = filteredTransactions.filter(t => t.type !== "transfer");
     // Centavos, como no resto do app: em float, cem lançamentos de
     // R$ 0,01 não somavam exatamente R$ 1,00.
     const cent = (itens) => itens.reduce((acc, t) => acc + paraCentavos(t.amount), 0);

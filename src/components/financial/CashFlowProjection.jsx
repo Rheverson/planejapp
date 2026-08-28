@@ -19,8 +19,6 @@ export default function CashFlowProjection({ transactions, accounts, currentBala
 
   const projection = useMemo(() => {
     const today = new Date();
-    const investmentIds = new Set(accounts.filter(a => a.type === "investment").map(a => a.id));
-
     // Pega previstos de hoje até 30 dias (i=0 = hoje)
     const next30 = [];
     for (let i = 0; i <= 30; i++) {
@@ -30,8 +28,9 @@ export default function CashFlowProjection({ transactions, accounts, currentBala
         t.date &&
         t.date === ds &&
         t.is_realized === false &&
-        t.type !== "transfer" &&
-        !investmentIds.has(t.account_id)
+        // Só transferência fica de fora: uma despesa prevista paga da
+        // caixinha continua sendo saída.
+        t.type !== "transfer"
       );
       if (dayTxs.length > 0) {
         const income  = dayTxs.filter(t => t.type === "income").reduce((s,t) => s+Number(t.amount), 0);
