@@ -1,40 +1,70 @@
-# Migrations
+# Migrations — estado do versionamento
 
-Antes da auditoria de 26/08/2026 o schema **não era versionado**: as 25 tabelas,
-19 funções, as policies, os índices e os 10 cron jobs existiam apenas dentro do
-projeto do Supabase. Não havia como revisar uma mudança de banco em PR,
-reproduzir o ambiente nem voltar atrás.
+Situação em 28/08/2026, apurada comparando `supabase_migrations.schema_migrations`
+(produção) com os arquivos deste diretório.
 
-A partir daqui, toda alteração de banco entra como arquivo neste diretório.
+| | Quantidade |
+|---|---|
+| Aplicadas em produção | 40 |
+| Com arquivo aqui | 13 |
+| **Sem arquivo** | **28** |
 
-## Como aplicar
+## O que isso significa na prática
 
-```bash
-npx supabase db push
+O banco de produção está correto. O que falta é o caminho de volta: hoje
+**não é possível recriar o schema do zero a partir deste repositório**. Quem
+clonar o projeto e rodar as migrations terá um banco incompleto.
+
+## As 25 anteriores a agosto/2026
+
+Criadas entre abril e maio pelo painel do Supabase, antes de o schema passar
+a ser versionado. São elas que criam as tabelas, os cartões de crédito, o
+quiz, os códigos promocionais e os cron jobs de notificação:
+
+```
+add_notifications_rls_policies      create_credit_cards_system
+add_investment_type_to_goals        fix_rls_performance_and_indexes
+update_contribution_period_options  add_recurring_group_id
+whatsapp_bot_setup                  create_promo_codes
+whatsapp_pending_transactions       create_promo_codes_table
+notification_schedule_table         add_multiuse_promo_codes
+setup_notification_cron             create_kahoot_quiz_tables
+setup_daily_notifications_cron      grant_anon_quiz_tables
+add_payday_and_streak_to_profiles   create_event_leads_table
+setup_smart_notification_crons      normalize_categories_and_budgets
+fix_push_tokens_unique_constraint   financial_score_function
+unique_recurring_per_date           fix_savings_rate_calculation
+remove_realized_date_trigger
 ```
 
-## Baseline do schema — pendente
+**Não foram reconstruídas de memória de propósito.** Escrever um arquivo que
+apenas se pareça com o que aconteceu é pior do que não ter arquivo nenhum:
+daria a impressão de schema reproduzível sem o ser. O caminho correto é um
+baseline gerado por `supabase db dump`, que exige Docker.
 
-Falta gerar o snapshot do que já existia antes destas migrations:
+**Status: PENDENTE — necessita baseline do schema.**
 
-```bash
-npx supabase db dump --linked -f supabase/migrations/00000000000000_baseline_schema.sql --schema public
-```
+## As 4 de agosto sem arquivo
 
-Esse comando precisa do **Docker Desktop rodando**. Sem a baseline, um banco
-novo criado do zero não reproduz o projeto — as migrations abaixo assumem que
-as tabelas já existem.
+Aplicadas via MCP durante a auditoria e não salvas na hora. Espelhadas de
+forma idempotente em `20260828090000_espelho_migrations_sem_arquivo.sql`,
+a partir do estado conferido no banco:
 
-## O que já está versionado
+- `cron_jobs_autenticados`
+- `migra_recorrencias_legadas`
+- `desativa_trigger_recorrencia_antigo`
+- `quiz_placar_sem_definer`
 
-| Arquivo | Conteúdo |
-|---------|----------|
-| `20260826120000_rls_hardening.sql` | Remove leitura pública de `profiles`, `event_leads` e `public_users`; cria `validate_promo_code`; bloqueia DELETE anônimo no quiz |
-| `20260826121000_definer_functions_authz.sql` | Autorização nas funções `SECURITY DEFINER`; cria `pode_acessar_perfil()` |
-| `20260826122000_revoke_anon_from_definer_functions.sql` | Revoga `EXECUTE` nominalmente do papel `anon` |
-| `20260826123000_lock_remaining_public_functions.sql` | Fecha o `=X` (PUBLIC) e as 5 funções que não eram `SECURITY DEFINER` |
-| `20260827100000_lock_promo_codes.sql` | Fecha a tabela de códigos promocionais |
-| `20260827101000_internal_config_cron_token.sql` | Token compartilhado que autentica os cron jobs |
-| `20260827102000_recorrencia_modelo_unico.sql` | Unifica os dois modelos de recorrência e desliga o trigger antigo |
-| `20260827103000_indices_e_integridade.sql` | 13 índices de FK, `CHECK (amount > 0)`, FK em `transfer_account_id` |
-| `20260827104000_consolida_policies_compartilhamento.sql` | Consolida policies e corrige as permissões de editar/excluir compartilhadas |
+## `recorrencia_modelo_unico`
+
+Existe como arquivo aqui, mas não consta em `schema_migrations`. O efeito
+dele está no banco (conferido: trigger antigo desativado, 477 transações com
+`recurring_group_id`), aplicado sob o nome `migra_recorrencias_legadas` +
+`desativa_trigger_recorrencia_antigo`. O arquivo foi mantido como registro
+da intenção original.
+
+## Regra daqui para frente
+
+Toda mudança de schema entra por arquivo neste diretório **antes** de ser
+aplicada. Aplicar direto pelo painel ou pelo MCP sem salvar o arquivo é o
+que produziu esta divergência.

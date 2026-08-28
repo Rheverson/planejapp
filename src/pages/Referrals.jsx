@@ -1,6 +1,7 @@
 import React, { useMemo } from "react";
 import { useAuth } from "@/lib/AuthContext";
 import { supabase } from "@/lib/supabase";
+import EstadoErro from "@/components/common/EstadoErro";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { Copy, Share2, Users, Gift, CheckCircle2, Clock, XCircle } from "lucide-react";
@@ -20,7 +21,7 @@ export default function Referrals() {
     enabled: !!user?.id
   });
 
-  const { data: referrals = [] } = useQuery({
+  const { data: referrals = [], isError: erroDados, error: erroDadosObj, refetch: recarregarDados, isFetching: buscandoDados } = useQuery({
     queryKey: ['referrals', user?.id],
     queryFn: async () => {
         const { data, error } = await supabase
@@ -90,6 +91,14 @@ export default function Referrals() {
     if (status === 'pending') return 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400';
     return 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400';
   };
+
+  if (erroDados) {
+    return (
+      <div style={{ minHeight: "100vh", padding: "24px 16px", fontFamily: "'Outfit', sans-serif" }}>
+        <EstadoErro erro={erroDadosObj} tentando={buscandoDados} aoTentarDeNovo={() => recarregarDados()} />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 pb-24">

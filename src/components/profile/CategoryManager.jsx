@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/lib/AuthContext";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
+import { escreverVerificando } from "@/lib/escrita";
 import { X, Plus, Trash2, TrendingUp, TrendingDown, PiggyBank, Tag } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -53,8 +54,10 @@ export default function CategoryManager({ onClose }) {
 
   const deleteMutation = useMutation({
     mutationFn: async (id) => {
-      const { error } = await supabase.from('categories').delete().eq('id', id).eq('user_id', user?.id);
-      if (error) throw error;
+      await escreverVerificando(
+        supabase.from('categories').delete().eq('id', id).eq('user_id', user?.id),
+        "Esta categoria não está mais disponível.",
+      );
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['categories', user?.id] });

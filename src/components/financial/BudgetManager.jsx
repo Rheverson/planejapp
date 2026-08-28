@@ -2,6 +2,7 @@ import { useIsDark } from "@/design/useTheme";
 import React, { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/lib/supabase";
+import { escreverVerificando } from "@/lib/escrita";
 import { useAuth } from "@/lib/AuthContext";
 import { useSharedProfile } from "@/lib/SharedProfileContext";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -82,7 +83,10 @@ export default function BudgetManager({ transactions, accounts, selectedDate }) 
   }
 
   async function deleteBudget(id) {
-    await supabase.from("budgets").update({ is_active: false }).eq("id", id).eq("user_id", ownerId);
+    await escreverVerificando(
+      supabase.from("budgets").update({ is_active: false }).eq("id", id).eq("user_id", ownerId),
+      "Este orçamento não está mais disponível.",
+    );
     queryClient.invalidateQueries({ queryKey: ["budgets", ownerId] });
     toast.success("Orçamento removido");
   }

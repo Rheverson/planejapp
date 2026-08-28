@@ -55,8 +55,11 @@ export default function PendingInvites({ onClose }) {
 
   const acceptMutation = useMutation({
     mutationFn: async (shareId) => {
-      const { error } = await supabase.from("shared_access").update({ status: "accepted" }).eq("id", shareId).eq("shared_with_email", user.email);
-      if (error) throw error;
+      await escreverVerificando(
+        supabase.from("shared_access").update({ status: "accepted" })
+          .eq("id", shareId).eq("shared_with_email", user.email),
+        AVISOS.compartilhamentoAusente,
+      );
       await supabase.from("notifications").update({ status: "read", read_at: new Date().toISOString() }).eq("shared_access_id", shareId);
     },
     onSuccess: () => {
@@ -70,8 +73,11 @@ export default function PendingInvites({ onClose }) {
 
   const rejectMutation = useMutation({
     mutationFn: async (shareId) => {
-      const { error } = await supabase.from("shared_access").update({ status: "rejected" }).eq("id", shareId).eq("shared_with_email", user.email);
-      if (error) throw error;
+      await escreverVerificando(
+        supabase.from("shared_access").update({ status: "rejected" })
+          .eq("id", shareId).eq("shared_with_email", user.email),
+        AVISOS.compartilhamentoAusente,
+      );
       await supabase.from("notifications").update({ status: "read", read_at: new Date().toISOString() }).eq("shared_access_id", shareId);
     },
     onSuccess: () => {

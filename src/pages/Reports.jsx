@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
+import EstadoErro from "@/components/common/EstadoErro";
 import { useAuth } from "@/lib/AuthContext";
 import { useSharedProfile } from "@/lib/SharedProfileContext";
 import { useQuery } from "@tanstack/react-query";
@@ -62,6 +63,16 @@ function DonutChart({ data, total }) {
   );
 
   const activeItem = active !== null ? data[active] : null;
+
+  // Sem os lançamentos não há total honesto: melhor dizer que falhou do
+  // que desenhar zero como se fosse o valor real.
+  if (erroDados) {
+    return (
+      <div style={{ minHeight: "100vh", padding: "24px 16px", fontFamily: "'Outfit', sans-serif" }}>
+        <EstadoErro erro={erroDadosObj} tentando={buscandoDados} aoTentarDeNovo={() => recarregarDados()} />
+      </div>
+    );
+  }
 
   return (
     <div className="px-4 pb-6">
@@ -200,7 +211,7 @@ export default function Reports() {
   const { selectedDate, setSelectedDate } = useMonth();
   const [activeTab, setActiveTab] = useState("overview");
 
-  const { data: transactions = [] } = useQuery({
+  const { data: transactions = [], isError: erroDados, error: erroDadosObj, refetch: recarregarDados, isFetching: buscandoDados } = useQuery({
     queryKey: ["transactions", activeOwnerId],
     queryFn: async () => {
       const { data, error } = await supabase.from("transactions").select("*")

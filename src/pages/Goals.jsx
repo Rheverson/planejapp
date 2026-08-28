@@ -2,6 +2,8 @@ import { useIsDark } from "@/design/useTheme";
 import { mensagemDeErro } from "@/lib/erros";
 import React, { useMemo, useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
+import EstadoErro from "@/components/common/EstadoErro";
+import { escreverVerificando, AVISOS } from "@/lib/escrita";
 import { useAuth } from "@/lib/AuthContext";
 import { useSharedProfile } from "@/lib/SharedProfileContext";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -31,7 +33,7 @@ export default function Goals() {
   const ownerId     = activeOwnerId ?? user?.id;
   const canAddGoals = !isViewingSharedProfile || sharedPermissions?.add_transactions;
 
-  const { data: goals = [], isLoading: goalsLoading, error: goalsError } = useQuery({
+  const { data: goals = [], isLoading: goalsLoading, error: goalsError, refetch: recarregarMetas, isFetching: buscandoMetas } = useQuery({
     queryKey: ["goals", ownerId],
     queryFn: async () => {
       if (isViewingSharedProfile) {
@@ -77,8 +79,10 @@ export default function Goals() {
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }) => {
       if (!ownerId) throw new Error("Usuário não identificado.");
-      const { error } = await supabase.from("goals").update(data).eq("id", id).eq("user_id", ownerId);
-      if (error) throw error;
+      await escreverVerificando(
+        supabase.from("goals").update(data).eq("id", id).eq("user_id", ownerId),
+        AVISOS.metaAusente,
+      );
     },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["goals", ownerId] }); setEditGoal(null); setShowForm(false); toast.success("Meta atualizada!"); },
     onError: (err) => toast.error(mensagemDeErro(err)),
@@ -87,8 +91,10 @@ export default function Goals() {
   const deleteMutation = useMutation({
     mutationFn: async (id) => {
       if (!ownerId) throw new Error("Usuário não identificado.");
-      const { error } = await supabase.from("goals").delete().eq("id", id).eq("user_id", ownerId);
-      if (error) throw error;
+      await escreverVerificando(
+        supabase.from("goals").delete().eq("id", id).eq("user_id", ownerId),
+        AVISOS.metaAusente,
+      );
     },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["goals", ownerId] }); setDeleteId(null); toast.success("Meta excluída!"); },
     onError: (err) => toast.error(mensagemDeErro(err)),
@@ -115,10 +121,6 @@ export default function Goals() {
     if (editGoal) updateMutation.mutate({ id: editGoal.id, data });
     else createMutation.mutate(data);
   };
-
-  const goalsErrorMessage = goalsError instanceof Error
-    ? goalsError.message
-    : goalsError?.message || JSON.stringify(goalsError) || "Erro desconhecido.";
 
   // Tokens — mesmos do Home/Transactions
   const bg      = dark ? "#060709" : "#f1f4f9";
@@ -236,11 +238,10 @@ export default function Goals() {
           </div>
         )}
 
+        {/* Antes daqui a tela despejava o erro técnico cru, com
+            JSON.stringify, na cara do usuário. */}
         {ownerId && goalsError && (
-          <div style={{ background: dark ? "rgba(220,38,38,0.08)" : "#fef2f2", border: `1px solid ${dark ? "rgba(220,38,38,0.2)" : "#fecaca"}`, borderRadius: 14, padding: "12px 16px" }}>
-            <p style={{ fontSize: "0.85rem", fontWeight: 500, color: "#dc2626" }}>Erro ao carregar metas.</p>
-            <p style={{ fontSize: "0.72rem", color: "#ef4444", marginTop: 4, wordBreak: "break-all" }}>{goalsErrorMessage}</p>
-          </div>
+          <EstadoErro erro={goalsError} tentando={buscandoMetas} aoTentarDeNovo={() => recarregarMetas()} compacto />
         )}
 
         {/* Empty state */}

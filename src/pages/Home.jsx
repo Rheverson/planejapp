@@ -27,6 +27,7 @@ import CashFlowProjection from "@/components/financial/CashFlowProjection";
 import MonthComparison from "@/components/financial/MonthComparison";
 import BudgetManager from "@/components/financial/BudgetManager";
 import { calcularTotaisDeSaldo, calcularKPIsMes, gerarOcorrenciasRecorrentes } from "@/domain/financas";
+import EstadoErro from "@/components/common/EstadoErro";
 import { Skeleton, SkeletonKPI, SkeletonLinha, SkeletonKeyframes } from "@/components/common/Skeleton";
 
 const fmt = (v) =>
@@ -182,13 +183,13 @@ export default function Home() {
     return () => clearTimeout(t);
   }, [isViewingSharedProfile, algumFormularioAberto]);
 
-  const { data: accounts = [], isLoading: carregandoContas } = useQuery({
+  const { data: accounts = [], isLoading: carregandoContas, isError: erroContas, error: erroContasObj, refetch: recarregarContas, isFetching: buscandoContas } = useQuery({
     queryKey: ["accounts", activeOwnerId],
     queryFn: async () => { const { data, error } = await supabase.from("accounts").select("*").eq("user_id", activeOwnerId).order("name"); if (error) throw error; return data; },
     enabled: !!activeOwnerId,
   });
 
-  const { data: transactions = [], isLoading: carregandoTransacoes } = useQuery({
+  const { data: transactions = [], isLoading: carregandoTransacoes, isError: erroTransacoes, error: erroTransacoesObj, refetch: recarregarTransacoes, isFetching: buscandoTransacoes } = useQuery({
     queryKey: ["transactions", activeOwnerId],
     queryFn: async () => { const { data, error } = await supabase.from("transactions").select("*").eq("user_id", activeOwnerId).order("date", { ascending: false }); if (error) throw error; return data; },
     enabled: !!activeOwnerId,
@@ -258,6 +259,20 @@ export default function Home() {
   const muted    = dark ? "#6b7a96" : "#64748b";
   const linkCol  = dark ? "#60a5fa" : "#2563eb";
   const subBg    = dark ? "#12151c" : "#f8fafc";
+
+  // Sem os dados não há número honesto para mostrar. Melhor dizer que
+  // falhou do que desenhar R$ 0,00 como se fosse o saldo real.
+  if (erroContas || erroTransacoes) {
+    return (
+      <div style={{ minHeight: "100vh", background: bg, padding: "24px 16px", fontFamily: "'Outfit', sans-serif" }}>
+        <EstadoErro
+          erro={erroContasObj || erroTransacoesObj}
+          tentando={buscandoContas || buscandoTransacoes}
+          aoTentarDeNovo={() => { recarregarContas(); recarregarTransacoes(); }}
+        />
+      </div>
+    );
+  }
 
   return (
     <div style={{ minHeight: "100vh", background: bg, paddingBottom: 96, fontFamily: "'Outfit', sans-serif" }}>

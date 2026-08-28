@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { CreditCard, Plus, X, ChevronRight, Calendar, AlertCircle, CheckCircle, Clock, Wallet } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
+import { escreverVerificando, AVISOS, NadaAfetado } from "@/lib/escrita";
 import { useAuth } from "@/lib/AuthContext";
 import { useSharedProfile } from "@/lib/SharedProfileContext";
 import { toast } from "sonner";
@@ -307,8 +308,11 @@ export default function CreditCardManager({ selectedDate }) {
   const saveMutation = useMutation({
     mutationFn: async (formData) => {
       if (editCard) {
-        const { error } = await supabase.from("credit_cards").update(formData).eq("id", editCard.id);
-        if (error) throw error;
+        await escreverVerificando(
+          supabase.from("credit_cards").update(formData)
+            .eq("id", editCard.id).eq("user_id", activeOwnerId),
+          AVISOS.cartaoAusente,
+        );
       } else {
         const { error } = await supabase.from("credit_cards").insert([{ ...formData, user_id: activeOwnerId }]);
         if (error) throw error;
@@ -328,7 +332,7 @@ export default function CreditCardManager({ selectedDate }) {
     mutationFn: async ({ card, total, invoiceMonth }) => {
       // 1. Cria transação de débito na conta vinculada ao cartão
       if (!card.account_id) throw new Error("Cartão sem conta vinculada para pagamento.");
-      const { error: txError } = await supabase.from("transactions").insert([{
+      const { data: debito, error: txError } = await supabase.from("transactions").insert([{
         user_id: activeOwnerId,
         description: `Pagamento fatura ${card.name} ${invoiceMonth}`,
         amount: total,
@@ -338,16 +342,32 @@ export default function CreditCardManager({ selectedDate }) {
         date: format(new Date(), "yyyy-MM-dd"),
         is_realized: true,
         notes: `Fatura ${invoiceMonth}`,
-      }]);
+      }]).select("id");
       if (txError) throw txError;
 
-      // 2. Marca todas as transações da fatura como pagas
-      const { error: updateError } = await supabase.from("transactions")
+      // 2. Marca as compras da fatura como pagas.
+      //
+      // Se nada for marcado, a fatura já tinha sido paga em outro lugar
+      // e o débito acima viraria cobrança em duplicidade. Desfaz antes
+      // de avisar — deixar para o usuário perceber seria pior.
+      const { data: marcadas, error: updateError } = await supabase.from("transactions")
         .update({ is_realized: true })
         .eq("user_id", activeOwnerId)
         .eq("credit_card_id", card.id)
-        .eq("invoice_month", invoiceMonth);
+        .eq("invoice_month", invoiceMonth)
+        .select("id");
       if (updateError) throw updateError;
+
+      if (!marcadas || marcadas.length === 0) {
+        const idDebito = debito?.[0]?.id;
+        if (idDebito) {
+          await supabase.from("transactions").delete()
+            .eq("id", idDebito).eq("user_id", activeOwnerId);
+        }
+        throw new NadaAfetado(
+          "Esta fatura já constava como paga. Nenhum débito foi lançado.",
+        );
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["transactions"] });

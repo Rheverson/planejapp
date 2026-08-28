@@ -165,11 +165,13 @@ export default function SharedAccessList({ onClose }) {
 
   const deleteMutation = useMutation({
     mutationFn: async (id) => {
-      const { error } = await supabase.from("shared_access").delete().eq("id", id).eq("owner_id", user.id);
-      if (error) throw error;
+      await escreverVerificando(
+        supabase.from("shared_access").delete().eq("id", id).eq("owner_id", user.id),
+        AVISOS.compartilhamentoAusente,
+      );
     },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["sharedAccess"] }); queryClient.invalidateQueries({ queryKey: ["pendingInvitesCount"] }); toast.success("Compartilhamento removido!"); },
-    onError: (err) => toast.error(`Erro: ${err.message}`),
+    onError: (err) => toast.error(mensagemDeErro(err)),
   });
 
   const handleShare = async (formData) => {

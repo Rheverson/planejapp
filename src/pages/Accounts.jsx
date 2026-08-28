@@ -1,6 +1,7 @@
 import { mensagemDeErro } from "@/lib/erros";
 import React, { useState, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
+import EstadoErro from "@/components/common/EstadoErro";
 import { useAuth } from "@/lib/AuthContext";
 import { useSharedProfile } from "@/lib/SharedProfileContext";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -19,7 +20,8 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { calcularSaldosPorConta } from "@/domain/financas";
+import { calcularSaldosPorConta, calcularTotaisDeSaldo } from "@/domain/financas";
+import { escreverVerificando, AVISOS } from "@/lib/escrita";
 
 const iconMap    = { bank: Building2, wallet: Wallet, digital: Smartphone, investment: TrendingUp, other: MoreHorizontal };
 const typeLabels = { bank: "Conta Bancária", wallet: "Carteira", digital: "Conta Digital", investment: "Investimentos", other: "Outros" };
@@ -72,7 +74,17 @@ function AccountDetailModal({ account, transactions, onClose }) {
 
   const getTxAmount = (t) => {
     const isIn = t.type === "income" || (t.type === "transfer" && t.transfer_account_id === account.id);
+    // Sem os lançamentos não há total honesto: melhor dizer que falhou do
+  // que desenhar zero como se fosse o valor real.
+  if (erroDados) {
     return (
+      <div style={{ minHeight: "100vh", padding: "24px 16px", fontFamily: "'Outfit', sans-serif" }}>
+        <EstadoErro erro={erroDadosObj} tentando={buscandoDados} aoTentarDeNovo={() => recarregarDados()} />
+      </div>
+    );
+  }
+
+  return (
       <span className={`text-sm font-medium ${isIn ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
         {isIn ? "+" : "-"}{fmt(t.amount)}
       </span>
@@ -175,7 +187,7 @@ export default function Accounts() {
   const [selectedAccount, setSelectedAccount] = useState(null);
   const [activeTab, setActiveTab] = useState("accounts"); // "accounts" | "cards"
 
-  const { data: accounts = [] } = useQuery({
+  const { data: accounts = [], isError: erroDados, error: erroDadosObj, refetch: recarregarDados, isFetching: buscandoDados } = useQuery({
     queryKey: ["accounts", activeOwnerId],
     queryFn: async () => {
       const { data, error } = await supabase.from("accounts").select("*").eq("user_id", activeOwnerId).order("name");
@@ -209,8 +221,12 @@ export default function Accounts() {
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }) => {
-      const { error } = await supabase.from("accounts").update({ ...data, initial_balance: parseFloat(data.initial_balance || 0) }).eq("id", id);
-      if (error) throw error;
+      await escreverVerificando(
+        supabase.from("accounts")
+          .update({ ...data, initial_balance: parseFloat(data.initial_balance || 0) })
+          .eq("id", id).eq("user_id", activeOwnerId),
+        AVISOS.contaAusente,
+      );
     },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["accounts"] }); setEditAccount(null); setShowForm(false); toast.success("Conta atualizada!"); },
     onError: (err) => toast.error(mensagemDeErro(err)),
@@ -218,32 +234,39 @@ export default function Accounts() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id) => {
-      const { error } = await supabase.from("accounts").delete().eq("id", id);
-      if (error) throw error;
+      // As transações da conta são preservadas: o FK é SET NULL desde
+      // 28/08. Antes disso, este delete apagava o histórico inteiro.
+      await escreverVerificando(
+        supabase.from("accounts").delete()
+          .eq("id", id).eq("user_id", activeOwnerId),
+        AVISOS.contaAusente,
+      );
     },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["accounts"] }); setDeleteId(null); toast.success("Conta removida!"); },
     onError: (err) => toast.error(mensagemDeErro(err)),
   });
 
-  const accountBalances = useMemo(() => {
-    const balances = {};
-    accounts.forEach(acc => { balances[acc.id] = Number(acc.initial_balance) || 0; });
-    transactions.forEach(t => {
-      if (t.is_realized === false) return;
-      if (t.type === "income"  && t.account_id) balances[t.account_id] = (balances[t.account_id] || 0) + Number(t.amount);
-      else if (t.type === "expense" && t.account_id) balances[t.account_id] = (balances[t.account_id] || 0) - Number(t.amount);
-      else if (t.type === "transfer") {
-        if (t.account_id) balances[t.account_id] = (balances[t.account_id] || 0) - Number(t.amount);
-        if (t.transfer_account_id) balances[t.transfer_account_id] = (balances[t.transfer_account_id] || 0) + Number(t.amount);
-      }
-    });
-    return balances;
-  }, [accounts, transactions]);
+  // A Carteira reimplementava este cálculo à mão. A cópia divergia do
+  // domínio em dois pontos: descontava compra no cartão do saldo da
+  // conta (a regra diz que só o pagamento da fatura desconta) e somava
+  // em float em vez de centavos. Enquanto ninguém lançou cartão e conta
+  // na mesma transação, as duas versões coincidiram por acaso.
+  // `calcularTotaisDeSaldo` é a mesma função que a Home usa para o saldo
+  // do topo — usar as duas garante que Carteira e Home nunca divirjam,
+  // inclusive na soma (que ele faz em centavos, não em float).
+  const { saldos: accountBalances, emConta: totalBalance, investido: totalInvested,
+          contasComuns: regularAccounts, contasInvestimento: investmentAccounts } =
+    useMemo(() => calcularTotaisDeSaldo(accounts, transactions), [accounts, transactions]);
 
-  const regularAccounts    = accounts.filter(a => a.type !== "investment");
-  const investmentAccounts = accounts.filter(a => a.type === "investment");
-  const totalBalance    = regularAccounts.reduce((s, a)    => s + (accountBalances[a.id] || 0), 0);
-  const totalInvested   = investmentAccounts.reduce((s, a) => s + (accountBalances[a.id] || 0), 0);
+  // O diálogo precisa dizer quantos lançamentos ficam sem conta; sem
+  // isso o usuário confirma no escuro.
+  const contaParaExcluir = accounts.find(a => a.id === deleteId) || null;
+  const txDaConta = useMemo(
+    () => (deleteId ? transactions.filter(t => t.account_id === deleteId).length : 0),
+    [transactions, deleteId],
+  );
+
+
 
   const handleSubmit = (data) =>
     editAccount ? updateMutation.mutate({ id: editAccount.id, data }) : createMutation.mutate(data);
@@ -407,8 +430,20 @@ export default function Accounts() {
       <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Excluir conta?</AlertDialogTitle>
-            <AlertDialogDescription>Esta ação não pode ser desfeita.</AlertDialogDescription>
+            <AlertDialogTitle>Excluir {contaParaExcluir?.name || "conta"}?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-1.5">
+                <p>A conta sai da carteira. Esta ação não pode ser desfeita.</p>
+                {txDaConta > 0 && (
+                  <p>
+                    <strong>
+                      {txDaConta} {txDaConta === 1 ? "lançamento continua" : "lançamentos continuam"} no histórico
+                    </strong>
+                    {" "}— apenas sem conta vinculada. Nenhum valor é apagado.
+                  </p>
+                )}
+              </div>
+            </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>

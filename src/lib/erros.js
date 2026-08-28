@@ -24,6 +24,10 @@ const POR_TRECHO = [
   [/violates row-level security|permission denied/i, "Você não tem permissão para fazer isso."],
   [/violates check constraint .*amount_positivo/i, "O valor precisa ser maior que zero."],
   [/violates check constraint .*contas_distintas/i, "A conta de origem e a de destino precisam ser diferentes."],
+  // Conta que paga a fatura de um cartão: o banco barra de propósito,
+  // porque um cartão sem conta de débito não sabe de onde pagar.
+  [/violates foreign key.*credit_cards_account_id/i,
+   "Esta conta paga a fatura de um cartão. Desvincule o cartão antes de excluir a conta."],
   [/violates foreign key/i, "Este item está vinculado a outro registro e não pode ser alterado assim."],
   [/date\/time field value out of range|invalid input syntax for type date/i, "A data informada não existe."],
   [/JWT expired|invalid token|session/i, "Sua sessão expirou. Entre novamente."],
@@ -41,6 +45,10 @@ const POR_TRECHO = [
  */
 export function mensagemDeErro(erro, contexto) {
   if (!erro) return "Algo não saiu como esperado. Tente de novo.";
+
+  // Escrita que não afetou linha nenhuma já chega com a frase pronta
+  // e específica (ver src/lib/escrita.js). Traduzir de novo só pioraria.
+  if (erro.jaEmPortugues && erro.message) return erro.message;
 
   const codigo = erro.code ?? erro?.error?.code;
   if (codigo && POR_CODIGO[codigo]) return POR_CODIGO[codigo];

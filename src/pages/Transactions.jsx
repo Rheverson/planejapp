@@ -2,6 +2,7 @@ import { useIsDark } from "@/design/useTheme";
 import { mensagemDeErro } from "@/lib/erros";
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabase";
+import EstadoErro from "@/components/common/EstadoErro";
 import { useAuth } from "@/lib/AuthContext";
 import { useSharedProfile } from "@/lib/SharedProfileContext";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -22,6 +23,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { gerarOcorrenciasRecorrentes } from "@/domain/financas";
+import { escreverVerificando, AVISOS } from "@/lib/escrita";
 
 const CATEGORIES = [
   "alimentação","moradia","transporte","saúde","educação",
@@ -105,7 +107,7 @@ export default function Transactions() {
     enabled: !!activeOwnerId,
   });
 
-  const { data: transactions = [] } = useQuery({
+  const { data: transactions = [], isError: erroDados, error: erroDadosObj, refetch: recarregarDados, isFetching: buscandoDados } = useQuery({
     queryKey: ["transactions", activeOwnerId],
     queryFn: async () => {
       const { data, error } = await supabase.from("transactions").select("*").eq("user_id", activeOwnerId).order("date", { ascending: false });
@@ -138,24 +140,36 @@ export default function Transactions() {
     mutationFn: async ({ id, data, scope, transaction }) => {
       if (!scope || scope === "only") {
         // Apenas este — mantém no grupo mas atualiza só este
-        const { error } = await supabase.from("transactions").update(data).eq("id", id);
-        if (error) throw error;
+        await escreverVerificando(
+          supabase.from("transactions").update(data)
+            .eq("id", id).eq("user_id", activeOwnerId),
+          AVISOS.transacaoAusente,
+        );
       } else if (scope === "future" && transaction?.recurring_group_id) {
         // Este e os seguintes — preserva as datas individuais (exclui date do update)
         const { date: _d, ...dataWithoutDate } = data;
-        const { error } = await supabase.from("transactions").update(dataWithoutDate)
-          .eq("recurring_group_id", transaction.recurring_group_id)
-          .gte("date", transaction.date);
-        if (error) throw error;
+        await escreverVerificando(
+          supabase.from("transactions").update(dataWithoutDate)
+            .eq("recurring_group_id", transaction.recurring_group_id)
+            .gte("date", transaction.date)
+            .eq("user_id", activeOwnerId),
+          AVISOS.recorrenciaAusente,
+        );
       } else if (scope === "all" && transaction?.recurring_group_id) {
         // Todos — preserva as datas individuais (exclui date do update)
         const { date: _d, ...dataWithoutDate } = data;
-        const { error } = await supabase.from("transactions").update(dataWithoutDate)
-          .eq("recurring_group_id", transaction.recurring_group_id);
-        if (error) throw error;
+        await escreverVerificando(
+          supabase.from("transactions").update(dataWithoutDate)
+            .eq("recurring_group_id", transaction.recurring_group_id)
+            .eq("user_id", activeOwnerId),
+          AVISOS.recorrenciaAusente,
+        );
       } else {
-        const { error } = await supabase.from("transactions").update(data).eq("id", id);
-        if (error) throw error;
+        await escreverVerificando(
+          supabase.from("transactions").update(data)
+            .eq("id", id).eq("user_id", activeOwnerId),
+          AVISOS.transacaoAusente,
+        );
       }
     },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["transactions", activeOwnerId] }); setEditTransaction(null); setShowForm(false); setRecurringModal(null); toast.success("Atualizado!"); },
@@ -166,22 +180,34 @@ export default function Transactions() {
     mutationFn: async ({ id, scope, transaction }) => {
       if (!scope || scope === "only") {
         // Apenas este
-        const { error } = await supabase.from("transactions").delete().eq("id", id);
-        if (error) throw error;
+        await escreverVerificando(
+          supabase.from("transactions").delete()
+            .eq("id", id).eq("user_id", activeOwnerId),
+          AVISOS.transacaoAusente,
+        );
       } else if (scope === "future" && transaction?.recurring_group_id) {
         // Este e os seguintes
-        const { error } = await supabase.from("transactions").delete()
-          .eq("recurring_group_id", transaction.recurring_group_id)
-          .gte("date", transaction.date);
-        if (error) throw error;
+        await escreverVerificando(
+          supabase.from("transactions").delete()
+            .eq("recurring_group_id", transaction.recurring_group_id)
+            .gte("date", transaction.date)
+            .eq("user_id", activeOwnerId),
+          AVISOS.recorrenciaAusente,
+        );
       } else if (scope === "all" && transaction?.recurring_group_id) {
         // Todos
-        const { error } = await supabase.from("transactions").delete()
-          .eq("recurring_group_id", transaction.recurring_group_id);
-        if (error) throw error;
+        await escreverVerificando(
+          supabase.from("transactions").delete()
+            .eq("recurring_group_id", transaction.recurring_group_id)
+            .eq("user_id", activeOwnerId),
+          AVISOS.recorrenciaAusente,
+        );
       } else {
-        const { error } = await supabase.from("transactions").delete().eq("id", id);
-        if (error) throw error;
+        await escreverVerificando(
+          supabase.from("transactions").delete()
+            .eq("id", id).eq("user_id", activeOwnerId),
+          AVISOS.transacaoAusente,
+        );
       }
     },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["transactions", activeOwnerId] }); setDeleteId(null); setRecurringModal(null); toast.success("Excluído!"); },
@@ -324,7 +350,17 @@ export default function Transactions() {
         const accName = accountMap[t.account_id]?.name?.toLowerCase() || "";
         const amtStr  = fmt(Number(t.amount)).toLowerCase();
         const amtNum  = String(t.amount);
-        return (
+        // Sem os lançamentos não há total honesto: melhor dizer que falhou do
+  // que desenhar zero como se fosse o valor real.
+  if (erroDados) {
+    return (
+      <div style={{ minHeight: "100vh", padding: "24px 16px", fontFamily: "'Outfit', sans-serif" }}>
+        <EstadoErro erro={erroDadosObj} tentando={buscandoDados} aoTentarDeNovo={() => recarregarDados()} />
+      </div>
+    );
+  }
+
+  return (
           t.description?.toLowerCase().includes(q) ||
           t.category?.toLowerCase().includes(q) ||
           t.notes?.toLowerCase().includes(q) ||
