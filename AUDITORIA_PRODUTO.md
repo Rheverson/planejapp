@@ -1,5 +1,10 @@
 # PlanejeApp — Auditoria de Produto (28/08/2026)
 
+> **Rodada de correções executada em 28/08.** O P0 foi corrigido e provado
+> (`fix(P0)` — commits `740ec80` e `8d7b807`). Ver a seção
+> "Correções aplicadas" no fim deste documento.
+
+
 Auditoria de terceira rodada, feita como produto real e não como lista de
 tarefas. Nenhuma linha de código foi alterada durante esta apuração.
 
@@ -435,3 +440,89 @@ Três achados desta auditoria vêm de alterações que eu mesmo fiz:
    problema de schema não reproduzível.
 3. A correção de fechamento de modal cobriu 3 de 12 modais; eu tratei o caso
    relatado e não varri os demais.
+
+
+---
+
+# Correções aplicadas (28/08/2026)
+
+## Fase 0 — estado preservado
+
+O inventário revelou mais do que esta auditoria apontou: **40 migrations
+aplicadas contra 13 arquivos locais**. Não eram 4 faltando, eram 28 — a
+comparação original olhou só a janela recente. As 4 da janela de agosto
+ganharam espelho idempotente; as 25 de abril/maio ficam como pendência de
+baseline, documentadas em `supabase/migrations/README.md`. Reconstruí-las de
+memória daria falsa impressão de schema reproduzível.
+
+## Fase 1 e 2 — o P0
+
+`transactions_account_id_fkey` passou de `CASCADE` para `SET NULL`. A escolha
+seguiu o que o modelo já fazia: `transfer_account_id` sempre foi `SET NULL`, e
+havia 56 transações com `account_id` nulo antes da mudança.
+
+Teste de integração (`supabase/tests/exclusao_conta.sql`), 8 verificações:
+
+| Verificação | Resultado |
+|---|---|
+| conta excluída | 0 |
+| transações preservadas | 3 (de 3) |
+| `account_id` das três | NULL |
+| valor, data, descrição, categoria, nota | intactos |
+| recorrência (`recurring_group_id`) | preservada |
+| transação de outra conta | vínculo mantido |
+| saldo da conta restante | correto |
+| conta que paga fatura de cartão | exclusão barrada |
+
+## Fase 3 — escritas verificadas
+
+`src/lib/escrita.js` distingue erro do banco, zero linhas e sucesso real.
+Aplicado em 9 arquivos. O caso mais grave era o pagamento de fatura: se a
+marcação das compras não afetasse nada, o débito ficava lançado e a tela dizia
+"Fatura paga!" — cobrança em duplicidade. Agora o débito é desfeito antes do
+aviso.
+
+## Fase 4 — erro de rede
+
+`EstadoErro`, com "Tentar novamente" ligado ao `refetch`, em 6 páginas. A Home
+para antes de desenhar: mostrar R$ 0,00 quando a query falhou é pior do que
+mostrar o erro. Em Metas saiu o `JSON.stringify` do erro que ia para a tela.
+
+## Fase 5 — `congelar_ref`
+
+`search_path` fixo. Advisors de segurança: **13 → 12**.
+
+## Fase 6 — consistência financeira
+
+A Carteira reimplementava o saldo, divergindo em dois pontos (descontava compra
+no cartão e somava em float). Passa a usar `calcularTotaisDeSaldo`, a mesma da
+Home. 15 testes novos em `src/domain/saldos.test.js`.
+
+Relatórios somava em float e rotulava "Saídas" o total realizado, enquanto a
+Home rotula igual o total com previstas — mesmo nome, números diferentes.
+Agora soma em centavos e os rótulos dizem "realizadas".
+
+Conferido em produção: Home e Carteira mostram **R$ 5.632,00**, decompostos
+igual (5.500 + 132).
+
+## Fase 9 — mobile
+
+O hook de fechamento estava em 3 modais; agora são **9**.
+
+## Fase 10 — performance
+
+`recharts` saiu dos chunks fixos. Carga inicial: **1.262 KB → 851 KB (−33%)**.
+Os 411 KB de gráficos agora só descem ao abrir Relatórios.
+
+## Fase 11 — código morto
+
+`components/ui/chart.jsx` removido após verificar import, import dinâmico,
+teste e config — zero referências. Os outros 38 componentes shadcn sem uso
+permanecem: a dúvida pesa mais que o ganho.
+
+## O que continua pendente
+
+Nada do que esta rodada tocou. Seguem abertos, por decisão de escopo:
+Design System, LGPD (exclusão de conta e exportação), paginação, refatoração
+do `AIInsights.jsx`, baseline do schema, e os 11 itens de
+**NECESSITA VALIDAÇÃO** listados acima.
