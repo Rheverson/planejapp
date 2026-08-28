@@ -69,6 +69,28 @@ export function ehCompraNoCartao(t) {
   return Boolean(t?.credit_card_id) && t?.type === "expense";
 }
 
+/**
+ * Pagamento de fatura do cartao.
+ *
+ * `pagar_fatura` (migration 20260828100000) grava o pagamento como uma
+ * despesa comum, com `category = 'faturas'` e sem `credit_card_id` --
+ * e e o unico lugar do sistema que escreve esse valor. A categoria que
+ * o usuario ve no formulario e "Cartao de Credito", gravada como
+ * `cartao de credito`; nao colide.
+ *
+ * Ele TEM que continuar debitando a conta: e ali que o dinheiro sai de
+ * verdade. Por isso `calcularSaldosPorConta` nao conhece este
+ * predicado. Mas ele NAO e gasto do mes -- o gasto ja foi contado
+ * quando a compra entrou no cartao. Contar os dois dobra a despesa no
+ * mes em que a fatura e paga: R$ 300 de compra mais R$ 300 de
+ * pagamento viravam R$ 600 de saida para uma queda real de R$ 300.
+ *
+ * Liquidacao de passivo, nao despesa operacional.
+ */
+export function ehPagamentoDeFatura(t) {
+  return t?.type === "expense" && t?.category === "faturas";
+}
+
 /** Converte "2026-04-12" em Date local ao meio-dia, evitando o deslocamento de fuso. */
 export function paraData(dataISO) {
   if (!dataISO) return null;
@@ -194,14 +216,19 @@ export function calcularTotaisDeSaldo(contas, transacoes) {
  *
  * Despesas sem conta vinculada (`account_id` nulo) entram: são gastos
  * reais que o usuário registrou sem escolher a conta.
+ *
+ * O pagamento de fatura sai (`ehPagamentoDeFatura`): a compra no cartão
+ * já é a despesa: o pagamento é a liquidação dela. Contar os dois
+ * dobrava o gasto do cartão no mês em que a fatura é paga.
  */
-// `contas` não é mais lido — fica na assinatura para não quebrar os
-// chamadores. Removê-lo é limpeza para outra rodada.
 // `contas` não é mais lido — fica na assinatura para não quebrar os
 // chamadores. Removê-lo é limpeza para outra rodada.
 export function transacoesDoMes(transacoes, contas, dataReferencia) {
   return lista(transacoes).filter(
-    (t) => t.type !== "transfer" && noMes(t, dataReferencia)
+    (t) =>
+      t.type !== "transfer" &&
+      !ehPagamentoDeFatura(t) &&
+      noMes(t, dataReferencia)
   );
 }
 

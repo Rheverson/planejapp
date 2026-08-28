@@ -22,7 +22,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { gerarOcorrenciasRecorrentes, paraCentavos, paraReais } from "@/domain/financas";
+import { gerarOcorrenciasRecorrentes, paraCentavos, paraReais, ehPagamentoDeFatura } from "@/domain/financas";
 import { escreverVerificando, AVISOS } from "@/lib/escrita";
 
 const CATEGORIES = [
@@ -405,8 +405,12 @@ export default function Transactions() {
   const summary = useMemo(() => {
     // Antes daqui esta tela tinha a própria cópia da regra e descartava
     // tudo que passasse por conta de investimento — inclusive despesas
-    // reais. Agora o recorte é o do domínio: fora só transferência.
-    const tx = filteredTransactions.filter(t => t.type !== "transfer");
+    // reais. Agora o recorte é o do domínio: fora transferência e
+    // pagamento de fatura (a compra no cartão já é a despesa; somar o
+    // pagamento também dobraria o gasto, como na Home).
+    const tx = filteredTransactions.filter(
+      t => t.type !== "transfer" && !ehPagamentoDeFatura(t)
+    );
     // Centavos, como no resto do app: em float, cem lançamentos de
     // R$ 0,01 não somavam exatamente R$ 1,00.
     const cent = (itens) => itens.reduce((acc, t) => acc + paraCentavos(t.amount), 0);

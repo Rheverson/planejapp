@@ -99,7 +99,18 @@ Leia o arquivo `PLANEJAPP_DOCS.md` antes de qualquer tarefa. Ele contém toda a 
 - RLS está ativo em todas as tabelas
 
 ### Ao fazer deploy
-- **Antes de tudo:** `npm test` (Vitest sobre o módulo de domínio) e `npm run build`
+- **Antes de tudo, os três:** `npm test` (Vitest sobre o módulo de domínio),
+  `npm run lint` e `npm run build`. Os três, sempre, antes de qualquer push
+  ou deploy — nenhum substitui o outro.
+- **O lint não é enfeite.** A tela da Carteira ficou quebrada em produção por
+  dias: um bloco de estado de erro foi inserido ancorado no `return` errado e
+  caiu dentro de outra função, onde as variáveis não existiam. Abrir uma conta
+  COM lançamentos estourava `ReferenceError` e o ErrorBoundary mostrava "Essa
+  tela travou". O `npm run lint` apontava para isso desde o primeiro dia —
+  quatro variáveis "assigned a value but never used" logo no commit que as
+  criou para usar. Teste e build passaram os dois; só o lint viu.
+  Variável declarada e nunca usada logo depois de você a ter introduzido para
+  usar é a assinatura de um bloco que foi parar no escopo errado.
 - **App:** `git add . && git commit -m "..." && git push` (Vercel detecta automaticamente)
 - **Landing:** `cd src/pages/planejapp-landing && npx vercel --prod` (sem Git)
 - **Edge Functions:** `npx supabase functions deploy <nome>`

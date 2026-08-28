@@ -40,6 +40,15 @@ export const ehPrevista = (t: Transacao) => t?.is_realized === false;
 export const ehCompraNoCartao = (t: Transacao) =>
   Boolean(t?.credit_card_id) && t?.type === "expense";
 
+// Pagamento de fatura: liquidacao de passivo, nao despesa do mes.
+// `pagar_fatura` grava com category = 'faturas'; a compra no cartao ja
+// foi contada como gasto. Contar os dois dobra a despesa no mes em que
+// a fatura e paga. Espelha `ehPagamentoDeFatura` de
+// src/domain/financas.js -- se um mudar, o outro muda junto, senao o
+// Finn volta a responder um numero e a Home outro.
+export const ehPagamentoDeFatura = (t: Transacao) =>
+  t?.type === "expense" && t?.category === "faturas";
+
 // ── datas em horário de Brasília ────────────────────────────
 
 /**
@@ -192,7 +201,8 @@ const dentro = (t: Transacao, p: Periodo) => t.date >= p.de && t.date <= p.ate;
  */
 export function calcularTotais(transacoes: Transacao[], periodo: Periodo): Totais {
   const doPeriodo = (transacoes || []).filter(
-    (t) => t && t.type !== "transfer" && dentro(t, periodo),
+    (t) =>
+      t && t.type !== "transfer" && !ehPagamentoDeFatura(t) && dentro(t, periodo),
   );
 
   const soma = (itens: Transacao[]) =>
