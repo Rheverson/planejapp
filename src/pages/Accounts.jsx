@@ -74,17 +74,7 @@ function AccountDetailModal({ account, transactions, onClose }) {
 
   const getTxAmount = (t) => {
     const isIn = t.type === "income" || (t.type === "transfer" && t.transfer_account_id === account.id);
-    // Sem os lançamentos não há total honesto: melhor dizer que falhou do
-  // que desenhar zero como se fosse o valor real.
-  if (erroDados) {
     return (
-      <div style={{ minHeight: "100vh", padding: "24px 16px", fontFamily: "'Outfit', sans-serif" }}>
-        <EstadoErro erro={erroDadosObj} tentando={buscandoDados} aoTentarDeNovo={() => recarregarDados()} />
-      </div>
-    );
-  }
-
-  return (
       <span className={`text-sm font-medium ${isIn ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
         {isIn ? "+" : "-"}{fmt(t.amount)}
       </span>
@@ -309,6 +299,24 @@ export default function Accounts() {
       </motion.div>
     );
   };
+
+  // Sem os lançamentos não há total honesto: melhor dizer que falhou do
+  // que desenhar zero como se fosse o valor real.
+  //
+  // Este bloco nasceu dentro de `getTxAmount`, no AccountDetailModal, por
+  // uma inserção ancorada no `return` errado (740ec80). Como
+  // `erroDados` só existe aqui, abrir uma conta COM lançamentos no mês
+  // estourava `ReferenceError: erroDados is not defined` e o
+  // ErrorBoundary mostrava "Essa tela travou". Conta sem movimento no
+  // mês não chamava `getTxAmount` e passava — foi o que escondeu a
+  // falha do teste.
+  if (erroDados) {
+    return (
+      <div style={{ minHeight: "100vh", padding: "24px 16px", fontFamily: "'Outfit', sans-serif" }}>
+        <EstadoErro erro={erroDadosObj} tentando={buscandoDados} aoTentarDeNovo={() => recarregarDados()} />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 pb-24 transition-colors duration-200">
