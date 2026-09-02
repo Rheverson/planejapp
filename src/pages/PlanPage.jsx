@@ -11,6 +11,7 @@ import {
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { temAcessoPro, estadoDaAssinatura, ESTADO } from "@/domain/assinatura";
 
 const fmt = (v) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
 
@@ -116,8 +117,10 @@ export default function PlanPage() {
     enabled: !!user?.id,
   });
 
-  const isActive = subscription?.status === "active" || subscription?.status === "trialing";
-  const isCancelled = subscription?.status === "cancelled";
+  // Mesma regra do portão (App.jsx) e do Perfil — ver
+  // src/domain/assinatura.js.
+  const isActive = temAcessoPro(subscription);
+  const isCancelled = estadoDaAssinatura(subscription) === ESTADO.CANCELADA;
   const currentPlan = isActive || isCancelled ? "monthly" : "free";
   const endDate = subscription?.current_period_end
     ? format(new Date(subscription.current_period_end), "dd/MM/yyyy", { locale: ptBR })

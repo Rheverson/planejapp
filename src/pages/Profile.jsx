@@ -25,6 +25,7 @@ import ReferralInviteModal from "@/components/referral/ReferralInviteModal";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { temAcessoPro, estadoDaAssinatura, ESTADO } from "@/domain/assinatura";
 
 export default function Profile() {
   const { user, signOut } = useAuth();
@@ -121,8 +122,11 @@ export default function Profile() {
     enabled: !!user?.id,
   });
 
-  const isActive = subscription?.status === "active" || subscription?.status === "trialing";
-  const isCancelled = subscription?.status === "cancelled";
+  // Antes: `status === "active" || "trialing"`, sem olhar o período —
+  // uma assinatura cancelada ainda dentro do prazo aparecia como sem
+  // plano para quem continuava com acesso.
+  const isActive = temAcessoPro(subscription);
+  const isCancelled = estadoDaAssinatura(subscription) === ESTADO.CANCELADA;
   const endDate = subscription?.current_period_end
     ? format(new Date(subscription.current_period_end), "dd/MM/yyyy", { locale: ptBR })
     : null;

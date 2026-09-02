@@ -26,6 +26,7 @@ import { supabase } from '@/lib/supabase';
 import { useEffect, Suspense } from 'react';
 import { initPushNotifications } from '@/lib/pushNotifications';
 import ErrorBoundary from '@/lib/ErrorBoundary';
+import { temAcessoPro, pagamentoFalhou } from '@/domain/assinatura';
 
 const { Pages, Layout, mainPage } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
@@ -84,25 +85,11 @@ function useProfile(userId) {
   });
 }
 
-function hasActiveAccess(subscription) {
-  if (!subscription) return false;
-  const { status, current_period_end } = subscription;
-  if (status === 'active' || status === 'trialing') return true;
-  if (status === 'cancelled' && current_period_end) {
-    return new Date(current_period_end) > new Date();
-  }
-  return false;
-}
-
-function isPaymentFailed(subscription) {
-  if (!subscription) return false;
-  return (
-    subscription.status === 'past_due' ||
-    (subscription.status === 'cancelled' &&
-      (!subscription.current_period_end ||
-        new Date(subscription.current_period_end) < new Date()))
-  );
-}
+// A regra mora em src/domain/assinatura.js — uma pergunta, uma
+// resposta. Estas duas funções viviam aqui e tinham cópias divergentes
+// em Profile.jsx e PlanPage.jsx, que ignoravam `current_period_end`.
+const hasActiveAccess = temAcessoPro;
+const isPaymentFailed = pagamentoFalhou;
 
 const AuthenticatedApp = () => {
   const { loading, user } = useAuth();
