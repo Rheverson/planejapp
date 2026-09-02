@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 import Stripe from "https://esm.sh/stripe@13.11.0?deno-std=0.177.0"
+import { requireUser } from "../_shared/auth.ts"
 
 const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY")!, { apiVersion: "2023-10-16" })
 
@@ -19,35 +20,46 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders })
 
   try {
-    const authHeader = req.headers.get("Authorization")
-    if (!authHeader) return json({ error: "Nao autorizado." }, 401)
-
-    const supabaseUser = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } }
-    )
-    const { data: { user }, error: userError } = await supabaseUser.auth.getUser()
-    if (userError || !user) return json({ error: "Sessao expirada." }, 401)
+    // A identidade vem do JWT, nunca do corpo.
+    //
+    // Esta função autenticava e depois usava `body.userId` mesmo assim,
+    // com service_role — ou seja, por cima do RLS. Um usuário logado
+    // podia informar o id de outro e ler ou escrever a linha de
+    // assinatura alheia, inclusive zerar o `stripe_customer_id` da
+    // vítima no tratamento de `resource_missing` mais abaixo.
+    //
+    // Era a única das 15 funções fora do padrão do `_shared/auth.ts`.
+    // O front continua mandando `userId`/`email` no corpo; agora são
+    // simplesmente ignorados.
+    const auth = await requireUser(req)
+    if (auth.response) return auth.response
+    const userId = auth.user.id
+    const email = auth.user.email
+    if (!email) return json({ error: "Conta sem e-mail cadastrado." }, 400)
 
     const supabaseAdmin = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     )
 
-    let userId: string, email: string, referralCode: string | null, promoCode: string | null, trialDays: number
+    // O tamanho do trial também não vem do corpo.
+    //
+    // `trial_period_days` ia direto do cliente para o Stripe, sem teto:
+    // bastava chamar esta função com `{"trialDays": 730}` e sem promo
+    // para ganhar dois anos de acesso grátis (730 é o limite do Stripe).
+    // O caminho legítimo de trial longo já é outro — o promoCode, que é
+    // conferido contra `promo_codes` logo abaixo e sobrescreve este
+    // valor. O cliente não tem o que opinar aqui.
+    let trialDays = 30
+
+    let referralCode: string | null, promoCode: string | null
     try {
       const body = await req.json()
-      userId = body.userId
-      email = body.email
       referralCode = body.referralCode || null
       promoCode = body.promoCode ? body.promoCode.toUpperCase().trim() : null
-      trialDays = typeof body.trialDays === 'number' && body.trialDays > 0 ? body.trialDays : 30
     } catch {
       return json({ error: "Dados invalidos." }, 400)
     }
-
-    if (!userId || !email) return json({ error: "Dados incompletos." }, 400)
 
     // ── Valida promoCode se enviado ────────────────────────
     if (promoCode) {
