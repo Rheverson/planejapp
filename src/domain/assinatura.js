@@ -122,9 +122,27 @@ export function podeAssinar(assinatura, agora = new Date()) {
   return !(estado === ESTADO.TRIAL || estado === ESTADO.ATIVA);
 }
 
+/**
+ * O usuário já pediu o cancelamento?
+ *
+ * Diferente de estar cancelada. Quando o cancelamento é pedido, o
+ * Stripe mantém o status em `active` até o período virar — é assim que
+ * a pessoa fica com o mês que já pagou. A intenção fica nesta flag.
+ *
+ * Serve só para a interface dizer a verdade ("cancelada, ativa até
+ * tal dia"). O acesso continua decidido por `temAcessoPro`.
+ */
+export function cancelamentoPedido(assinatura) {
+  return assinatura?.cancel_at_period_end === true;
+}
+
 /** Rótulo para a interface. Só apresentação — não decide acesso. */
 export function rotuloDoEstado(assinatura, agora = new Date()) {
   const estado = estadoDaAssinatura(assinatura);
+  if (cancelamentoPedido(assinatura) &&
+      (estado === ESTADO.ATIVA || estado === ESTADO.TRIAL)) {
+    return "Cancelada — ativa até o fim do período";
+  }
   switch (estado) {
     case ESTADO.TRIAL: return "Período de teste";
     case ESTADO.ATIVA: return "Ativa";

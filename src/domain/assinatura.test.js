@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   ESTADO, estadoDaAssinatura, temAcessoPro, pagamentoFalhou,
-  podeAssinar, rotuloDoEstado,
+  podeAssinar, rotuloDoEstado, cancelamentoPedido,
 } from "./assinatura";
 
 // ============================================================
@@ -142,5 +142,36 @@ describe("rótulo da interface", () => {
     expect(rotuloDoEstado(sub("active"), AGORA)).toBe("Ativa");
     expect(rotuloDoEstado(sub("past_due"), AGORA)).toBe("Pagamento pendente");
     expect(rotuloDoEstado(null, AGORA)).toBe("Sem assinatura");
+  });
+});
+
+describe("cancelamento pedido, período ainda correndo", () => {
+  // O Stripe mantém `active` até o período virar. Quem cancelou hoje
+  // continua com o mês que pagou — e a tela precisa dizer isso, em vez
+  // de "Ativa", que faria a pessoa achar que o cancelamento não pegou.
+  const pediu = { status: "active", current_period_end: FUTURO, cancel_at_period_end: true };
+
+  it("o acesso continua valendo", () => {
+    expect(temAcessoPro(pediu, AGORA)).toBe(true);
+  });
+
+  it("a flag é reconhecida", () => {
+    expect(cancelamentoPedido(pediu)).toBe(true);
+    expect(cancelamentoPedido(sub("active", FUTURO))).toBe(false);
+  });
+
+  it("o rótulo conta a verdade", () => {
+    expect(rotuloDoEstado(pediu, AGORA)).toBe("Cancelada — ativa até o fim do período");
+    expect(rotuloDoEstado(sub("active", FUTURO), AGORA)).toBe("Ativa");
+  });
+
+  it("não é confundido com falha de pagamento", () => {
+    expect(pagamentoFalhou(pediu, AGORA)).toBe(false);
+  });
+
+  it("vale também durante o período de teste", () => {
+    const trialCancelado = { status: "trialing", trial_end: FUTURO, cancel_at_period_end: true };
+    expect(temAcessoPro(trialCancelado, AGORA)).toBe(true);
+    expect(rotuloDoEstado(trialCancelado, AGORA)).toBe("Cancelada — ativa até o fim do período");
   });
 });

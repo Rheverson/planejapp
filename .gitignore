@@ -28,3 +28,8 @@ dist-ssr
 *.sw?
 
 .env
+# saidas dos scripts de QA (contem ids de usuario e do Stripe)
+scripts/qa-stripe-ids.json
+scripts/qa-stripe-resultado.json
+scripts/audit-live-periods-resultado.json
+scripts/live-null-periods.json

@@ -48,6 +48,19 @@ function paraISO(segundos: number | null | undefined): string | null {
   return Number.isNaN(d.getTime()) ? null : d.toISOString();
 }
 
+// ── Fronteira de vocabulario (P2-C) ─────────────────────────
+//
+// O Stripe grava `canceled`, com um L. O app sempre gravou `cancelled`,
+// com dois -- e o `src/domain/assinatura.js` fala esse. Gravar o valor
+// do Stripe cru deixaria as duas grafias circulando no banco.
+//
+// A traducao acontece AQUI, na entrada. Substituicao textual pelo
+// codigo seria o caminho errado: quebraria a leitura das linhas que ja
+// estao gravadas.
+function statusInterno(doStripe: string): string {
+  return doStripe === "canceled" ? "cancelled" : doStripe;
+}
+
 async function sendNotification(userId: string, title: string, body: string) {
   try {
     await supabase.functions.invoke('send-notification', {
@@ -132,22 +145,69 @@ serve(async (req) => {
 
   const obj = event.data.object as any
 
+  // ── P2-B: entrega repetida nao age duas vezes ─────────────
+  //
+  // O Stripe reentrega por design, ate 3 dias. A idempotencia de antes
+  // era acidental: funcionava porque os UPDATEs sao idempotentes por
+  // natureza. Bastava alguem acrescentar um INSERT, um incremento ou um
+  // e-mail para deixar de funcionar.
+  //
+  // Agora o `event.id` e registrado ANTES de agir. Quem chega repetido
+  // esbarra na chave primaria e sai sem efeito.
+  const { error: erroEvento } = await supabase
+    .from("stripe_eventos_processados")
+    .insert({ id: event.id, tipo: event.type, modo })
+
+  if (erroEvento) {
+    // 23505 = unique_violation: ja processamos este evento.
+    if (erroEvento.code === "23505") {
+      console.log(`evento ${event.id} ja processado — ignorado`)
+      return new Response(JSON.stringify({ ok: true, repetido: true }), { status: 200 })
+    }
+    // Qualquer outra falha aqui e do banco, nao do Stripe. Responder
+    // 500 faz o Stripe reentregar, que e o que queremos.
+    console.error("falha ao registrar evento:", erroEvento)
+    return new Response("erro ao registrar evento", { status: 500 })
+  }
+
+  // ── P1-C: evento atrasado nao desfaz estado mais novo ─────
+  //
+  // O Stripe NAO garante ordem. Reproduzido na bateria: `created` ->
+  // `deleted` -> `created` atrasado deixava a linha `active` depois de
+  // cancelada.
+  //
+  // Compara o horario do EVENTO (nao o do banco): dois eventos podem
+  // chegar no mesmo segundo em ordem trocada.
+  const eventoEm = new Date(((event as any).created ?? 0) * 1000).toISOString()
+
+  /** Filtro comum a toda escrita: mesma linha, mesmo modo, evento mais novo. */
+  const alvo = (q: any) =>
+    q.eq("stripe_customer_id", obj.customer)
+     .eq("is_test", eTeste)
+     .or(`ultimo_evento_em.is.null,ultimo_evento_em.lt.${eventoEm}`)
+
+
   // ── Assinatura criada ou atualizada ─────────────────────
   if (["customer.subscription.created", "customer.subscription.updated"].includes(event.type)) {
-    await supabase.from("subscriptions").update({
+    await alvo(supabase.from("subscriptions").update({
       stripe_subscription_id: obj.id,
-      status: obj.status,
+      status: statusInterno(obj.status),
       trial_end: paraISO(obj.trial_end),
       current_period_end: paraISO(fimDoPeriodo(obj)),
-    }).eq("stripe_customer_id", obj.customer).eq("is_test", eTeste)
+      cancel_at_period_end: obj.cancel_at_period_end === true,
+      ultimo_evento_em: eventoEm,
+    }))
   }
 
   // ── Assinatura cancelada ─────────────────────────────────
   if (event.type === "customer.subscription.deleted") {
-    await supabase.from("subscriptions")
-      .update({ status: "cancelled" })
-      .eq("stripe_customer_id", obj.customer)
-      .eq("is_test", eTeste)
+    await alvo(supabase.from("subscriptions")
+      .update({
+        status: "cancelled",
+        cancel_at_period_end: false,
+        current_period_end: paraISO(fimDoPeriodo(obj)) ?? undefined,
+        ultimo_evento_em: eventoEm,
+      }))
 
     const { data: sub } = await supabase
       .from("subscriptions")

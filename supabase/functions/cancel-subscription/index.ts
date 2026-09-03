@@ -32,7 +32,7 @@ serve(async (req) => {
 
     if (subErr || !sub) throw new Error("Assinatura não encontrada")
 
-    if (sub.status === "cancelled") {
+    if (sub.status === "cancelled" || sub.cancel_at_period_end === true) {
       return new Response(JSON.stringify({ ok: true, message: "Já cancelada" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" }
       })
@@ -60,10 +60,24 @@ serve(async (req) => {
       if (!stripeRes.ok) throw new Error(`Stripe error: ${stripeData.error?.message}`)
     }
 
-    // Atualiza banco: status cancelled mas mantém current_period_end
+    // Marca a INTENÇÃO, não o estado (P2-C).
+    //
+    // A função pede `cancel_at_period_end=true` no Stripe, e o Stripe
+    // mantém a assinatura em `active` até o período virar — é assim que
+    // o cliente continua com acesso pelo mês que já pagou.
+    //
+    // Antes daqui gravávamos `status = "cancelled"` por conta própria.
+    // Funcionava só porque o `customer.subscription.updated` não estava
+    // sendo entregue; assim que ele passou a ser (P1-B), o webhook
+    // devolveria a linha para `active` e o cancelamento sumiria da tela
+    // segundos depois de o usuário pedir.
+    //
+    // Agora quem manda no `status` é o Stripe, via webhook. Aqui só se
+    // registra que o cancelamento foi pedido — o que dá resposta
+    // imediata na interface sem competir com o webhook.
     const { error: updateErr } = await supabase
       .from("subscriptions")
-      .update({ status: "cancelled" })
+      .update({ cancel_at_period_end: true })
       .eq("user_id", userId)
 
     if (updateErr) throw updateErr
