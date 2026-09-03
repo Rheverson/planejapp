@@ -64,10 +64,31 @@ serve(async (req) => {
     return new Response(`Webhook Error: ${ultimoErro}`, { status: 400 })
   }
 
-  // Deixa no log de qual modo veio o evento. Se um dia aparecer um
-  // evento de teste mexendo em assinatura de producao, isto e o que
-  // permite descobrir.
-  console.log(`webhook ${event.type} · segredo=${modo} · livemode=${(event as any).livemode}`)
+  // ── Isolamento entre teste e producao ─────────────────────
+  //
+  // O webhook grava no MESMO banco nos dois modos e casava a linha so
+  // por `stripe_customer_id`. Comprovado antes desta guarda: um evento
+  // assinado com o segredo de TESTE, nomeando o customer de um cliente
+  // REAL, mudava a assinatura dele de `active` para `canceled`.
+  //
+  // Duas travas agora:
+  //
+  //  1. O `livemode` que o evento declara tem que bater com o segredo
+  //     que o validou. Um evento assinado em teste dizendo ser de
+  //     producao (ou o contrario) e recusado.
+  //  2. Toda escrita filtra tambem por `is_test`. Evento de teste so
+  //     alcanca linha de teste; evento de producao so alcanca linha de
+  //     producao. Nao e convencao que alguem precisa lembrar de seguir,
+  //     e condicao no WHERE.
+  const eTeste = modo === "test"
+  const livemode = (event as any).livemode
+
+  if (typeof livemode === "boolean" && livemode === eTeste) {
+    console.error(`webhook recusado: segredo=${modo} mas livemode=${livemode}`)
+    return new Response("Webhook Error: modo do evento nao confere com a chave", { status: 400 })
+  }
+
+  console.log(`webhook ${event.type} · segredo=${modo} · livemode=${livemode} · is_test=${eTeste}`)
 
   const obj = event.data.object as any
 
@@ -78,7 +99,7 @@ serve(async (req) => {
       status: obj.status,
       trial_end: obj.trial_end ? new Date(obj.trial_end * 1000).toISOString() : null,
       current_period_end: obj.current_period_end ? new Date(obj.current_period_end * 1000).toISOString() : null,
-    }).eq("stripe_customer_id", obj.customer)
+    }).eq("stripe_customer_id", obj.customer).eq("is_test", eTeste)
   }
 
   // ── Assinatura cancelada ─────────────────────────────────
@@ -86,12 +107,14 @@ serve(async (req) => {
     await supabase.from("subscriptions")
       .update({ status: "cancelled" })
       .eq("stripe_customer_id", obj.customer)
+      .eq("is_test", eTeste)
 
     const { data: sub } = await supabase
       .from("subscriptions")
       .select("user_id")
       .eq("stripe_customer_id", obj.customer)
-      .single()
+      .eq("is_test", eTeste)
+      .maybeSingle()
 
     if (sub?.user_id) {
       await supabase.from("referrals")
@@ -117,7 +140,8 @@ serve(async (req) => {
         .from("subscriptions")
         .select("user_id")
         .eq("stripe_customer_id", obj.customer)
-        .single()
+        .eq("is_test", eTeste)
+        .maybeSingle()
 
       if (sub?.user_id) {
         // Ativa o referral
