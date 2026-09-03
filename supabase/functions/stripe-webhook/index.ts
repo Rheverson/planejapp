@@ -8,6 +8,46 @@ const supabase = createClient(
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
 )
 
+// ── Datas do Stripe ─────────────────────────────────────────
+//
+// HOTFIX 03/09/2026. `current_period_end` era lido de
+// `obj.current_period_end`, e na versao de API desta conta
+// (2026-03-25.dahlia) esse campo NAO EXISTE MAIS no objeto
+// `subscription`: ele passou a viver em
+// `subscription.items.data[].current_period_end`.
+//
+// Resultado: o webhook gravava NULL para todo mundo. E a regra de
+// acesso diz que assinatura cancelada mantem PRO ate o fim do periodo
+// pago -- sem a data, `temAcessoPro` devolve false e quem pagou o mes e
+// cancelou perdia o acesso na hora.
+//
+// Comprovado nas duas assinaturas ativas reais do LIVE: o campo esta
+// ausente no objeto e presente no item, com a data certa.
+//
+// O item vem primeiro porque e onde a API atual coloca o valor; o campo
+// do objeto fica como reserva, para o caso de um endpoint fixado numa
+// versao antiga ainda mandar no formato velho.
+function fimDoPeriodo(obj: any): number | null {
+  const doItem = obj?.items?.data?.[0]?.current_period_end;
+  const doObjeto = obj?.current_period_end;
+  const bruto = doItem ?? doObjeto;
+  return typeof bruto === "number" && Number.isFinite(bruto) ? bruto : null;
+}
+
+/**
+ * Segundos do Unix -> ISO, ou null.
+ *
+ * Aceita so numero finito. Antes, um valor inesperado (string, NaN,
+ * undefined) viraria `new Date(NaN).toISOString()`, que LANCA
+ * RangeError e derrubaria o webhook inteiro com 500 -- o Stripe
+ * reentregaria sem parar.
+ */
+function paraISO(segundos: number | null | undefined): string | null {
+  if (typeof segundos !== "number" || !Number.isFinite(segundos)) return null;
+  const d = new Date(segundos * 1000);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+}
+
 async function sendNotification(userId: string, title: string, body: string) {
   try {
     await supabase.functions.invoke('send-notification', {
@@ -97,8 +137,8 @@ serve(async (req) => {
     await supabase.from("subscriptions").update({
       stripe_subscription_id: obj.id,
       status: obj.status,
-      trial_end: obj.trial_end ? new Date(obj.trial_end * 1000).toISOString() : null,
-      current_period_end: obj.current_period_end ? new Date(obj.current_period_end * 1000).toISOString() : null,
+      trial_end: paraISO(obj.trial_end),
+      current_period_end: paraISO(fimDoPeriodo(obj)),
     }).eq("stripe_customer_id", obj.customer).eq("is_test", eTeste)
   }
 
