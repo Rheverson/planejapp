@@ -22,12 +22,52 @@ serve(async (req) => {
   const body = await req.text()
   const sig = req.headers.get("stripe-signature")!
 
-  let event
-  try {
-    event = await stripe.webhooks.constructEventAsync(body, sig, Deno.env.get("STRIPE_WEBHOOK_SECRET")!)
-  } catch (err) {
-    return new Response(`Webhook Error: ${err.message}`, { status: 400 })
+  // ── Assinatura: aceita LIVE e TEST, cada uma com o proprio segredo ──
+  //
+  // Os dois modos do Stripe assinam com segredos diferentes. Em vez de
+  // uma chave global (que obrigaria a VIRAR producao para test, o que
+  // ninguem quer), a funcao tenta os segredos que existirem: primeiro o
+  // de producao, depois o de teste.
+  //
+  // Consequencias, de proposito:
+  //  - Sem STRIPE_WEBHOOK_SECRET_TEST configurado, o comportamento e
+  //    exatamente o de antes. Nada muda em producao.
+  //  - Um evento de teste so e aceito se estiver assinado com o segredo
+  //    de teste; um evento forjado continua sendo 400 nos dois casos.
+  //  - Nao existe caminho em que um evento de teste passe como se fosse
+  //    de producao: o proprio evento carrega `livemode`, registrado
+  //    abaixo, e o segredo que o validou diz de qual modo ele veio.
+  const segredos = [
+    ["live", Deno.env.get("STRIPE_WEBHOOK_SECRET")],
+    ["test", Deno.env.get("STRIPE_WEBHOOK_SECRET_TEST")],
+  ].filter(([, s]) => !!s) as [string, string][]
+
+  if (segredos.length === 0) {
+    console.error("Nenhum segredo de webhook configurado")
+    return new Response("Webhook Error: sem segredo configurado", { status: 500 })
   }
+
+  let event
+  let modo = ""
+  let ultimoErro = ""
+  for (const [nome, segredo] of segredos) {
+    try {
+      event = await stripe.webhooks.constructEventAsync(body, sig, segredo)
+      modo = nome
+      break
+    } catch (err) {
+      ultimoErro = err.message
+    }
+  }
+
+  if (!event) {
+    return new Response(`Webhook Error: ${ultimoErro}`, { status: 400 })
+  }
+
+  // Deixa no log de qual modo veio o evento. Se um dia aparecer um
+  // evento de teste mexendo em assinatura de producao, isto e o que
+  // permite descobrir.
+  console.log(`webhook ${event.type} · segredo=${modo} · livemode=${(event as any).livemode}`)
 
   const obj = event.data.object as any
 
