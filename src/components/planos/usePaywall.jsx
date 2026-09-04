@@ -1,6 +1,7 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import PaywallModal from "./PaywallModal";
 import { erroDeLimite } from "@/domain/limites";
+import { supabase } from "@/lib/supabase";
 
 // ============================================================
 // O paywall em dois caminhos, e os dois precisam existir.
@@ -17,16 +18,47 @@ import { erroDeLimite } from "@/domain/limites";
 // propósito, então essa mensagem VAI aparecer sempre que a tela e o
 // banco discordarem. Tratá-la é o que faz a experiência ser a mesma
 // pelos dois lados.
+//
+// ── E é aqui que o funil é medido ───────────────────────────
+//
+// Os treze pontos que abrem paywall no app passam todos por este hook.
+// Por isso a telemetria mora AQUI e em nenhum outro lugar: instrumentar
+// as treze telas daria treze chances de esquecer uma, e um funil com
+// buraco mede o buraco.
 // ============================================================
 
 export function usePaywall() {
   const [alvo, setAlvo] = useState(null);
 
-  const abrir = useCallback((recurso, atual, limite) => {
-    setAlvo({ recurso, atual, limite });
+  // Qual recurso já foi registrado nesta abertura. `abrir` e
+  // `tratarErro` são manipuladores de evento, então re-render não passa
+  // por aqui — este ref cobre o resto: cinco toques seguidos no mesmo
+  // botão, ou uma mutation que erra duas vezes com o modal aberto.
+  // A janela de 5 minutos da RPC é a segunda trava, no banco.
+  const registrado = useRef(null);
+
+  const registrar = useCallback((recurso) => {
+    if (!recurso || registrado.current === recurso) return;
+    registrado.current = recurso;
+    // Sem await e sem throw: telemetria não pode atrasar nem derrubar a
+    // tela. Se a chamada falhar, falta uma linha no relatório — e o
+    // usuário não fica sabendo de nada.
+    Promise.resolve(
+      supabase.rpc("registrar_paywall_visto", { p_recurso: recurso }),
+    ).catch(() => {});
   }, []);
 
-  const fechar = useCallback(() => setAlvo(null), []);
+  const abrir = useCallback((recurso, atual, limite) => {
+    registrar(recurso);
+    setAlvo({ recurso, atual, limite });
+  }, [registrar]);
+
+  const fechar = useCallback(() => {
+    // Liberado para o próximo encontro de verdade. Encontro em outra
+    // hora conta de novo; o mesmo encontro, não.
+    registrado.current = null;
+    setAlvo(null);
+  }, []);
 
   /**
    * Reconhece o erro do trigger e abre o paywall.
@@ -36,9 +68,10 @@ export function usePaywall() {
   const tratarErro = useCallback((erro) => {
     const limite = erroDeLimite(erro);
     if (!limite) return false;
+    registrar(limite.recurso);
     setAlvo(limite);
     return true;
-  }, []);
+  }, [registrar]);
 
   const paywall = alvo ? (
     <PaywallModal
@@ -57,6 +90,10 @@ export function usePaywall() {
  *
  * Aparece só no último item antes do teto. Antes disso é ruído; depois
  * disso o lugar é o paywall.
+ *
+ * NÃO registra evento: quem ainda cabe não esbarrou em nada, e contar
+ * isso como `paywall_visto` inflaria o topo do funil com gente que
+ * nunca foi barrada.
  */
 export function AvisoDeLimite({ situacao, texto }) {
   if (!situacao?.ultimo) return null;

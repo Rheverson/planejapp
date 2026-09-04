@@ -53,12 +53,22 @@ export default function Subscribe() {
         localStorage.removeItem('referral_code');
         setLoading(false); return;
       }
+      // Qual limite trouxe a pessoa ate aqui. Vazio quando ela chegou
+      // pela pilula "Seja Pro" ou pelo menu — e isso e informacao, nao
+      // falta dela: separa venda por atrito de venda espontanea.
+      let paywallRecurso = null;
+      try {
+        paywallRecurso = sessionStorage.getItem("paywall_recurso") || null;
+        sessionStorage.removeItem("paywall_recurso");
+      } catch { /* armazenamento indisponivel */ }
+
       const { data, error } = await supabase.functions.invoke("create-checkout", {
         body: {
           userId: session.user.id,
           email: session.user.email,
           referralCode: !isPromo ? (referralCode || null) : null,
           promoCode: isPromo ? promoCode : null,
+          paywallRecurso,
           trialDays: trialDays,
         },
         headers: { Authorization: `Bearer ${session.access_token}` }

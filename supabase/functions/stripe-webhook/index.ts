@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
+import { EVENTO, MOTIVO, motivoDaMudanca } from "../_shared/eventos.ts"
 import Stripe from "https://esm.sh/stripe@13.11.0?deno-std=0.177.0"
 
 const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY")!, { apiVersion: "2023-10-16" })
@@ -186,9 +187,65 @@ serve(async (req) => {
      .eq("is_test", eTeste)
      .or(`ultimo_evento_em.is.null,ultimo_evento_em.lt.${eventoEm}`)
 
+  // ── Funil de monetizacao ────────────────────────────────
+  //
+  // O plano vem de `plano_do_usuario`, a MESMA funcao que os triggers
+  // usam. Nao ha aqui uma quarta implementacao da regra de acesso: o
+  // webhook pergunta ao banco antes e depois de escrever, e so registra
+  // se a resposta mudou. Assim o evento nao pode divergir do que o app
+  // de fato concede.
+  const linhaDoCliente = async () => {
+    const { data } = await supabase
+      .from("subscriptions")
+      .select("user_id, status, stripe_subscription_id")
+      .eq("stripe_customer_id", obj.customer)
+      .eq("is_test", eTeste)
+      .maybeSingle()
+    return data
+  }
+
+  const planoAgora = async (userId: string) => {
+    const { data } = await supabase.rpc("plano_do_usuario", { p_user: userId })
+    return typeof data === "string" ? data : null
+  }
+
+  /**
+   * Registra `plano_mudou` se, e somente se, o plano efetivo mudou.
+   *
+   * Recarregar a tela nao gera evento porque nada aqui olha o
+   * frontend. Entrega repetida nao gera evento porque
+   * `stripe_eventos_processados` ja devolveu 200 antes de chegar aqui —
+   * e, mesmo que chegasse, o segundo calculo daria "nao mudou".
+   */
+  const registrarMudancaDePlano = async (
+    antes: { user_id: string; status: string | null } | null,
+    planoAntes: string | null,
+    veioDeCheckout: boolean,
+  ) => {
+    if (!antes?.user_id || !planoAntes) return
+    const depois = await linhaDoCliente()
+    const planoDepois = await planoAgora(antes.user_id)
+    if (!planoDepois || planoDepois === planoAntes) return
+
+    await supabase.from("eventos_plano").insert({
+      user_id: antes.user_id,
+      evento: EVENTO.PLANO_MUDOU,
+      plano_anterior: planoAntes,
+      plano_novo: planoDepois,
+      motivo: motivoDaMudanca(
+        planoAntes, planoDepois, antes.status, depois?.status ?? null, veioDeCheckout,
+      ),
+      stripe_subscription_id: depois?.stripe_subscription_id ?? obj.id ?? null,
+      is_test: eTeste,
+    })
+  }
+
 
   // ── Assinatura criada ou atualizada ─────────────────────
   if (["customer.subscription.created", "customer.subscription.updated"].includes(event.type)) {
+    const antes = await linhaDoCliente()
+    const planoAntes = antes?.user_id ? await planoAgora(antes.user_id) : null
+
     await alvo(supabase.from("subscriptions").update({
       stripe_subscription_id: obj.id,
       status: statusInterno(obj.status),
@@ -197,10 +254,18 @@ serve(async (req) => {
       cancel_at_period_end: obj.cancel_at_period_end === true,
       ultimo_evento_em: eventoEm,
     }))
+
+    // `created` vem logo depois de um checkout; `updated` nao.
+    await registrarMudancaDePlano(
+      antes, planoAntes, event.type === "customer.subscription.created",
+    )
   }
 
   // ── Assinatura cancelada ─────────────────────────────────
   if (event.type === "customer.subscription.deleted") {
+    const antes = await linhaDoCliente()
+    const planoAntes = antes?.user_id ? await planoAgora(antes.user_id) : null
+
     await alvo(supabase.from("subscriptions")
       .update({
         status: "cancelled",
@@ -208,6 +273,8 @@ serve(async (req) => {
         current_period_end: paraISO(fimDoPeriodo(obj)) ?? undefined,
         ultimo_evento_em: eventoEm,
       }))
+
+    await registrarMudancaDePlano(antes, planoAntes, false)
 
     const { data: sub } = await supabase
       .from("subscriptions")
@@ -264,6 +331,42 @@ serve(async (req) => {
             'Seu pagamento foi confirmado. Obrigado por assinar o PlanejeApp!'
           )
         }
+      }
+    }
+  }
+
+  // ── Checkout concluido ───────────────────────────────────
+  //
+  // A UNICA fonte de verdade para "pagou": o Stripe dizendo que a
+  // sessao fechou. O clique no botao ja foi medido em
+  // `checkout_iniciado`, la no create-checkout; o frontend nao tem voz
+  // nesta etapa.
+  //
+  // O `checkout_session_id` amarra de volta ao `checkout_iniciado`, e e
+  // por ele que a conversao volta ao recurso que a originou — sem
+  // depender da metadata, que existe para o relatorio do proprio
+  // Stripe.
+  if (event.type === "checkout.session.completed") {
+    const { data: sub } = await supabase
+      .from("subscriptions")
+      .select("user_id")
+      .eq("stripe_customer_id", obj.customer)
+      .eq("is_test", eTeste)
+      .maybeSingle()
+
+    if (sub?.user_id) {
+      const { error } = await supabase.from("eventos_plano").insert({
+        user_id: sub.user_id,
+        evento: EVENTO.CHECKOUT_CONCLUIDO,
+        recurso: obj?.metadata?.paywall_recurso ?? null,
+        checkout_session_id: obj.id,
+        stripe_subscription_id: typeof obj.subscription === "string" ? obj.subscription : null,
+        is_test: eTeste,
+      })
+      // 23505 e o indice unico barrando entrega repetida: esperado,
+      // nao e falha.
+      if (error && error.code !== "23505") {
+        console.error("checkout_concluido nao registrado:", error.message)
       }
     }
   }

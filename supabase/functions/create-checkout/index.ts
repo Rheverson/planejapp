@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 import Stripe from "https://esm.sh/stripe@13.11.0?deno-std=0.177.0"
 import { requireUser } from "../_shared/auth.ts"
+import { EVENTO, registrarEvento } from "../_shared/eventos.ts"
 
 const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY")!, { apiVersion: "2023-10-16" })
 
@@ -53,13 +54,21 @@ serve(async (req) => {
     let trialDays = 30
 
     let referralCode: string | null, promoCode: string | null
+    // O que o front DIZ ter originado o checkout. Ainda nao vale nada:
+    // e conferido contra os eventos que o backend gravou, mais abaixo.
+    let recursoAlegado: string | null = null
     try {
       const body = await req.json()
       referralCode = body.referralCode || null
       promoCode = body.promoCode ? body.promoCode.toUpperCase().trim() : null
+      recursoAlegado = typeof body.paywallRecurso === "string" ? body.paywallRecurso : null
     } catch {
       return json({ error: "Dados invalidos." }, 400)
     }
+
+    // Origem do checkout, resolvida depois de autenticar. Declarada
+    // aqui porque o evento e gravado depois do try/catch da sessao.
+    let recursoOrigem: string | null = null
 
     // ── Valida promoCode se enviado ────────────────────────
     if (promoCode) {
@@ -155,6 +164,30 @@ serve(async (req) => {
     // ── Cria sessao de checkout ───────────────────────────
     let session
     try {
+      // ── De onde veio este checkout ──────────────────────
+      //
+      // O front informa o recurso que abriu o paywall, mas o backend NAO
+      // acredita nele: so aceita se ELE MESMO tiver registrado um
+      // `paywall_visto` desse recurso para este usuario na ultima hora.
+      // A atribuicao passa a se apoiar num evento que o servidor
+      // gravou, e nao numa afirmacao do cliente.
+      //
+      // Sem correspondencia, a origem fica NULA — o checkout entra como
+      // organico (pilula "Seja Pro", tela de planos). Rotular errado e
+      // pior que nao rotular: um numero inventado orienta decisao.
+      if (recursoAlegado) {
+        const { data: visto } = await supabaseAdmin
+          .from("eventos_plano")
+          .select("recurso")
+          .eq("user_id", userId)
+          .eq("evento", EVENTO.PAYWALL_VISTO)
+          .eq("recurso", recursoAlegado)
+          .gte("ocorrido_em", new Date(Date.now() - 60 * 60 * 1000).toISOString())
+          .limit(1)
+          .maybeSingle()
+        recursoOrigem = visto?.recurso ?? null
+      }
+
       session = await stripe.checkout.sessions.create({
         customer: customerId,
         payment_method_types: ["card"],
@@ -164,8 +197,13 @@ serve(async (req) => {
         payment_method_collection: "always", // ✅ cartao obrigatorio
         subscription_data: {
           trial_period_days: trialDays,
-          trial_settings: { end_behavior: { missing_payment_method: "cancel" } }
+          trial_settings: { end_behavior: { missing_payment_method: "cancel" } },
+          // Na ASSINATURA, nao so na sessao: a sessao expira, a
+          // assinatura fica. E o que permite ver no proprio Stripe qual
+          // limite pagou a conta, ao lado da receita.
+          metadata: recursoOrigem ? { paywall_recurso: recursoOrigem } : {},
         },
+        metadata: recursoOrigem ? { paywall_recurso: recursoOrigem } : {},
         success_url: `${Deno.env.get("APP_URL")}/subscription-success`,
         cancel_url: `${Deno.env.get("APP_URL")}/subscribe`,
       })
@@ -179,6 +217,16 @@ serve(async (req) => {
     }
 
     if (!session?.url) return json({ error: "Erro ao gerar link." }, 500)
+
+    // `checkout_iniciado` so aqui: a sessao existe no Stripe e tem URL.
+    // Clique em botao nao e checkout iniciado — e intencao.
+    await registrarEvento({
+      user_id: userId,
+      evento: EVENTO.CHECKOUT_INICIADO,
+      recurso: recursoOrigem,
+      checkout_session_id: session.id,
+    })
+
     return json({ url: session.url })
 
   } catch (err: any) {

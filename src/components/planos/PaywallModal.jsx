@@ -167,7 +167,17 @@ export default function PaywallModal({ recurso, atual, limite, onClose }) {
             // GERIR uma assinatura que existe (trocar cartao, cancelar).
             // Mandar um Free para la e oferecer o botao de cancelar a
             // quem nunca assinou.
-            onClick={() => { onClose?.(); navigate("/subscribe"); }}
+            onClick={() => {
+              // Carrega o gatilho ate o checkout. Vale so para esta aba
+              // e some ao fechar — e o backend ainda confere contra o
+              // `paywall_visto` que ELE gravou, entao um valor velho ou
+              // adulterado nao vira atribuicao.
+              try {
+                sessionStorage.setItem("paywall_recurso", recurso ?? "");
+              } catch { /* aba anonima, armazenamento bloqueado */ }
+              onClose?.();
+              navigate("/subscribe");
+            }}
             style={{
               width: "100%", height: 50, borderRadius: 14, border: "none", cursor: "pointer",
               background: "linear-gradient(135deg,#7c3aed,#6d28d9)", color: "#fff",
