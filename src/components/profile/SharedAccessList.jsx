@@ -8,6 +8,16 @@ import { useAuth } from '@/lib/AuthContext';
 import { toast } from 'sonner';
 import ShareFinancesModal from './ShareFinancesModal';
 import { useFecharModal } from "@/hooks/useFecharModal";
+import { escreverVerificando, AVISOS } from "@/lib/escrita";
+import { mensagemDeErro } from "@/lib/erros";
+import { usePlano } from "@/lib/usePlano";
+import { usePaywall } from "@/components/planos/usePaywall";
+
+const ROTULOS_STATUS = {
+  pending:  "Aguardando",
+  accepted: "Ativo",
+  rejected: "Recusado",
+};
 
 const relationshipLabels = {
   'Esposo(a)': 'Esposo(a)', 'Namorado(a)': 'Namorado(a)', 'Noivo(a)': 'Noivo(a)',
@@ -67,9 +77,9 @@ function ShareCard({ share, onDelete, isDeleting, dark }) {
   const [confirming, setConfirming] = useState(false);
 
   const statusMap = {
-    pending:  { icon: Clock,    label: "Aguardando", barColor: "#f59e0b", badgeBg: dark ? "rgba(245,158,11,0.12)" : "#fffbeb", badgeColor: "#f59e0b" },
-    accepted: { icon: Check,    label: "Ativo",      barColor: "#10b981", badgeBg: dark ? "rgba(16,185,129,0.12)" : "#f0fdf4", badgeColor: "#10b981" },
-    rejected: { icon: XCircle,  label: "Recusado",   barColor: "#ef4444", badgeBg: dark ? "rgba(239,68,68,0.12)"  : "#fef2f2", badgeColor: "#ef4444" },
+    pending:  { icon: Clock,    label: ROTULOS_STATUS.pending, barColor: "#f59e0b", badgeBg: dark ? "rgba(245,158,11,0.12)" : "#fffbeb", badgeColor: "#f59e0b" },
+    accepted: { icon: Check,    label: ROTULOS_STATUS.accepted, barColor: "#10b981", badgeBg: dark ? "rgba(16,185,129,0.12)" : "#f0fdf4", badgeColor: "#10b981" },
+    rejected: { icon: XCircle,  label: ROTULOS_STATUS.rejected, barColor: "#ef4444", badgeBg: dark ? "rgba(239,68,68,0.12)"  : "#fef2f2", badgeColor: "#ef4444" },
   };
   const s = statusMap[share.status] || statusMap.pending;
   const Icon = s.icon;
@@ -259,7 +269,7 @@ export default function SharedAccessList({ onClose }) {
               <div style={{ padding: 40, textAlign: "center" }}>
                 <Users size={40} color={dark ? "rgba(255,255,255,0.08)" : "#e2e8f0"} style={{ margin: "0 auto 12px" }} />
                 <p style={{ fontSize: "0.82rem", color: muted }}>
-                  {activeTab === "all" ? "Nenhum compartilhamento ainda" : `Nenhum ${statusMap?.[activeTab]?.label?.toLowerCase() || ""}`}
+                  {activeTab === "all" ? "Nenhum compartilhamento ainda" : `Nenhum ${(ROTULOS_STATUS[activeTab] || "").toLowerCase()}`}
                 </p>
                 {activeTab === "all" && (
                   <button onClick={() => setShowNewInvite(true)} style={{ marginTop: 8, fontSize: "0.72rem", color: "#2563eb", background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}>

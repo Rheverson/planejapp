@@ -123,7 +123,7 @@ export default function Verify() {
               <AlertCircle size={16} color="#e85d5d" style={{ flexShrink:0,marginTop:2 }}/>
               <div>
                 <p style={{ fontSize:"0.8rem",fontWeight:600,color:"#e85d5d" }}>Código expirado ou inválido</p>
-                <p style={{ fontSize:"0.74rem",color:"#6b7a96",marginTop:2 }}>Clique em "Reenviar código" abaixo.</p>
+                <p style={{ fontSize:"0.74rem",color:"#6b7a96",marginTop:2 }}>Clique em &quot;Reenviar código&quot; abaixo.</p>
               </div>
             </motion.div>
           )}

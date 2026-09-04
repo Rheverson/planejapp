@@ -41,6 +41,19 @@ const ARTEFATOS = {
 };
 
 const REGRAS = {
+  // As `recommended` do @eslint/js e do eslint-plugin-react entram AQUI,
+  // e nao pelo spread la embaixo: `rules:` vem depois do spread no
+  // objeto de config e substituia o conjunto inteiro. Ou seja, elas
+  // estavam desligadas sem ninguem notar — inclusive `no-undef`, que e
+  // a regra que pega uma variavel usada fora do escopo onde existe.
+  // Foi exatamente esse o defeito da Carteira e o dos Relatorios.
+  ...pluginJs.configs.recommended.rules,
+  ...pluginReact.configs.flat.recommended.rules,
+
+  // `catch {}` vazio e proposital em parse que pode falhar; o que a
+  // regra precisa pegar e bloco vazio de verdade (if/for sem corpo).
+  "no-empty": ["error", { allowEmptyCatch: true }],
+
   "no-unused-vars": "off",
   "react/jsx-uses-vars": "error",
   "react/jsx-uses-react": "error",
@@ -79,8 +92,6 @@ export default [
       "src/App.jsx",
       "src/main.jsx",
     ],
-    ...pluginJs.configs.recommended,
-    ...pluginReact.configs.flat.recommended,
     languageOptions: {
       globals: globals.browser,
       parserOptions: {

@@ -5,6 +5,7 @@ import { Home, ArrowLeftRight, Wallet, Target, Sparkles, User } from "lucide-rea
 import { usePhoneVerification } from "@/hooks/usePhoneVerification";
 import PhoneVerificationModal from "@/components/profile/PhoneVerificationModal";
 import { useNotificationListener } from "@/hooks/useNotificationListener";
+import { usePlano } from "@/lib/usePlano";
 
 const navItems = [
   { name: "Home",       icon: Home,          page: "Home"         },
@@ -21,6 +22,12 @@ export default function Layout({ children, currentPageName }) {
   const navigate = useNavigate();
   const isAIActive = currentPageName === "AIInsights";
   const showProfileIcon = !HIDE_PROFILE_ICON.includes(currentPageName);
+
+  // Sem o muro na entrada, o caminho para assinar precisa existir em
+  // algum lugar visível — senão o Free vira um beco sem venda. Fica ao
+  // lado do ícone de perfil, some assim que a pessoa é Pro.
+  const { ehPro, carregando: carregandoPlano } = usePlano();
+  const mostrarUpgrade = showProfileIcon && !carregandoPlano && !ehPro;
 
   const { showPhoneModal, setShowPhoneModal } = usePhoneVerification();
   const { permissionGranted, requestPermission, isAvailable } = useNotificationListener();
@@ -69,10 +76,14 @@ export default function Layout({ children, currentPageName }) {
         .finn-glow        { box-shadow: 0 0 22px rgba(29,78,216,0.5), 0 4px 20px rgba(55,48,163,0.4); }
         .finn-glow-active { box-shadow: 0 0 32px rgba(29,78,216,0.75), 0 4px 28px rgba(55,48,163,0.6); }
         .dark body { background: #060709; }
-        .dark .dark\:bg-gray-900 { background: #060709 !important; }
-        .dark .dark\:bg-gray-800 { background: #0c0e13 !important; }
-        .dark .dark\:bg-gray-700\/60 { background: rgba(12,14,19,0.8) !important; }
-        .dark .dark\:border-gray-700 { border-color: rgba(255,255,255,0.07) !important; }
+        /* Barra DUPLA de proposito. Isto aqui e um template literal:
+           uma barra so vira escape do JS e some, e o navegador
+           recebia .dark .dark:bg-gray-900 — seletor invalido, regra
+           descartada. As quatro linhas abaixo nunca pintaram nada. */
+        .dark .dark\\:bg-gray-900 { background: #060709 !important; }
+        .dark .dark\\:bg-gray-800 { background: #0c0e13 !important; }
+        .dark .dark\\:bg-gray-700\\/60 { background: rgba(12,14,19,0.8) !important; }
+        .dark .dark\\:border-gray-700 { border-color: rgba(255,255,255,0.07) !important; }
       `}</style>
 
       {/* Banner: pede permissão de notificações (só no APK Android) */}
@@ -118,6 +129,36 @@ export default function Layout({ children, currentPageName }) {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Convite para o Pro — só para quem é Free */}
+      {mostrarUpgrade && (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="fixed z-40"
+          style={{ top: "46px", right: "64px" }}
+        >
+          <Link to="/subscribe" style={{ textDecoration: "none" }}>
+            <motion.div
+              whileTap={{ scale: 0.94 }}
+              style={{
+                display: "flex", alignItems: "center", gap: 5,
+                height: 30, padding: "0 11px", borderRadius: 999,
+                background: "linear-gradient(135deg,#7c3aed,#6d28d9)",
+                boxShadow: "0 2px 10px rgba(124,58,237,0.35)",
+              }}
+            >
+              <Sparkles className="w-3.5 h-3.5 text-white" />
+              <span style={{
+                color: "#fff", fontSize: "0.72rem", fontWeight: 800,
+                fontFamily: "'Cabinet Grotesk',sans-serif", letterSpacing: "-0.01em",
+              }}>
+                Seja Pro
+              </span>
+            </motion.div>
+          </Link>
+        </motion.div>
+      )}
 
       {/* Ícone de perfil flutuante */}
       {showProfileIcon && (

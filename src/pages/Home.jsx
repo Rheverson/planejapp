@@ -404,7 +404,7 @@ export default function Home() {
           <KPICard title="Entradas Previstas" aria-label="Entradas previstas do mês" value={kpis.entradas} color="green" subvalor={kpis.entradasRealizadas} subrotulo="já entrou" hidden={hidden} dark={dark} to={`/Transactions?filter=income&month=${format(selectedDate,"yyyy-MM")}`} />
           <KPICard title="Saídas Previstas" aria-label="Saídas previstas do mês" value={kpis.saidas} color="red" subvalor={kpis.saidasRealizadas} subrotulo="já saiu" hidden={hidden} dark={dark} to={`/Transactions?filter=expense&month=${format(selectedDate,"yyyy-MM")}`} />
           <KPICard title="Resultado Realizado do Mês" aria-label="Resultado realizado do mês" value={kpis.resultadoDoMes} color={kpis.resultadoDoMes>=0?"blue":"red"} subtitle="só o que já aconteceu" hidden={hidden} dark={dark} to={`/Transactions?filter=realized&month=${format(selectedDate,"yyyy-MM")}`} />
-          <KPICard title="Projeção Final do Mês" aria-label="Projeção Final do Mês"    value={kpis.projecaoFinal} color={kpis.projecaoFinal>=0?"violet":"red"} subtitle="Mês completo" aria-label="Mês completo" hidden={hidden} dark={dark} to={`/Transactions?filter=planned&month=${format(selectedDate,"yyyy-MM")}`} />
+          <KPICard title="Projeção Final do Mês" aria-label="Projeção Final do Mês"    value={kpis.projecaoFinal} color={kpis.projecaoFinal>=0?"violet":"red"} subtitle="Mês completo" hidden={hidden} dark={dark} to={`/Transactions?filter=planned&month=${format(selectedDate,"yyyy-MM")}`} />
           </>)}
         </div>
 

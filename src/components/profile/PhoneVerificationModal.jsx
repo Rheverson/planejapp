@@ -14,6 +14,12 @@ const TERMS = `Ao fornecer seu número de telefone, você concorda com:
 
 Não compartilharemos seu número com terceiros para fins de marketing. Você pode remover seu telefone a qualquer momento nas configurações da conta.`;
 
+/* eslint-disable no-unreachable --
+   O modal esta desligado de proposito ate o SMS voltar (o `return null`
+   abaixo). O corpo inteiro fica parado, e nao morto: apagar seria
+   refazer o fluxo de OTP do zero quando o SMS voltar. O disable e para
+   o lint nao confundir "parado de proposito" com "escapou do escopo",
+   que e o defeito que essa regra existe para pegar. */
 export default function PhoneVerificationModal({ onClose, onSuccess }) {
   // TODO: reativar quando SMS estiver funcionando
   return null;

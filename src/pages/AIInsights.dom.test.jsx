@@ -121,7 +121,7 @@ describe("valores exibidos batem com o registro", () => {
       montar(acaoExcluir, { ...registroReal, dados: { ...registroReal.dados, amount: valor } });
       // o espaço do pt-BR é o não separável (U+00A0)
       const achou = screen.getAllByText((_, el) =>
-        el?.textContent?.replace(/ /g, " ") === esperado);
+        el?.textContent?.replace(/\u00A0/g, " ") === esperado);
       expect(achou.length).toBeGreaterThan(0);
     });
   }

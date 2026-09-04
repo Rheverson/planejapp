@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { X, Clock, Check, XCircle } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/AuthContext';
+import { escreverVerificando, AVISOS } from "@/lib/escrita";
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 import { useFecharModal } from "@/hooks/useFecharModal";
