@@ -94,16 +94,33 @@ serve(async (req) => {
       trialDays = promo.trial_days
     }
 
-    // ── Verifica assinatura ativa ─────────────────────────
+    // ── Ja tem assinatura valendo? ────────────────────────
+    //
+    // 409 e nao 400: o pedido esta bem formado, o que existe e um
+    // CONFLITO com o estado atual. A diferenca importa para quem chama
+    // — o front distingue "corrija os dados" de "voce ja tem isso".
+    //
+    // Esta leitura sozinha NAO fecha a corrida: dois cliques passam
+    // aqui antes de qualquer um inserir. Ela evita o caso comum; quem
+    // fecha e o indice unico (migration 20260907090000), tratado abaixo.
+    //
+    // `is_test = false` porque este endpoint e estritamente de
+    // producao. Sem o filtro, uma linha de QA esconderia a real.
     const { data: existingSub, error: subError } = await supabaseAdmin
       .from("subscriptions")
       .select("stripe_customer_id, status")
       .eq("user_id", userId)
+      .eq("is_test", false)
       .maybeSingle()
 
     if (subError) return json({ error: "Erro ao verificar assinatura." }, 500)
-    if (existingSub && ['active', 'trialing'].includes(existingSub.status))
-      return json({ error: "Voce ja possui uma assinatura ativa." }, 400)
+    if (existingSub && ['active', 'trialing'].includes(existingSub.status)) {
+      return json({
+        error: "Voce ja possui uma assinatura ativa.",
+        codigo: "assinatura_ja_ativa",
+        status: existingSub.status,
+      }, 409)
+    }
 
     // ── Cria ou reutiliza customer no Stripe ──────────────
     let customerId = existingSub?.stripe_customer_id
@@ -118,8 +135,36 @@ serve(async (req) => {
             stripe_customer_id: customerId,
             status: "incomplete",
             promo_code: promoCode || null,
+            is_test: false,
           })
-        if (insertError) console.error("Erro ao salvar customer:", insertError)
+
+        // 23505 = o indice unico barrou: outra aba chegou primeiro.
+        // Nao e erro do usuario. Reaproveita o cliente que venceu, em
+        // vez de seguir com um customer que nao esta gravado em lugar
+        // nenhum — que era o desfecho antigo, e deixava a pessoa
+        // pagando num customer orfao.
+        if (insertError?.code === "23505") {
+          const { data: vencedor } = await supabaseAdmin
+            .from("subscriptions")
+            .select("stripe_customer_id, status")
+            .eq("user_id", userId)
+            .eq("is_test", false)
+            .maybeSingle()
+
+          if (vencedor && ["active", "trialing"].includes(vencedor.status)) {
+            return json({
+              error: "Voce ja possui uma assinatura ativa.",
+              codigo: "assinatura_ja_ativa",
+              status: vencedor.status,
+            }, 409)
+          }
+          if (vencedor?.stripe_customer_id) {
+            console.warn(`corrida no checkout: customer ${customerId} descartado em favor do ja gravado`)
+            customerId = vencedor.stripe_customer_id
+          }
+        } else if (insertError) {
+          console.error("Erro ao salvar customer:", insertError)
+        }
       } catch (err) {
         console.error("Erro ao criar customer:", err)
         return json({ error: "Erro ao configurar pagamento." }, 500)

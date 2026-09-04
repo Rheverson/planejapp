@@ -35,20 +35,41 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     )
 
+    // `is_test = false`: o portal e da conta de PRODUCAO. Sem o filtro,
+    // uma linha de QA poderia entregar um customer de teste, e a sessao
+    // falharia sem que ninguem entendesse por que.
     const { data: sub } = await supabaseAdmin
       .from("subscriptions")
       .select("stripe_customer_id")
       .eq("user_id", user.id)
-      .single()
+      .eq("is_test", false)
+      .maybeSingle()
 
     if (!sub?.stripe_customer_id) return json({ error: "Assinatura nao encontrada." }, 404)
 
+    // ── Para onde o Stripe devolve o usuario ────────────────
+    //
+    // `returnUrl` vinha do corpo e ia direto para o Stripe. Isso e
+    // redirecionamento aberto: bastava chamar a funcao com a URL de um
+    // site qualquer para que a pessoa saisse do portal LEGITIMO do
+    // Stripe direto para la — com a confianca toda que a passagem pelo
+    // Stripe acabou de construir. E o cenario classico de phishing de
+    // cobranca.
+    //
+    // O destino agora e sempre dentro do app. O corpo so escolhe o
+    // CAMINHO; a origem e do servidor.
+    const appUrl = Deno.env.get("APP_URL") || ""
     const body = await req.json().catch(() => ({}))
-    const returnUrl = body.returnUrl || Deno.env.get("APP_URL") + "/"
+    const caminho = typeof body.returnPath === "string" ? body.returnPath : "/"
+    // Barra unica no inicio: "//evil.com" e URL absoluta protocol-relative,
+    // e passaria por uma checagem ingenua de "comeca com barra".
+    const caminhoSeguro = /^\/(?!\/)[A-Za-z0-9\-._~/?#[\]@!$&'()*+,;=%]*$/.test(caminho)
+      ? caminho
+      : "/"
 
     const session = await stripe.billingPortal.sessions.create({
       customer: sub.stripe_customer_id,
-      return_url: returnUrl,
+      return_url: `${appUrl}${caminhoSeguro}`,
     })
 
     return json({ url: session.url })

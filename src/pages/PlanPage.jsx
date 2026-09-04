@@ -151,7 +151,10 @@ export default function PlanPage() {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const { data, error } = await supabase.functions.invoke("create-billing-portal", {
-        body: { userId: user.id, returnUrl: window.location.href },
+        // Só o caminho: a origem é montada no servidor. Mandar a URL
+        // inteira daqui era redirecionamento aberto — o Stripe devolvia
+        // a pessoa para onde o corpo mandasse.
+        body: { returnPath: "/PlanPage" },
         headers: { Authorization: `Bearer ${session?.access_token}` }
       });
       if (error || data?.error) throw new Error(data?.error || "Erro ao abrir portal");
@@ -258,8 +261,14 @@ export default function PlanPage() {
             </div>
           </motion.div>
 
-          {/* Gerenciar cobrança — só aparece se tem Stripe */}
-          {subscription?.stripe_subscription_id && (isActive || isCancelled) && (
+          {/* Gerenciar cobrança — basta ter cliente no Stripe.
+              ANTES a condição era `stripe_subscription_id && (isActive
+              || isCancelled)`, e isso escondia o bloco de quem está em
+              `past_due`: nem ativo, nem cancelado. Ou seja, sumia
+              exatamente para quem teve o cartão recusado — a pessoa que
+              o banner de cobrança manda para cá para trocar o cartão.
+              O portal precisa do CLIENTE, não de assinatura viva. */}
+          {subscription?.stripe_customer_id && (
             <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}
               className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-100 dark:border-gray-700 overflow-hidden">
               <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 px-5 pt-4 pb-2">Cobrança</p>
