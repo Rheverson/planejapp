@@ -1,7 +1,6 @@
 import React, { useState, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
 import EstadoErro from "@/components/common/EstadoErro";
-import { useAuth } from "@/lib/AuthContext";
 import { useSharedProfile } from "@/lib/SharedProfileContext";
 import { useQuery } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
@@ -14,8 +13,7 @@ import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
   BarChart, Bar, XAxis, YAxis, CartesianGrid, LineChart, Line
 } from "recharts";
-import {
-  TrendingUp, TrendingDown, Target, Wallet, BarChart2
+import { Target, BarChart2
 } from "lucide-react";
 import { useMonth } from "@/lib/MonthContext";
 import { transacoesDoMes, ehRealizada, calcularSobraDoMes, calcularTaxaPoupanca, calcularProgressoMeta, paraCentavos, paraReais } from "@/domain/financas";
@@ -65,16 +63,6 @@ function DonutChart({ data, total }) {
   );
 
   const activeItem = active !== null ? data[active] : null;
-
-  // Sem os lançamentos não há total honesto: melhor dizer que falhou do
-  // que desenhar zero como se fosse o valor real.
-  if (erroDados) {
-    return (
-      <div style={{ minHeight: "100vh", padding: "24px 16px", fontFamily: "'Outfit', sans-serif" }}>
-        <EstadoErro erro={erroDadosObj} tentando={buscandoDados} aoTentarDeNovo={() => recarregarDados()} />
-      </div>
-    );
-  }
 
   return (
     <div className="px-4 pb-6">
@@ -208,7 +196,6 @@ function Card({ title, children, className = "" }) {
 }
 
 export default function Reports() {
-  const { user } = useAuth();
   const { activeOwnerId } = useSharedProfile();
   const { selectedDate, setSelectedDate } = useMonth();
 
@@ -263,8 +250,6 @@ export default function Reports() {
     enabled: !!activeOwnerId,
   });
 
-  const monthStart = startOfMonth(selectedDate);
-  const monthEnd   = endOfMonth(selectedDate);
 
   // ✅ Usa o mesmo recorte da Home: sem transferências e sem contas de
   // investimento. Antes os Relatórios incluíam investimentos, então
@@ -348,6 +333,24 @@ export default function Reports() {
     .filter(g => g.end_date && !isBefore(parseISO(g.end_date), new Date()))
     .map(goal => ({ ...goal, current: calcularProgressoMeta(goal, transactions, accounts) })),
     [goals, transactions, accounts]);
+
+  // Sem os lançamentos não há total honesto: melhor dizer que falhou do
+  // que desenhar zero como se fosse o valor real.
+  //
+  // Fica DEPOIS de todos os hooks de propósito: um `return` antes deles
+  // muda a ordem de chamada entre renders e quebra as regras do React.
+  //
+  // Este bloco já nasceu no lugar errado uma vez — dentro do
+  // `DonutChart`, onde `erroDados` não existe. Como o `DonutChart`
+  // devolve cedo quando não há dados, só quebrava para quem TINHA
+  // lançamentos, que é justamente todo mundo que usa a tela.
+  if (erroDados) {
+    return (
+      <div style={{ minHeight: "100vh", padding: "24px 16px", fontFamily: "'Outfit', sans-serif" }}>
+        <EstadoErro erro={erroDadosObj} tentando={buscandoDados} aoTentarDeNovo={() => recarregarDados()} />
+      </div>
+    );
+  }
 
   const tabs = [
     { key: "overview", label: "Resumo"   },
