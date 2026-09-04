@@ -20,6 +20,8 @@ import {
 import { useMonth } from "@/lib/MonthContext";
 import { transacoesDoMes, ehRealizada, calcularSobraDoMes, calcularTaxaPoupanca, calcularProgressoMeta, paraCentavos, paraReais } from "@/domain/financas";
 import MonthSelector from "@/components/common/MonthSelector";
+import { usePlano } from "@/lib/usePlano";
+import { usePaywall } from "@/components/planos/usePaywall";
 
 const CATEGORY_COLORS = {
   alimentação:       "#f97316",
@@ -209,6 +211,25 @@ export default function Reports() {
   const { user } = useAuth();
   const { activeOwnerId } = useSharedProfile();
   const { selectedDate, setSelectedDate } = useMonth();
+
+  // Histórico é exclusivo do Pro: no plano gratuito o relatório é do
+  // mês corrente. O seletor continua na tela — quem tenta voltar um mês
+  // recebe o convite, em vez de um controle morto que não explica nada.
+  const { disponivel } = usePlano();
+  const podeVerHistorico = disponivel("relatorio_historico");
+  const paywall = usePaywall();
+
+  const trocarMes = (novaData) => {
+    const agora = new Date();
+    const ehMesCorrente =
+      novaData.getMonth() === agora.getMonth() &&
+      novaData.getFullYear() === agora.getFullYear();
+    if (!podeVerHistorico && !ehMesCorrente) {
+      paywall.abrir("relatorio_historico", 0, 0);
+      return;
+    }
+    setSelectedDate(novaData);
+  };
   const [activeTab, setActiveTab] = useState("overview");
 
   const { data: transactions = [], isError: erroDados, error: erroDadosObj, refetch: recarregarDados, isFetching: buscandoDados } = useQuery({
@@ -345,8 +366,10 @@ export default function Reports() {
             <BarChart2 className="w-5 h-5 text-slate-300" />
             <h1 className="text-2xl font-bold text-white">Relatórios</h1>
           </div>
-          <MonthSelector selectedDate={selectedDate} onChange={setSelectedDate} />
+          <MonthSelector selectedDate={selectedDate} onChange={trocarMes} />
         </div>
+
+        {paywall.paywall}
 
         {/* Resumo rápido no header */}
         <div className="flex gap-4 px-5 pb-4">

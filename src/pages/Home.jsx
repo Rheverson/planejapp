@@ -19,6 +19,7 @@ import ReferralBanner from "@/components/referral/ReferralBanner";
 import ReferralInviteModal from "@/components/referral/ReferralInviteModal";
 import TransactionItem from "@/components/transactions/TransactionItem";
 import TransactionForm from "@/components/transactions/TransactionForm";
+import { usePaywall } from "@/components/planos/usePaywall";
 import TransferForm from "@/components/transactions/TransferForm";
 import MonthSelector from "@/components/common/MonthSelector";
 import EmptyState from "@/components/common/EmptyState";
@@ -148,6 +149,7 @@ export default function Home() {
   const { selectedDate, setSelectedDate } = useMonth();
   const { hidden, toggle } = usePrivacy();
   const [showTransactionForm, setShowTransactionForm] = useState(false);
+  const paywall = usePaywall();
   const [showTransferForm, setShowTransferForm]       = useState(false);
   const [initialType, setInitialType]                 = useState("expense");
   const queryClient = useQueryClient();
@@ -230,7 +232,7 @@ export default function Home() {
   const createTransferMutation = useMutation({
     mutationFn: async ({ fromAccountId, toAccountId, amount, date, description }) => { const { error } = await supabase.from("transactions").insert([{ description: description || "Transferência", amount: parseFloat(amount), type: "transfer", account_id: fromAccountId, transfer_account_id: toAccountId, date, is_realized: true, user_id: activeOwnerId }]); if (error) throw error; },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["transactions"] }); setShowTransferForm(false); toast.success("Transferência realizada!"); },
-    onError: (err) => toast.error(mensagemDeErro(err)),
+    onError: (err) => { if (!paywall.tratarErro(err)) toast.error(mensagemDeErro(err)); },
   });
 
   const monthStart = startOfMonth(selectedDate);
@@ -520,6 +522,7 @@ export default function Home() {
       )}
 
       <AnimatePresence>
+        {paywall.paywall}
         {showTransactionForm && <TransactionForm accounts={accounts} initialType={initialType} onSubmit={d=>createTransactionMutation.mutate(d)} onClose={()=>setShowTransactionForm(false)} />}
       </AnimatePresence>
       <AnimatePresence>

@@ -150,6 +150,9 @@ export default function SharedAccessList({ onClose }) {
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab]     = useState("all");
   const [showNewInvite, setShowNewInvite] = useState(false);
+  const { disponivel } = usePlano();
+  const podeCompartilhar = disponivel("compartilhamento");
+  const paywall = usePaywall();
 
   const bg     = dark ? "#060709"                : "#ffffff";
   const cardBg = dark ? "#0c0e13"                : "#ffffff";
@@ -205,7 +208,9 @@ export default function SharedAccessList({ onClose }) {
 
   return (
     <>
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      <>
+    {paywall.paywall}
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)", zIndex: 100, display: "flex", alignItems: "flex-end", justifyContent: "center" }}
         onClick={onClose}>
         <motion.div
@@ -225,7 +230,12 @@ export default function SharedAccessList({ onClose }) {
               </h2>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <button onClick={() => setShowNewInvite(true)} style={{
+              <button onClick={() => {
+                // Compartilhar é exclusivo do Pro. O botão fica; o
+                // toque explica o que muda.
+                if (!podeCompartilhar) { paywall.abrir("compartilhamento", 0, 0); return; }
+                setShowNewInvite(true);
+              }} style={{
                 display: "flex", alignItems: "center", gap: 5, fontSize: "0.72rem", fontWeight: 700,
                 color: "#2563eb", background: dark ? "rgba(37,99,235,0.12)" : "rgba(37,99,235,0.08)",
                 border: "none", borderRadius: 999, padding: "6px 12px", cursor: "pointer",
@@ -287,6 +297,7 @@ export default function SharedAccessList({ onClose }) {
           <ShareFinancesModal onSubmit={handleShare} onClose={() => setShowNewInvite(false)} />
         )}
       </AnimatePresence>
+    </>
     </>
   );
 }

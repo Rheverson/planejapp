@@ -20,6 +20,8 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { calcularProgressoMeta } from "@/domain/financas";
+import { useLimite } from "@/lib/usePlano";
+import { usePaywall, AvisoDeLimite } from "@/components/planos/usePaywall";
 
 export default function Goals() {
   const dark = useIsDark();
@@ -66,6 +68,10 @@ export default function Goals() {
     enabled: !!ownerId,
   });
 
+  // Contagem que a tela já tem em mãos.
+  const limiteMetas = useLimite("metas", goals.length);
+  const paywall = usePaywall();
+
   const createMutation = useMutation({
     mutationFn: async (data) => {
       if (!ownerId) throw new Error("Usuário não identificado.");
@@ -73,7 +79,8 @@ export default function Goals() {
       if (error) throw error;
     },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["goals", ownerId] }); setShowForm(false); toast.success("Meta criada!"); },
-    onError: (err) => toast.error(mensagemDeErro(err)),
+    // Limite de plano vira convite, não erro de banco.
+    onError: (err) => { if (!paywall.tratarErro(err)) toast.error(mensagemDeErro(err)); },
   });
 
   const updateMutation = useMutation({
@@ -301,12 +308,29 @@ export default function Goals() {
         <motion.button
           whileTap={{ scale: 0.88 }}
           whileHover={{ scale: 1.06 }}
-          onClick={() => { setEditGoal(null); setShowForm(true); }}
+          onClick={() => {
+            // Checa antes de abrir o formulário.
+            if (!limiteMetas.permitido) {
+              paywall.abrir("metas", limiteMetas.atual, limiteMetas.limite);
+              return;
+            }
+            setEditGoal(null); setShowForm(true);
+          }}
           style={{ position: "fixed", bottom: 88, right: 20, width: 52, height: 52, background: "linear-gradient(135deg,#6d28d9,#4338ca)", border: "none", borderRadius: "50%", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 0 24px rgba(109,40,217,0.5),0 4px 14px rgba(0,0,0,0.25)", zIndex: 40 }}
         >
           <Plus size={21} color="#fff" />
         </motion.button>
       )}
+
+      {/* Aviso discreto na última meta antes do teto. */}
+      {limiteMetas.ultimo && (
+        <div className="px-4 pb-2">
+          <AvisoDeLimite situacao={limiteMetas}
+            texto={`Última meta do plano gratuito — ${limiteMetas.atual} de ${limiteMetas.limite}.`} />
+        </div>
+      )}
+
+      {paywall.paywall}
 
       <AnimatePresence>
         {showForm && canAddGoals && (

@@ -12,6 +12,8 @@ import { addMonths, format } from "date-fns";
 import { supabase } from "@/lib/supabase";
 import { calcularMesFatura, contasAtivas } from "@/domain/financas";
 import { useFecharModal, CAMADAS } from "@/hooks/useFecharModal";
+import { usePlano } from "@/lib/usePlano";
+import { usePaywall } from "@/components/planos/usePaywall";
 
 const frequencyOptions = [
   { value: "monthly", label: "Mensal"  },
@@ -54,6 +56,12 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
   const [showSuggestion, setShowSuggestion]     = useState(false);
   const [erroValor, setErroValor]               = useState("");
   const [erroCarteira, setErroCarteira]         = useState("");
+
+  // Recorrência é exclusiva do Pro. O botão CONTINUA na tela — quem
+  // toca vê o que ganha, em vez de procurar uma função que sumiu.
+  const { disponivel } = usePlano();
+  const podeRepetir = disponivel("recorrencias");
+  const paywall = usePaywall();
 
   // Esc, botão voltar do Android e trava de rolagem do fundo
   useFecharModal(true, onClose);
@@ -354,10 +362,15 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
               style={{ ...inputStyle, colorScheme: dark ? "dark" : "light" }} />
           </div>
 
+          {paywall.paywall}
+
           {/* Recorrente */}
           {(
             <div style={{ borderRadius: 14, border: `1px solid ${rowBrd}` }}>
-              <button type="button" onClick={() => setIsRecurring(!isRecurring)}
+              <button type="button" onClick={() => {
+                if (!podeRepetir) { paywall.abrir("recorrencias", 0, 0); return; }
+                setIsRecurring(!isRecurring);
+              }}
                 style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "11px 14px", background: isRecurring ? (dark ? "rgba(29,78,216,0.08)" : "rgba(29,78,216,0.04)") : rowBg, border: "none", borderRadius: isRecurring ? "14px 14px 0 0" : 14, cursor: "pointer", gap: 12 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                   <div style={{ width: 32, height: 32, borderRadius: 10, background: isRecurring ? "rgba(29,78,216,0.12)" : (dark ? "rgba(255,255,255,0.05)" : "#f1f4f9"), display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -366,7 +379,9 @@ export default function TransactionForm({ accounts, onSubmit, onClose, initialTy
                   <div style={{ textAlign: "left" }}>
                     <p style={{ fontSize: "0.85rem", fontWeight: 600, color: text, marginBottom: 1 }}>Recorrente</p>
                     <p style={{ fontSize: "0.68rem", color: muted }}>
-                      {isRecurring ? "Ocorrências viram previsão automaticamente" : "Repetir todo mês, semana ou ano"}
+                      {!podeRepetir
+                        ? "Exclusivo do Pro — repetir todo mês sem relançar"
+                        : isRecurring ? "Ocorrências viram previsão automaticamente" : "Repetir todo mês, semana ou ano"}
                     </p>
                   </div>
                 </div>

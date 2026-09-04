@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { gerarOcorrenciasRecorrentes, paraCentavos, paraReais, ehPagamentoDeFatura } from "@/domain/financas";
 import { escreverVerificando, AVISOS } from "@/lib/escrita";
+import { usePaywall } from "@/components/planos/usePaywall";
 
 const CATEGORIES = [
   "alimentação","moradia","transporte","saúde","educação",
@@ -57,6 +58,10 @@ export default function Transactions() {
   const [advFilters, setAdvFilters]             = useState({
     categories: [], accountIds: [], minAmount: "", maxAmount: "", dateFrom: "", dateTo: "",
   });
+
+  // O limite mensal de lançamentos é do banco; aqui só interceptamos a
+  // recusa para virar convite em vez de erro técnico.
+  const paywall = usePaywall();
 
   const hasAdvFilters =
     advFilters.categories.length > 0 || advFilters.accountIds.length > 0 ||
@@ -133,7 +138,7 @@ export default function Transactions() {
       setShowForm(false);
       toast.success(data?.is_recurring ? "Recorrência criada!" : "Transação criada!");
     },
-    onError: (err) => toast.error(mensagemDeErro(err)),
+    onError: (err) => { if (!paywall.tratarErro(err)) toast.error(mensagemDeErro(err)); },
   });
 
   const updateMutation = useMutation({
@@ -526,6 +531,7 @@ export default function Transactions() {
       </div>
 
       {/* ══ FILTROS AVANÇADOS ═══════════════════════════════════ */}
+      {paywall.paywall}
       <AnimatePresence>
         {showAdvanced && (
           <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}

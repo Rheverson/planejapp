@@ -22,6 +22,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { calcularSaldosPorConta, calcularTotaisDeSaldo, contasAtivas, ehContaAtiva } from "@/domain/financas";
 import { escreverVerificando, AVISOS } from "@/lib/escrita";
+import { useLimite } from "@/lib/usePlano";
+import { usePaywall, AvisoDeLimite } from "@/components/planos/usePaywall";
 
 const iconMap    = { bank: Building2, wallet: Wallet, digital: Smartphone, investment: TrendingUp, other: MoreHorizontal };
 const typeLabels = { bank: "Conta Bancária", wallet: "Carteira", digital: "Conta Digital", investment: "Investimentos", other: "Outros" };
@@ -177,6 +179,10 @@ export default function Accounts() {
   const [selectedAccount, setSelectedAccount] = useState(null);
   const [activeTab, setActiveTab] = useState("accounts"); // "accounts" | "cards"
 
+  // O paywall precisa existir antes das mutations, que o usam no
+  // onError para transformar o erro do trigger em convite.
+  const paywall = usePaywall();
+
   const { data: accounts = [], isError: erroDados, error: erroDadosObj, refetch: recarregarDados, isFetching: buscandoDados } = useQuery({
     queryKey: ["accounts", activeOwnerId],
     queryFn: async () => {
@@ -206,7 +212,9 @@ export default function Accounts() {
       return data;
     },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["accounts"] }); setShowForm(false); toast.success("Conta criada!"); },
-    onError: (err) => toast.error(mensagemDeErro(err)),
+    // Se o trigger barrou por limite, o lugar é o paywall — nunca um
+    // toast com a mensagem do Postgres.
+    onError: (err) => { if (!paywall.tratarErro(err)) toast.error(mensagemDeErro(err)); },
   });
 
   const updateMutation = useMutation({
@@ -273,6 +281,10 @@ export default function Accounts() {
   // As listas abaixo mostram só as ativas, e as encerradas ganham seção
   // própria: assim o que está na tela continua somando o número do topo,
   // em vez de aparecer um saldo consolidado sem origem visível.
+  // Contagem que a tela JÁ tem: nenhuma consulta nova para saber se
+  // cabe mais uma conta.
+  const limiteContas = useLimite("contas", contasAtivas(accounts).length);
+
   const contasVisiveis = contasAtivas(regularAccounts);
   const investVisiveis = contasAtivas(investmentAccounts);
   const encerradas     = accounts.filter((a) => !ehContaAtiva(a));
@@ -421,6 +433,12 @@ export default function Accounts() {
                 <div className="space-y-2.5">
                   {contasVisiveis.map((acc, i) => <AccountRow key={acc.id} account={acc} index={i} />)}
                 </div>
+                {/* Aviso discreto no último antes do teto. Antes disso é
+                    ruído; depois disso o lugar é o paywall. */}
+                <div className="px-1">
+                  <AvisoDeLimite situacao={limiteContas}
+                    texto={`Última conta do plano gratuito — ${limiteContas.atual} de ${limiteContas.limite}.`} />
+                </div>
               </div>
             )}
             {investVisiveis.length > 0 && (
@@ -463,7 +481,15 @@ export default function Accounts() {
       {canManage && activeTab === "accounts" && (
         <motion.button
           whileTap={{ scale: 0.9 }}
-          onClick={() => { setEditAccount(null); setShowForm(true); }}
+          onClick={() => {
+            // Checa antes de abrir: preencher um formulário inteiro
+            // para descobrir no fim que não cabia é a pior versão disto.
+            if (!limiteContas.permitido) {
+              paywall.abrir("contas", limiteContas.atual, limiteContas.limite);
+              return;
+            }
+            setEditAccount(null); setShowForm(true);
+          }}
           className="fixed bottom-24 right-5 bg-violet-700 text-white rounded-full shadow-lg shadow-violet-700/30 flex items-center justify-center z-40"
           style={{ width: 52, height: 52 }}
         >
@@ -490,6 +516,8 @@ export default function Accounts() {
           />
         )}
       </AnimatePresence>
+
+      {paywall.paywall}
 
       <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
         <AlertDialogContent>

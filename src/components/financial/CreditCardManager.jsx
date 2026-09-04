@@ -12,6 +12,8 @@ import { toast } from "sonner";
 import { format, parseISO, startOfMonth, endOfMonth, addMonths } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { calcularMesFatura, contasAtivas } from "@/domain/financas";
+import { useLimite } from "@/lib/usePlano";
+import { usePaywall, AvisoDeLimite } from "@/components/planos/usePaywall";
 
 const fmt = (v) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v || 0);
 
@@ -269,6 +271,7 @@ export default function CreditCardManager({ selectedDate }) {
   const { activeOwnerId } = useSharedProfile();
   const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);
+  const paywall = usePaywall();
   const [editCard, setEditCard] = useState(null);
   const currentMonth = format(selectedDate, "yyyy-MM");
 
@@ -285,6 +288,9 @@ export default function CreditCardManager({ selectedDate }) {
     },
     enabled: !!activeOwnerId,
   });
+
+  // A contagem vem do que a tela já carregou: nenhuma consulta nova.
+  const limiteCartoes = useLimite("cartoes", cards.length);
 
   const { data: accounts = [] } = useQuery({
     queryKey: ["accounts", activeOwnerId],
@@ -323,7 +329,7 @@ export default function CreditCardManager({ selectedDate }) {
       setShowForm(false); setEditCard(null);
       toast.success(editCard ? "Cartão atualizado!" : "Cartão adicionado!");
     },
-    onError: (err) => toast.error(mensagemDeErro(err)),
+    onError: (err) => { if (!paywall.tratarErro(err)) toast.error(mensagemDeErro(err)); },
   });
 
   const [payingInvoice, setPayingInvoice] = useState(null); // { card, total, invoiceMonth, dueDate }
@@ -365,7 +371,13 @@ export default function CreditCardManager({ selectedDate }) {
           <CreditCard size={32} color={dark ? "rgba(255,255,255,0.1)" : "#e2e8f0"} style={{ margin: "0 auto 10px", display: "block" }} />
           <p style={{ fontFamily: "'Cabinet Grotesk',sans-serif", fontWeight: 700, fontSize: "0.88rem", color: text, marginBottom: 4 }}>Nenhum cartão cadastrado</p>
           <p style={{ fontSize: "0.72rem", color: muted, marginBottom: 14 }}>Adicione seus cartões para acompanhar faturas</p>
-          <button onClick={() => setShowForm(true)}
+          <button onClick={() => {
+            if (!limiteCartoes.permitido) {
+              paywall.abrir("cartoes", limiteCartoes.atual, limiteCartoes.limite);
+              return;
+            }
+            setShowForm(true);
+          }}
             style={{ padding: "9px 20px", borderRadius: 10, border: "none", background: "linear-gradient(135deg,#1d4ed8,#3730a3)", color: "#fff", fontFamily: "'Cabinet Grotesk',sans-serif", fontWeight: 700, fontSize: "0.82rem", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6, boxShadow: "0 0 16px rgba(29,78,216,0.3)" }}>
             <Plus size={14} /> Adicionar cartão
           </button>
@@ -385,11 +397,24 @@ export default function CreditCardManager({ selectedDate }) {
           <p style={{ fontFamily: "'Cabinet Grotesk',sans-serif", fontWeight: 700, fontSize: "0.88rem", color: text, display: "flex", alignItems: "center", gap: 6 }}>
             <CreditCard size={15} color={muted} /> Faturas
           </p>
-          <button onClick={() => { setEditCard(null); setShowForm(true); }}
+          <button onClick={() => {
+            if (!limiteCartoes.permitido) {
+              paywall.abrir("cartoes", limiteCartoes.atual, limiteCartoes.limite);
+              return;
+            }
+            setEditCard(null); setShowForm(true);
+          }}
             style={{ display: "flex", alignItems: "center", gap: 5, fontSize: "0.72rem", fontWeight: 700, color: "#2563eb", background: dark ? "rgba(37,99,235,0.12)" : "rgba(37,99,235,0.08)", border: "none", borderRadius: 999, padding: "5px 10px", cursor: "pointer", fontFamily: "'Cabinet Grotesk',sans-serif" }}>
             <Plus size={12} /> Novo cartão
           </button>
         </div>
+
+        {limiteCartoes.ultimo && (
+          <AvisoDeLimite situacao={limiteCartoes}
+            texto={`Último cartão do plano gratuito — ${limiteCartoes.atual} de ${limiteCartoes.limite}.`} />
+        )}
+
+        {paywall.paywall}
 
         {/* Cards de fatura */}
         {cards.map(card => (

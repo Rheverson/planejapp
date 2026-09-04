@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { adminClient, cors, preflight, requireUser } from "../_shared/auth.ts"
 import { chamarIA } from "../_shared/ia.ts"
+import { registrarUsoDoFinn } from "../_shared/limites.ts"
 import {
   hojeBrasilia, detectarPeriodo, periodoDoMes, calcularTotais,
   somarMeses, mesDe, nomeDoMes,
@@ -367,6 +368,33 @@ Nunca invente outro tipo de bloco.
 
 Categorias: alimentação, transporte, moradia, saúde, educação, lazer, compras, outros.
 Contas: ${accountNames}`
+
+    // ── Cota do Finn ──────────────────────────────────────────
+    //
+    // Contabiliza ANTES de chamar o provedor. Uma mensagem que estourou
+    // o limite não pode consumir a cota da Groq — que é o teto de
+    // verdade aqui: ~8.000 tokens/min a ~1.400 por mensagem dão ~5,7
+    // mensagens por minuto no app INTEIRO, somando todos os usuários.
+    //
+    // O incremento é atômico (`on conflict do update`), então duas
+    // perguntas simultâneas não perdem contagem.
+    //
+    // Se o contador falhar, `registrarUsoDoFinn` devolve
+    // `dentroDoLimite: true`: contador quebrado não cala o Finn.
+    const cota = await registrarUsoDoFinn(userId)
+    if (!cota.dentroDoLimite) {
+      // Motivo legível para a tela escolher a mensagem e oferecer o
+      // upgrade. O usuário nunca vê erro técnico.
+      return new Response(
+        JSON.stringify({
+          error: "limite_do_plano",
+          recurso: "finn_mensagens_mes",
+          usadas: cota.usadas - 1,
+          limite: cota.limite,
+        }),
+        { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      )
+    }
 
     const messages = [
       ...(history || []).map((h: any) => ({ role: h.role, content: h.content })),
