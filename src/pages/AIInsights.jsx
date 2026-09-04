@@ -16,6 +16,7 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSharedProfile } from "@/lib/SharedProfileContext";
+import { usePaywall } from "@/components/planos/usePaywall";
 import { gerarOcorrenciasRecorrentes, dataNoMes, MAX_OCORRENCIAS } from "@/domain/financas";
 
 const NAV_HEIGHT = 68;
@@ -493,6 +494,10 @@ function useSpeechRecognition({ onResult }) {
 // ── Chat Tab ──────────────────────────────────────────────────
 function ChatTab({ user, dark }) {
   const queryClient = useQueryClient();
+  // A cota do Finn e checada no `ai-chat` ANTES de chamar a IA, e volta
+  // como 429. Sem isto o usuario ouvia "tente de novo em instantes" —
+  // mentira, porque a cota so volta no mes que vem.
+  const paywall = usePaywall();
   // O Finn opera sobre a conta de quem está logado — o `ai-chat` deriva a
   // identidade do JWT. Num perfil compartilhado, gravar aqui escreveria na
   // conta errada, então as ações ficam desabilitadas.
@@ -676,8 +681,16 @@ function ChatTab({ user, dark }) {
       // um modelo descontinuado na Groq apareceu como se o Finn não
       // estivesse compreendendo a pergunta. Agora cada motivo tem a sua fala.
       if (err || result?.error) {
-        throw Object.assign(new Error(result?.error || err?.message || "Erro"), {
-          motivo: result?.motivo,
+        // `result` e nulo em qualquer nao-2xx; o corpo vem no erro.
+        const corpo = result ?? await corpoDoErro(err);
+        if (corpo?.error === "limite_do_plano") {
+          throw Object.assign(new Error("limite_do_plano"), {
+            motivo: "limite",
+            limite: { recurso: corpo.recurso, atual: corpo.usadas, limite: corpo.limite },
+          });
+        }
+        throw Object.assign(new Error(corpo?.error || err?.message || "Erro"), {
+          motivo: corpo?.motivo,
         });
       }
 
@@ -694,6 +707,9 @@ function ChatTab({ user, dark }) {
       setPendingAction(action);
       setMessages(prev => [...prev, { role: "assistant", content: reply }]);
     } catch (e) {
+      if (e?.motivo === "limite") {
+        paywall.abrir(e.limite.recurso, e.limite.atual, e.limite.limite);
+      }
       setMessages(prev => [...prev, { role: "assistant", content: mensagemDeFalhaDaIA(e) }]);
     } finally {
       clearTimeout(relogio);
@@ -1087,6 +1103,8 @@ function ChatTab({ user, dark }) {
           </motion.div>
         )}
       </div>
+
+      {paywall.paywall}
     </div>
   );
 }
@@ -1121,7 +1139,11 @@ function AnalysisTab({ user, dark }) {
     setLoading(true); setError(null); setLimiteAtingido(false); setShowPeriodSelector(false);
     try {
       const { data: result, error: err } = await supabase.functions.invoke("ai-insights", { body: { userId: user.id, month } });
-      if (err) { try { const b = JSON.parse(err.context?.responseText || "{}"); if (b.error === "limite_atingido") { setLimiteAtingido(true); setError(b.message); return; } } catch {} throw err; }
+      if (err) {
+        const b = await corpoDoErro(err);
+        if (b?.error === "limite_atingido") { setLimiteAtingido(true); setError(b.message); return; }
+        throw err;
+      }
       if (result?.error === "limite_atingido") { setLimiteAtingido(true); setError(result.message); return; }
       if (result?.error) throw Object.assign(new Error(result.error), { motivo: result.motivo });
       setData(result); setUsage(result.usage); await saveInsights(result);
@@ -1345,9 +1367,29 @@ function AnalysisTab({ user, dark }) {
 // O que não pode voltar a acontecer é a falha ficar invisível: era por
 // isso que um modelo descontinuado na Groq parecia "o Finn não entendeu
 // a pergunta" e ninguém percebia que a IA estava fora do ar.
+/**
+ * Abre o corpo de erro de um `functions.invoke`.
+ *
+ * Num não-2xx o supabase-js NÃO parseia nada: ele lança
+ * `FunctionsHttpError` com `context` sendo o `Response` cru, e devolve
+ * `data: null`. Quem procurar `err.context.responseText` acha
+ * `undefined` — era o que os dois tratamentos de limite deste arquivo
+ * faziam, então nenhum dos dois funcionava.
+ */
+async function corpoDoErro(err) {
+  try { return await err?.context?.json?.(); } catch { return null; }
+}
+
 function mensagemDeFalhaDaIA(e) {
   const motivo = e?.motivo || e?.name || "desconhecido";
   console.warn("[Finn] falha ao responder:", motivo, e?.message || "");
+
+  // Cota do mes: dizer "tente de novo em instantes" seria mentira.
+  if (e?.motivo === "limite") {
+    const teto = e?.limite?.limite;
+    return `🗓️ Você usou as ${teto ?? ""} conversas comigo deste mês no plano gratuito. ` +
+           "No mês que vem sua cota volta — ou você libera 300 por mês com o Pro.";
+  }
 
   const demorou = e?.name === "AbortError" ||
     String(e?.message || "").toLowerCase().includes("abort");
