@@ -14,8 +14,21 @@ export const EVENTO = {
   PAYWALL_VISTO: "paywall_visto",
   /** A sessão do Stripe foi criada com sucesso. Nasce no create-checkout. */
   CHECKOUT_INICIADO: "checkout_iniciado",
-  /** O Stripe confirmou. Nasce no webhook — nunca no clique do botão. */
+  /**
+   * O Stripe confirmou o checkout. Nasce no webhook — nunca no clique.
+   *
+   * No modelo PLG isto significa "ENTROU NO TRIAL", não "pagou": o
+   * cartão é exigido na entrada, mas a primeira cobrança só vem 7 dias
+   * depois. Quem paga de fato é `TRIAL_CONVERTIDO`.
+   */
   CHECKOUT_CONCLUIDO: "checkout_concluido",
+  /**
+   * A primeira fatura de verdade foi paga, depois do trial.
+   *
+   * É o único evento do funil que representa dinheiro entrando. Sem ele,
+   * 100 trials iniciados e 3 pagamentos pareceriam 100% de conversão.
+   */
+  TRIAL_CONVERTIDO: "trial_convertido",
   /** O plano efetivo mudou de verdade. Nasce no webhook. */
   PLANO_MUDOU: "plano_mudou",
 };

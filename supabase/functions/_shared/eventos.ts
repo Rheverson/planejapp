@@ -12,7 +12,11 @@ import { adminClient } from "./auth.ts";
 export const EVENTO = {
   PAYWALL_VISTO: "paywall_visto",
   CHECKOUT_INICIADO: "checkout_iniciado",
+  // "entrou no trial", nao "pagou" — o cartao entra na porta, a
+  // cobranca so 7 dias depois.
   CHECKOUT_CONCLUIDO: "checkout_concluido",
+  // O unico evento do funil que representa dinheiro entrando.
+  TRIAL_CONVERTIDO: "trial_convertido",
   PLANO_MUDOU: "plano_mudou",
 } as const;
 
@@ -80,14 +84,25 @@ export function motivoDaMudanca(
   statusAnterior: string | null,
   statusNovo: string | null,
   veioDeCheckout: boolean,
+  cancelouNoTrial = false,
 ): Motivo {
   if (planoNovo === "pro") {
     return veioDeCheckout ? MOTIVO.ASSINOU : MOTIVO.REATIVACAO;
   }
   const s = String(statusNovo || "").toLowerCase();
   if (s === "past_due" || s === "unpaid") return MOTIVO.PAGAMENTO_FALHOU;
+
+  // Vindo de `trialing` ha dois desfechos MUITO diferentes para o
+  // produto, e o status nao os distingue:
+  //
+  //   a pessoa DESISTIU no meio do trial  -> cancelamento
+  //   o trial acabou e ela nao pagou      -> trial_expirou
+  //
+  // Quem separa e o `trial_end`: ainda no futuro significa que alguem
+  // apertou "cancelar"; ja no passado significa que o prazo venceu.
+  // Misturar os dois esconde se o problema e o produto ou o preco.
   if (String(statusAnterior || "").toLowerCase() === "trialing") {
-    return MOTIVO.TRIAL_EXPIROU;
+    return cancelouNoTrial ? MOTIVO.CANCELAMENTO : MOTIVO.TRIAL_EXPIROU;
   }
   return MOTIVO.CANCELAMENTO;
 }

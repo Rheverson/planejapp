@@ -247,6 +247,7 @@ serve(async (req) => {
     antes: { user_id: string; status: string | null } | null,
     planoAntes: string | null,
     veioDeCheckout: boolean,
+    cancelouNoTrial = false,
   ) => {
     if (!antes?.user_id || !planoAntes) return
     const depois = await linhaDoCliente()
@@ -259,7 +260,8 @@ serve(async (req) => {
       plano_anterior: planoAntes,
       plano_novo: planoDepois,
       motivo: motivoDaMudanca(
-        planoAntes, planoDepois, antes.status, depois?.status ?? null, veioDeCheckout,
+        planoAntes, planoDepois, antes.status, depois?.status ?? null,
+        veioDeCheckout, cancelouNoTrial,
       ),
       stripe_subscription_id: depois?.stripe_subscription_id ?? obj.id ?? null,
       is_test: eTeste,
@@ -292,15 +294,34 @@ serve(async (req) => {
     const antes = await linhaDoCliente()
     const planoAntes = antes?.user_id ? await planoAgora(antes.user_id) : null
 
+    // ── Cancelou DURANTE o trial? ─────────────────────────
+    //
+    // A regra de acesso mantem o Pro de quem cancelou ate o fim do
+    // periodo — porque a pessoa PAGOU aquele mes. Num trial nao houve
+    // pagamento nenhum: manter o acesso ate o fim seria dar Pro de
+    // graca por cancelar.
+    //
+    // O sinal e o `trial_end` ainda no futuro. Quando o trial acaba
+    // sozinho, o Stripe cancela NO fim dele e a data ja passou; quando
+    // a pessoa cancela antes, a data ainda esta a frente.
+    //
+    // A correcao fica AQUI e nao em `temAcessoPro`: a regra continua
+    // sendo "cancelada mantem acesso ate o fim do periodo pago". O que
+    // muda e parar de afirmar um periodo pago que nunca existiu.
+    const fimDoTrial = typeof obj.trial_end === "number" ? obj.trial_end * 1000 : null
+    const cancelouNoTrial = fimDoTrial !== null && fimDoTrial > Date.now()
+
     await alvo(supabase.from("subscriptions")
       .update({
         status: "cancelled",
         cancel_at_period_end: false,
-        current_period_end: paraISO(fimDoPeriodo(obj)) ?? undefined,
+        current_period_end: cancelouNoTrial
+          ? null
+          : (paraISO(fimDoPeriodo(obj)) ?? undefined),
         ultimo_evento_em: eventoEm,
       }))
 
-    await registrarMudancaDePlano(antes, planoAntes, false)
+    await registrarMudancaDePlano(antes, planoAntes, false, cancelouNoTrial)
 
     const { data: sub } = await supabase
       .from("subscriptions")
@@ -361,6 +382,51 @@ serve(async (req) => {
     }
   }
 
+  // ── Trial que virou pagamento ────────────────────────────
+  //
+  // `checkout_concluido` diz que a pessoa ENTROU no trial: no modelo
+  // PLG o cartao e exigido na porta, mas a cobranca so vem 7 dias
+  // depois. Sem separar as duas coisas, 100 trials e 3 pagamentos
+  // pareceriam 100% de conversao.
+  //
+  // O sinal de "primeira fatura de verdade": cobranca de ciclo com
+  // valor maior que zero. A fatura do trial e de R$ 0 e tem
+  // `billing_reason = subscription_create`.
+  //
+  // `invoice.paid` entra junto com `invoice.payment_succeeded` porque o
+  // Stripe manda os dois e so o segundo esta assinado no endpoint hoje
+  // — assim a mudanca de configuracao, se vier, nao exige codigo novo.
+  // O indice unico por assinatura garante que os dois eventos, ou a
+  // renovacao do mes seguinte, nao contem duas vezes.
+  if (event.type === "invoice.payment_succeeded" || event.type === "invoice.paid") {
+    const pagouDeVerdade = (obj.amount_paid ?? obj.total ?? 0) > 0
+    const ehCiclo = obj.billing_reason === "subscription_cycle" ||
+                    obj.billing_reason === "subscription_update"
+
+    if (pagouDeVerdade && ehCiclo && obj.subscription) {
+      const { data: dono } = await supabase
+        .from("subscriptions")
+        .select("user_id")
+        .eq("stripe_customer_id", obj.customer)
+        .eq("is_test", eTeste)
+        .maybeSingle()
+
+      if (dono?.user_id) {
+        const { error } = await supabase.from("eventos_plano").insert({
+          user_id: dono.user_id,
+          evento: EVENTO.TRIAL_CONVERTIDO,
+          stripe_subscription_id: typeof obj.subscription === "string" ? obj.subscription : null,
+          is_test: eTeste,
+        })
+        // 23505 e o indice unico barrando a segunda contagem da mesma
+        // assinatura: esperado, nao e falha.
+        if (error && error.code !== "23505") {
+          console.error("trial_convertido nao registrado:", error.message)
+        }
+      }
+    }
+  }
+
   // ── Cobranca recusada ────────────────────────────────────
   //
   // O evento ja era ASSINADO no endpoint e nao era TRATADO no codigo: o
@@ -402,12 +468,66 @@ serve(async (req) => {
   // depender da metadata, que existe para o relatorio do proprio
   // Stripe.
   if (event.type === "checkout.session.completed") {
-    const { data: sub } = await supabase
-      .from("subscriptions")
-      .select("user_id")
-      .eq("stripe_customer_id", obj.customer)
-      .eq("is_test", eTeste)
-      .maybeSingle()
+    // Quem e o dono. Duas vias, e a segunda existe porque a primeira
+    // depende de uma escrita anterior ter dado certo:
+    //
+    //  1. `client_reference_id`, posto pelo create-checkout na criacao
+    //     da sessao. E o vinculo que nao depende de nada mais;
+    //  2. o `stripe_customer_id` ja gravado, para sessoes criadas antes
+    //     desta mudanca.
+    let donoId: string | null =
+      typeof obj.client_reference_id === "string" ? obj.client_reference_id : null
+
+    if (!donoId) {
+      const { data: porCliente } = await supabase
+        .from("subscriptions")
+        .select("user_id")
+        .eq("stripe_customer_id", obj.customer)
+        .eq("is_test", eTeste)
+        .maybeSingle()
+      donoId = porCliente?.user_id ?? null
+    }
+
+    // Grava o vinculo com o Stripe.
+    //
+    // O create-checkout ja escreve o `stripe_customer_id` ao criar o
+    // cliente. Aqui e a rede, e ela CRIA a linha se nao houver: sem
+    // isso, um insert que tenha falhado la atras faria o pagamento
+    // chegar sem linha nenhuma — a pessoa pagaria e continuaria sem
+    // acesso, que e o pior desfecho possivel deste fluxo.
+    //
+    // Nao da para usar upsert: `subscriptions` nao tem unicidade por
+    // `user_id` (ver pendencia no relatorio), entao e leitura e depois
+    // escrita.
+    if (donoId) {
+      const vinculo = {
+        stripe_customer_id: typeof obj.customer === "string" ? obj.customer : null,
+        stripe_subscription_id: typeof obj.subscription === "string" ? obj.subscription : null,
+      }
+
+      const { data: linha } = await supabase
+        .from("subscriptions")
+        .select("user_id")
+        .eq("user_id", donoId)
+        .eq("is_test", eTeste)
+        .maybeSingle()
+
+      if (linha) {
+        await supabase.from("subscriptions")
+          .update(vinculo)
+          .eq("user_id", donoId)
+          .eq("is_test", eTeste)
+      } else {
+        await supabase.from("subscriptions").insert({
+          user_id: donoId,
+          status: "incomplete",   // o evento de assinatura ajusta em seguida
+          is_test: eTeste,
+          ...vinculo,
+        })
+      }
+    }
+
+    const sub = donoId ? { user_id: donoId } : null
 
     if (sub?.user_id) {
       const { error } = await supabase.from("eventos_plano").insert({

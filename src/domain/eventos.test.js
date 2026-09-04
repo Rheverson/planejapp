@@ -16,10 +16,19 @@ import { LIMITES_PADRAO } from "./limites";
 // ============================================================
 
 describe("os nomes que o banco aceita", () => {
-  it("são exatamente estes quatro", () => {
+  it("são exatamente estes cinco", () => {
     expect(Object.values(EVENTO).sort()).toEqual([
-      "checkout_concluido", "checkout_iniciado", "paywall_visto", "plano_mudou",
+      "checkout_concluido", "checkout_iniciado", "paywall_visto",
+      "plano_mudou", "trial_convertido",
     ]);
+  });
+
+  it("entrar no trial e pagar são eventos DIFERENTES", () => {
+    // No modelo PLG o cartão é exigido na porta, mas a primeira
+    // cobrança só vem 7 dias depois. Se os dois fossem o mesmo evento,
+    // 100 trials iniciados e 3 pagamentos apareceriam como 100% de
+    // conversão — e a decisão de preço sairia de um número inventado.
+    expect(EVENTO.CHECKOUT_CONCLUIDO).not.toBe(EVENTO.TRIAL_CONVERTIDO);
   });
 
   it("os motivos são só os que o sistema produz de verdade", () => {

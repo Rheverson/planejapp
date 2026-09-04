@@ -51,7 +51,14 @@ serve(async (req) => {
     // O caminho legítimo de trial longo já é outro — o promoCode, que é
     // conferido contra `promo_codes` logo abaixo e sobrescreve este
     // valor. O cliente não tem o que opinar aqui.
-    let trialDays = 30
+    //
+    // SETE dias, não trinta. No modelo antigo o trial era a porta de
+    // entrada do app e precisava ser longo o bastante para a pessoa
+    // conhecer o produto. Agora ela já conhece: chegou até aqui usando
+    // o plano gratuito e esbarrou num limite. O trial deixou de ser
+    // "conheça o app" e virou "experimente o Pro" — e uma janela curta
+    // com cartão na mão converte melhor do que uma longa sem cartão.
+    let trialDays = 7
 
     let referralCode: string | null, promoCode: string | null
     // O que o front DIZ ter originado o checkout. Ainda nao vale nada:
@@ -195,6 +202,11 @@ serve(async (req) => {
         line_items: [{ price: Deno.env.get("STRIPE_PRICE_ID")!, quantity: 1 }],
         mode: "subscription",
         payment_method_collection: "always", // ✅ cartao obrigatorio
+        // Quem e o dono desta sessao, dito pelo BACKEND na criacao.
+        // Sem isto o webhook so consegue achar o usuario se o
+        // `stripe_customer_id` ja estiver gravado — e se a gravacao
+        // tiver falhado, o pagamento chega sem dono.
+        client_reference_id: userId,
         subscription_data: {
           trial_period_days: trialDays,
           trial_settings: { end_behavior: { missing_payment_method: "cancel" } },
