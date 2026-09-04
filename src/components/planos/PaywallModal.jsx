@@ -163,7 +163,11 @@ export default function PaywallModal({ recurso, atual, limite, onClose }) {
           </div>
 
           <button
-            onClick={() => { onClose?.(); navigate("/PlanPage"); }}
+            // `/subscribe` e nao `/PlanPage`: a PlanPage e a tela de
+            // GERIR uma assinatura que existe (trocar cartao, cancelar).
+            // Mandar um Free para la e oferecer o botao de cancelar a
+            // quem nunca assinou.
+            onClick={() => { onClose?.(); navigate("/subscribe"); }}
             style={{
               width: "100%", height: 50, borderRadius: 14, border: "none", cursor: "pointer",
               background: "linear-gradient(135deg,#7c3aed,#6d28d9)", color: "#fff",

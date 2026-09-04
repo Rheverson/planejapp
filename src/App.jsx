@@ -115,7 +115,8 @@ const AuthenticatedApp = () => {
 
   useEffect(() => {
     if (!user || profileLoading) return;
-    if (!isSubscribed) return;
+    // O tour não depende mais de assinatura: quem entra no Free também
+    // está chegando agora e precisa dele.
     const localCompleted = localStorage.getItem('onboarding_completed') === 'true';
     const dbCompleted = profile?.onboarding_completed === true;
     if (!localCompleted && !dbCompleted) {
@@ -153,20 +154,20 @@ const AuthenticatedApp = () => {
     );
   }
 
-  // ── Sem assinatura ───────────────────────────────────────
-  if (!isSubscribed) {
-    return (
-      <Routes>
-        <Route path="/Promo" element={<PromoPage />} />
-        <Route path="/subscribe" element={<Subscribe />} />
-        <Route path="/subscription-success" element={<SubscriptionSuccess />} />
-        <Route path="/onboarding-tour" element={<OnboardingTour />} />
-        <Route path="*" element={<Navigate to="/subscribe" replace />} />
-      </Routes>
-    );
-  }
-
-  // ── Assinatura ativa ─────────────────────────────────────
+  // ── Todo mundo que fez login entra ───────────────────────
+  //
+  // Antes havia um muro aqui: sem assinatura ativa, qualquer rota caía
+  // em `/subscribe`. Isso tornava o plano Free impossível de existir —
+  // os limites e o paywall que o app tem hoje nunca seriam alcançados,
+  // porque ninguém chegava a ser Free: quem terminava o trial virava
+  // bloqueado.
+  //
+  // Agora o atrito acontece onde a pessoa percebe valor (a terceira
+  // conta, a segunda meta, a 101ª transação), não na porta de entrada.
+  // Quem decide o que cada um pode fazer são os limites de plano, e a
+  // trava real está no banco.
+  //
+  // `/subscribe` continua existindo — virou upgrade voluntário.
   return (
     <Suspense fallback={<PageLoader />}>
       <Routes>
@@ -175,7 +176,9 @@ const AuthenticatedApp = () => {
         <Route path="/login" element={<Navigate to="/" replace />} />
         <Route path="/forgot-password" element={<Navigate to="/" replace />} />
         <Route path="/onboarding/*" element={<Navigate to="/" replace />} />
-        <Route path="/subscribe" element={<Navigate to="/" replace />} />
+        {/* Upgrade voluntário: vende para quem é Free, e não faz
+            sentido para quem já paga. */}
+        <Route path="/subscribe" element={isSubscribed ? <Navigate to="/" replace /> : <Subscribe />} />
         <Route path="/subscription-success" element={<SubscriptionSuccess />} />
         <Route path="/" element={<LayoutWrapper currentPageName={mainPageKey}><MainPage /></LayoutWrapper>} />
         {Object.entries(Pages).map(([path, Page]) => (

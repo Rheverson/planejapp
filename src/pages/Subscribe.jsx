@@ -3,11 +3,13 @@ import React, { useState, useEffect } from "react";
 import { useAuth } from "@/lib/AuthContext";
 import { supabase } from "@/lib/supabase";
 import { motion } from "framer-motion";
-import { Check, Users, Zap, LogOut, CheckCircle2, Lock, XCircle, Loader2, Gift, Sparkles, ChevronRight } from "lucide-react";
+import { Check, Users, Zap, LogOut, CheckCircle2, Lock, XCircle, Loader2, Gift, Sparkles, ChevronRight, ArrowLeft } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 export default function Subscribe() {
   const { user, signOut } = useAuth();
+  const navigate = useNavigate();
   const [referralCode, setReferralCode]     = useState('');
   const [referralLocked, setReferralLocked] = useState(false);
   const [referralValid, setReferralValid]   = useState(null);
@@ -115,10 +117,20 @@ export default function Subscribe() {
                 <p style={{ fontSize:"0.7rem",color:"rgba(255,255,255,0.5)",marginBottom:2 }}>Logado como</p>
                 <p style={{ fontSize:"0.82rem",color:"#fff",fontWeight:600,maxWidth:200,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{user?.email}</p>
               </div>
-              <button onClick={async () => { await signOut(); }}
-                style={{ display:"flex",alignItems:"center",gap:6,padding:"6px 12px",background:"rgba(255,255,255,0.12)",border:"0.5px solid rgba(255,255,255,0.2)",borderRadius:10,color:"rgba(255,255,255,0.8)",fontSize:"0.75rem",fontWeight:600,cursor:"pointer",fontFamily:"'Outfit',sans-serif" }}>
-                <LogOut size={13}/> Sair
-              </button>
+              {/* Esta tela era um muro: a unica saida era deslogar.
+                  Virou upgrade voluntario, entao precisa de volta — sem
+                  isso, quem toca em "Seja Pro" e desiste so escapa
+                  perdendo a sessao. */}
+              <div style={{ display:"flex",alignItems:"center",gap:8 }}>
+                <button onClick={() => navigate("/")} aria-label="Voltar para o app"
+                  style={{ display:"flex",alignItems:"center",gap:6,padding:"6px 12px",background:"rgba(255,255,255,0.12)",border:"0.5px solid rgba(255,255,255,0.2)",borderRadius:10,color:"rgba(255,255,255,0.8)",fontSize:"0.75rem",fontWeight:600,cursor:"pointer",fontFamily:"'Outfit',sans-serif" }}>
+                  <ArrowLeft size={13}/> Voltar
+                </button>
+                <button onClick={async () => { await signOut(); }} aria-label="Sair da conta"
+                  style={{ display:"flex",alignItems:"center",padding:"6px 10px",background:"rgba(255,255,255,0.12)",border:"0.5px solid rgba(255,255,255,0.2)",borderRadius:10,color:"rgba(255,255,255,0.8)",cursor:"pointer" }}>
+                  <LogOut size={13}/>
+                </button>
+              </div>
             </div>
 
             {/* Steps */}
