@@ -18,7 +18,6 @@ import Subscribe from "@/pages/Subscribe";
 import SubscriptionSuccess from "@/pages/SubscriptionSuccess";
 import OnboardingTour from '@/pages/OnboardingTour';
 import PromoPage from '@/pages/PromoPage';
-import PaymentFailed from '@/pages/PaymentFailed';
 import { MonthProvider } from '@/lib/MonthContext';
 import { PrivacyProvider } from '@/lib/PrivacyContext';
 import { useQuery } from '@tanstack/react-query';
@@ -26,7 +25,7 @@ import { supabase } from '@/lib/supabase';
 import { useEffect, Suspense } from 'react';
 import { initPushNotifications } from '@/lib/pushNotifications';
 import ErrorBoundary from '@/lib/ErrorBoundary';
-import { temAcessoPro, pagamentoFalhou } from '@/domain/assinatura';
+import { temAcessoPro } from '@/domain/assinatura';
 
 const { Pages, Layout, mainPage } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
@@ -86,10 +85,12 @@ function useProfile(userId) {
 }
 
 // A regra mora em src/domain/assinatura.js — uma pergunta, uma
-// resposta. Estas duas funções viviam aqui e tinham cópias divergentes
-// em Profile.jsx e PlanPage.jsx, que ignoravam `current_period_end`.
+// resposta. Esta função vivia aqui e tinha cópias divergentes em
+// Profile.jsx e PlanPage.jsx, que ignoravam `current_period_end`.
+//
+// Hoje ela decide só o que é Pro e o que é Free: não decide mais quem
+// entra, porque todo mundo entra.
 const hasActiveAccess = temAcessoPro;
-const isPaymentFailed = pagamentoFalhou;
 
 const AuthenticatedApp = () => {
   const { loading, user } = useAuth();
@@ -98,7 +99,6 @@ const AuthenticatedApp = () => {
   const navigate = useNavigate();
 
   const isSubscribed    = hasActiveAccess(subscription);
-  const paymentFailed   = isPaymentFailed(subscription);
 
   useEffect(() => {
     if (user) initPushNotifications();
@@ -145,14 +145,16 @@ const AuthenticatedApp = () => {
     );
   }
 
-  // ── Pagamento falhou ─────────────────────────────────────
-  if (paymentFailed) {
-    return (
-      <Routes>
-        <Route path="*" element={<PaymentFailed />} />
-      </Routes>
-    );
-  }
+  // Cobrança que falhou NÃO tranca mais o app. Havia um muro aqui: em
+  // `past_due`/`unpaid`, qualquer rota virava a tela de pagamento. É a
+  // pior hora possível para isso — quem teve o cartão recusado pode
+  // estar justamente sem dinheiro, que é quando um app de controle
+  // financeiro mais serve.
+  //
+  // A pessoa cai no Free como qualquer outra (as três implementações da
+  // regra concordam: `temAcessoPro`, `plano_do_usuario` no banco e o
+  // espelho do backend) e vê o `AvisoPagamento` no topo, com o caminho
+  // para atualizar o cartão. Perde o Pro, não o app.
 
   // ── Todo mundo que fez login entra ───────────────────────
   //

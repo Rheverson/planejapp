@@ -3,6 +3,7 @@ import {
   PLANO, LIMITES_PADRAO, planoDoUsuario, limiteDe, podeCriar,
   recursoDisponivel, erroDeLimite, tabelaDeLimites,
 } from "./limites";
+import { temAcessoPro } from "./assinatura";
 
 // ============================================================
 // Os limites de plano.
@@ -20,6 +21,25 @@ describe("qual é o plano", () => {
 
   it("quem tem assinatura em dia é pro", () => {
     expect(planoDoUsuario({ temAcesso: true })).toBe(PLANO.PRO);
+  });
+
+  it("cobrança que falhou vira Free, não parede", () => {
+    // Se o cartão falhou, a pessoa pode estar justamente sem dinheiro.
+    // Trancá-la para fora de um app de controle financeiro é a pior
+    // hora possível. Ela perde o Pro, não o app.
+    //
+    // Esta regra existe em TRÊS lugares e os três precisam concordar:
+    // aqui, em `plano_do_usuario` (SQL, migration 20260904092000) e no
+    // espelho de `_shared/limites.ts`.
+    for (const status of ["past_due", "unpaid", "incomplete", "paused"]) {
+      expect(planoDoUsuario({ temAcesso: temAcessoPro({ status }) })).toBe(PLANO.FREE);
+    }
+  });
+
+  it("assinatura em dia continua pro", () => {
+    for (const status of ["active", "trialing"]) {
+      expect(planoDoUsuario({ temAcesso: temAcessoPro({ status }) })).toBe(PLANO.PRO);
+    }
   });
 
   it("fundador é pro mesmo sem assinatura", () => {

@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthContext";
-import { temAcessoPro } from "@/domain/assinatura";
+import { temAcessoPro, pagamentoFalhou } from "@/domain/assinatura";
 import {
   planoDoUsuario, podeCriar, limiteDe, recursoDisponivel, tabelaDeLimites,
 } from "@/domain/limites";
@@ -70,6 +70,10 @@ export function usePlano() {
     plano,
     ehPro: plano === "pro",
     ehFundador,
+    // Para o aviso de cobrança. Quem está em `past_due`/`unpaid` já cai
+    // em `free` pelo `plano` acima — isto aqui só diz POR QUE caiu, que
+    // é o que o banner precisa para falar de cartão em vez de vender.
+    pagamentoFalhou: pagamentoFalhou(assinatura),
     limitesDoBanco: limitesDoBanco ?? null,
     carregando: carregandoAssinatura || carregandoFundador,
     limiteDe: (recurso) => limiteDe(plano, recurso, limitesDoBanco ?? null),

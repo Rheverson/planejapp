@@ -6,6 +6,7 @@ import { usePhoneVerification } from "@/hooks/usePhoneVerification";
 import PhoneVerificationModal from "@/components/profile/PhoneVerificationModal";
 import { useNotificationListener } from "@/hooks/useNotificationListener";
 import { usePlano } from "@/lib/usePlano";
+import AvisoPagamento from "@/components/planos/AvisoPagamento";
 
 const navItems = [
   { name: "Home",       icon: Home,          page: "Home"         },
@@ -67,6 +68,10 @@ export default function Layout({ children, currentPageName }) {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-200">
+      {/* Cobrança que falhou. Fica no fluxo do documento, no topo de
+          tudo: não tapa a tela e acompanha o scroll para cima. */}
+      <AvisoPagamento />
+
       <style>{`
         :root { --primary: 217 91% 60%; --primary-foreground: 210 40% 98%; }
         * { -webkit-tap-highlight-color: transparent; }
