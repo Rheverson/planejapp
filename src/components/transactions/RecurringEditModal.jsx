@@ -1,10 +1,9 @@
 import { useIsDark } from "@/design/useTheme";
 import React, { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { X, Edit2, ArrowRight, List, AlertTriangle, ChevronLeft } from "lucide-react";
 import { useFecharModal } from "@/hooks/useFecharModal";
 
-const fmt = (v) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v || 0);
 
 export default function RecurringEditModal({ mode = "edit", transaction, transactions = [], onSelect, onClose }) {
   // Esc, botão voltar do Android e trava de rolagem do fundo.

@@ -2,7 +2,6 @@ import { useIsDark } from "@/design/useTheme";
 import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { supabase } from "@/lib/supabase";
-import { useAuth } from "@/lib/AuthContext";
 import { TrendingUp, TrendingDown, Minus } from "lucide-react";
 
 function ScoreArc({ score }) {

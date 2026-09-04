@@ -3,7 +3,6 @@ import { mensagemDeErro } from "@/lib/erros";
 import React, { useState, useMemo, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
-import { useAuth } from "@/lib/AuthContext";
 import { useSharedProfile } from "@/lib/SharedProfileContext";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
@@ -143,7 +142,6 @@ function AccountCard({ account, balance, hidden, dark }) {
 
 export default function Home() {
   const dark = useIsDark();
-  const { user } = useAuth();
   const { activeOwnerId, isViewingSharedProfile, sharedPermissions } = useSharedProfile();
   const canAdd = !isViewingSharedProfile || sharedPermissions?.add_transactions;
   const { selectedDate, setSelectedDate } = useMonth();
@@ -271,7 +269,6 @@ export default function Home() {
   const text     = dark ? "#e8edf5" : "#0f172a";
   const muted    = dark ? "#6b7a96" : "#64748b";
   const linkCol  = dark ? "#60a5fa" : "#2563eb";
-  const subBg    = dark ? "#12151c" : "#f8fafc";
 
   // Sem os dados não há número honesto para mostrar. Melhor dizer que
   // falhou do que desenhar R$ 0,00 como se fosse o saldo real.

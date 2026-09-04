@@ -7,13 +7,12 @@ import { motion, AnimatePresence } from "framer-motion";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
-  Sparkles, Send, X, Check, AlertCircle,
-  TrendingUp, TrendingDown, Wallet, MessageCircle,
+  Sparkles, Send, X, Check,
+  TrendingUp, TrendingDown, MessageCircle,
   BarChart2, RefreshCw, Clock, ChevronDown, ChevronUp,
   CheckCircle2, AlertTriangle, Info, PiggyBank, Calendar,
   Target, Building2, Mail, Trash2, CheckCheck, Mic, MicOff, Copy
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSharedProfile } from "@/lib/SharedProfileContext";
@@ -518,7 +517,6 @@ function ChatTab({ user, dark }) {
   const currentMonth  = getBrasiliaMonth();
 
   const bg      = dark ? "#060709" : "#f1f4f9";
-  const cardBg  = dark ? "#0c0e13" : "#ffffff";
   const cardBrd = dark ? "rgba(255,255,255,0.07)" : "rgba(17,24,39,0.06)";
   const muted   = dark ? "#6b7a96" : "#64748b";
   const text    = dark ? "#e8edf5" : "#0f172a";

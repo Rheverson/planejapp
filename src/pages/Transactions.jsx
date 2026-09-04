@@ -3,7 +3,6 @@ import { mensagemDeErro } from "@/lib/erros";
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import EstadoErro from "@/components/common/EstadoErro";
-import { useAuth } from "@/lib/AuthContext";
 import { useSharedProfile } from "@/lib/SharedProfileContext";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
@@ -35,7 +34,6 @@ const fmt = (v) => new Intl.NumberFormat("pt-BR", { style: "currency", currency:
 
 export default function Transactions() {
   const dark = useIsDark();
-  const { user } = useAuth();
   const { activeOwnerId, isViewingSharedProfile, sharedPermissions } = useSharedProfile();
   const canAdd    = !isViewingSharedProfile || sharedPermissions?.add_transactions;
   const canDelete = !isViewingSharedProfile || sharedPermissions?.delete_transactions;

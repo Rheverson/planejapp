@@ -116,8 +116,14 @@ export function pagamentoFalhou(assinatura, agora = new Date()) {
   return false;
 }
 
-/** O usuário pode iniciar um novo checkout? */
-export function podeAssinar(assinatura, agora = new Date()) {
+/**
+ * O usuário pode iniciar um novo checkout?
+ *
+ * Sem relógio, ao contrário das irmãs: aqui a pergunta é só de estado —
+ * quem está em trial ou ativo não precisa assinar de novo. Não é
+ * esquecimento de passar `agora`.
+ */
+export function podeAssinar(assinatura) {
   const estado = estadoDaAssinatura(assinatura);
   return !(estado === ESTADO.TRIAL || estado === ESTADO.ATIVA);
 }

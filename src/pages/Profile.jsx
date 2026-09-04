@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "@/lib/AuthContext";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/lib/supabase";
 import { useNavigate } from "react-router-dom";
@@ -139,7 +139,7 @@ export default function Profile() {
     try {
       await signOut();
       toast.success("Sessão encerrada com sucesso");
-    } catch (error) {
+    } catch {
       toast.error("Erro ao sair da conta.");
       setIsLoggingOut(false);
     }
@@ -241,7 +241,7 @@ export default function Profile() {
       else if (item.action === "privacy") setShowPrivacyModal(true);
       else if (item.action === "categories") setShowCategories(true);
       else if (item.action === "rate") setShowRateModal(true);
-    } catch (error) {
+    } catch {
       toast.error("Erro ao executar ação");
     }
   };
@@ -443,7 +443,7 @@ export default function Profile() {
   );
 }
 
-function StatCard({ delay, icon: Icon, value, label, color, isPositive, isNegative }) {
+function StatCard({ delay, icon: Icon, value, label, color, isPositive }) {
   const colors = {
     blue: "bg-gray-50 text-blue-600 dark:bg-blue-950 dark:text-blue-300",
     emerald: "bg-emerald-50 text-emerald-600 dark:bg-emerald-950 dark:text-emerald-300",

@@ -1,27 +1,20 @@
 import { useIsDark } from "@/design/useTheme";
 import { mensagemDeErro } from "@/lib/erros";
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { CreditCard, Plus, X, ChevronRight, Calendar, AlertCircle, CheckCircle, Clock, Wallet } from "lucide-react";
+import { CreditCard, Plus, X, AlertCircle, CheckCircle, Clock } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { escreverVerificando, AVISOS, NadaAfetado } from "@/lib/escrita";
-import { useAuth } from "@/lib/AuthContext";
 import { useSharedProfile } from "@/lib/SharedProfileContext";
 import { toast } from "sonner";
-import { format, parseISO, startOfMonth, endOfMonth, addMonths } from "date-fns";
+import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { calcularMesFatura, contasAtivas } from "@/domain/financas";
+import { contasAtivas } from "@/domain/financas";
 import { useLimite } from "@/lib/usePlano";
 import { usePaywall, AvisoDeLimite } from "@/components/planos/usePaywall";
 
 const fmt = (v) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v || 0);
-
-// Delegado ao módulo de domínio: esta versão local ignorava
-// expense_date_mode e podia agrupar a compra em mês diferente
-// daquele gravado no lançamento pelo TransactionForm.
-const getInvoiceMonth = (date, closingDay, cartao) =>
-  calcularMesFatura(date, cartao ?? { closing_day: closingDay, expense_date_mode: "closing_date" });
 
 // ── Card de fatura ────────────────────────────────────────────
 function InvoiceCard({ card, invoiceMonth, transactions, dark, onPay }) {
@@ -52,7 +45,6 @@ function InvoiceCard({ card, invoiceMonth, transactions, dark, onPay }) {
   const brd   = dark ? "rgba(255,255,255,0.07)" : "rgba(17,24,39,0.06)";
   const text  = dark ? "#e8edf5" : "#0f172a";
   const muted = dark ? "#6b7a96" : "#64748b";
-  const subBg = dark ? "#12151c" : "#f8fafc";
 
   return (
     <div style={{ background: bg, border: `1px solid ${brd}`, borderRadius: 14, overflow: "hidden", boxShadow: dark ? "none" : "0 1px 4px rgba(17,24,39,0.04)" }}>
@@ -130,7 +122,10 @@ function InvoiceCard({ card, invoiceMonth, transactions, dark, onPay }) {
 // ── Modal cadastro de cartão ──────────────────────────────────
 function CreditCardForm({ onClose, onSave, accounts, dark, initialData }) {
   const [name, setName]         = useState(initialData?.name || "");
-  const [brand, setBrand]       = useState(initialData?.brand || "mastercard");
+  // Sem seletor de bandeira na tela: era `useState` com um setter que
+  // nunca foi chamado, o que dava a impressão de campo editável. O
+  // valor é o que veio do cadastro, e só.
+  const brand = initialData?.brand || "mastercard";
   const [color, setColor]       = useState(initialData?.color || "#8b5cf6");
   const [limit, setLimit]       = useState(initialData?.limit_amount || "");
   const [closingDay, setClosingDay] = useState(initialData?.closing_day || 15);
@@ -267,7 +262,6 @@ function CreditCardForm({ onClose, onSave, accounts, dark, initialData }) {
 // ── Componente principal ──────────────────────────────────────
 export default function CreditCardManager({ selectedDate }) {
   const dark = useIsDark();
-  const { user } = useAuth();
   const { activeOwnerId } = useSharedProfile();
   const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);

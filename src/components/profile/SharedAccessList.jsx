@@ -1,5 +1,5 @@
 import { useIsDark } from "@/design/useTheme";
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Trash2, Clock, Check, XCircle, UserPlus, Users, AlertCircle } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -155,7 +155,6 @@ export default function SharedAccessList({ onClose }) {
   const paywall = usePaywall();
 
   const bg     = dark ? "#060709"                : "#ffffff";
-  const cardBg = dark ? "#0c0e13"                : "#ffffff";
   const sep    = dark ? "rgba(255,255,255,0.06)" : "rgba(17,24,39,0.06)";
   const text   = dark ? "#e8edf5"                : "#0f172a";
   const muted  = dark ? "#6b7a96"                : "#64748b";

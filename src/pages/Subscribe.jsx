@@ -85,8 +85,6 @@ export default function Subscribe() {
   ];
 
   const accentColor = isPromo ? "#a78bfa" : "#60a5fa";
-  const accentBg    = isPromo ? "rgba(167,139,250,0.12)" : "rgba(37,99,235,0.12)";
-  const accentBdr   = isPromo ? "rgba(167,139,250,0.3)"  : "rgba(37,99,235,0.3)";
   const btnBg       = isPromo ? "#7c3aed" : "#1d4ed8";
   const btnGlow     = isPromo ? "rgba(124,58,237,0.4)"   : "rgba(29,78,216,0.4)";
 

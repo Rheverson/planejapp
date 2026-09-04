@@ -1,5 +1,5 @@
 import { useIsDark } from "@/design/useTheme";
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/lib/supabase";
 import { escreverVerificando } from "@/lib/escrita";
@@ -7,9 +7,8 @@ import { useAuth } from "@/lib/AuthContext";
 import { useSharedProfile } from "@/lib/SharedProfileContext";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { gastosPorCategoria } from "@/domain/financas";
-import { Plus, X, AlertTriangle, CheckCircle, Edit2 } from "lucide-react";
+import { Plus, X, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
-import { startOfMonth, endOfMonth, parseISO, isWithinInterval } from "date-fns";
 
 const fmt = (v) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
 
@@ -40,7 +39,6 @@ export default function BudgetManager({ transactions, accounts, selectedDate }) 
   const text   = dark ? "#e8edf5" : "#111827";
   const muted  = dark ? "#6b7a96" : "#6b7280";
   const subBg  = dark ? "#12151c" : "#f9fafb";
-  const inputBg= dark ? "#12151c" : "#f9fafb";
 
   // ✅ React Query em vez de useEffect + setState: o card passa a
   // participar do cache e a refletir mudanças feitas em outras telas.

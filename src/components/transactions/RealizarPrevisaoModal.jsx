@@ -1,5 +1,5 @@
 import { useIsDark } from "@/design/useTheme";
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { motion } from "framer-motion";
 import { X, CheckCircle2, SplitSquareHorizontal, Calendar } from "lucide-react";
 import { useFecharModal, CAMADAS } from "@/hooks/useFecharModal";

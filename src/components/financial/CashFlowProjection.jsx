@@ -1,9 +1,8 @@
 import { useIsDark } from "@/design/useTheme";
 import React, { useMemo } from "react";
 import { motion } from "framer-motion";
-import { useEffect, useState } from "react";
 import { TrendingDown, TrendingUp, AlertTriangle, CheckCircle } from "lucide-react";
-import { addDays, format, parseISO, startOfMonth, endOfMonth } from "date-fns";
+import { addDays, format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
 const fmt = (v) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);

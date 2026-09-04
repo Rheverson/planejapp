@@ -16,7 +16,6 @@
         const [code, setCode] = useState(codeFromUrl.toUpperCase());
         const [status, setStatus] = useState("idle"); // idle | loading | valid | error | used | expired
         const [errorMsg, setErrorMsg] = useState("");
-        const [promoData, setPromoData] = useState(null);
 
         // Auto-verifica se veio com código na URL
         useEffect(() => {
@@ -58,7 +57,6 @@
             }
 
             // Código válido — salva e vai para assinatura
-            setPromoData(promo);
             localStorage.setItem("pending_promo_code", codeToCheck.toUpperCase());
             localStorage.setItem("pending_promo_days", String(promo.trial_days));
             setStatus("valid");

@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { ArrowRight, ArrowLeft, Target, TrendingUp, ShieldCheck, Wallet } from "lucide-react";
 
 const goals = [

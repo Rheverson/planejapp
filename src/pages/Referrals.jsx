@@ -4,7 +4,7 @@ import { supabase } from "@/lib/supabase";
 import EstadoErro from "@/components/common/EstadoErro";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { Copy, Share2, Users, Gift, CheckCircle2, Clock, XCircle } from "lucide-react";
+import { Copy, Share2, Users, Gift, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 
 const fmt = (v) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
@@ -46,7 +46,6 @@ export default function Referrals() {
 
   const activeCount = referrals.filter(r => r.status === 'active').length;
   const pendingCount = referrals.filter(r => r.status === 'pending').length;
-  const cancelledCount = referrals.filter(r => r.status === 'cancelled').length;
 
   const discountPercent = useMemo(() => {
     if (activeCount >= 4) return 100;
@@ -72,12 +71,6 @@ export default function Referrals() {
         url: referralLink,
       });
     } else copyLink();
-  };
-
-  const getStatusIcon = (status) => {
-    if (status === 'active') return <CheckCircle2 className="w-4 h-4 text-emerald-500" />;
-    if (status === 'pending') return <Clock className="w-4 h-4 text-amber-500" />;
-    return <XCircle className="w-4 h-4 text-red-400" />;
   };
 
   const getStatusLabel = (status) => {

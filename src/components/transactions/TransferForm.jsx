@@ -1,5 +1,5 @@
 import { useIsDark } from "@/design/useTheme";
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { motion } from "framer-motion";
 import { X, ArrowLeftRight } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -28,7 +28,6 @@ export default function TransferForm({ accounts, onSubmit, onClose }) {
   const muted    = dark ? "#6b7a96" : "#64748b";
   const inputBg  = dark ? "#12151c" : "#f8fafc";
   const inputBrd = dark ? "rgba(255,255,255,0.08)" : "rgba(17,24,39,0.1)";
-  const rowBrd   = dark ? "rgba(255,255,255,0.06)" : "rgba(17,24,39,0.07)";
 
   const inputStyle = {
     width: "100%", height: 40, padding: "0 12px",

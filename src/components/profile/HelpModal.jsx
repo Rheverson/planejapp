@@ -1,6 +1,5 @@
 import { motion } from "framer-motion";
 import { X, MessageCircle, Mail, Book, Video } from "lucide-react";
-import { Button } from "@/components/ui/button";
 
 const helpTopics = [
   { icon: Book,          title: "Como começar",            description: "Aprenda o básico sobre como usar o app",     action: "tutorial" },

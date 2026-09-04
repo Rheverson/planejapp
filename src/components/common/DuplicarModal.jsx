@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { X, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { format, addMonths, startOfMonth } from "date-fns";
@@ -17,7 +17,7 @@ const gerarMeses = () => {
   return meses;
 };
 
-export default function DuplicarModal({ titulo, subtitulo, onConfirm, onClose }) {
+export default function DuplicarModal({ subtitulo, onConfirm, onClose }) {
   const [mesesSelecionados, setMesesSelecionados] = useState([]);
   const meses = gerarMeses();
 

@@ -2,16 +2,14 @@ import { mensagemDeErro } from "@/lib/erros";
 import React, { useState, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
 import EstadoErro from "@/components/common/EstadoErro";
-import { useAuth } from "@/lib/AuthContext";
 import { useSharedProfile } from "@/lib/SharedProfileContext";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, Building2, Wallet, Smartphone, TrendingUp, MoreHorizontal, Trash2, Edit2, X, ArrowUpRight, ArrowDownRight, ArrowLeftRight, CreditCard } from "lucide-react";
+import { Plus, Building2, Wallet, Smartphone, TrendingUp, MoreHorizontal, Trash2, Edit2, X, ArrowUpRight, ArrowDownRight, ArrowLeftRight } from "lucide-react";
 import CreditCardManager from "@/components/financial/CreditCardManager";
 import { toast } from "sonner";
 import { startOfMonth, endOfMonth, isWithinInterval, parseISO, format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { useMonth } from "@/lib/MonthContext";
 
 import AccountForm from "@/components/accounts/AccountForm";
 import EmptyState from "@/components/common/EmptyState";
@@ -169,7 +167,6 @@ function AccountDetailModal({ account, transactions, onClose }) {
 
 // ── Página principal ─────────────────────────────────────────
 export default function Accounts() {
-  const { user } = useAuth();
   const { activeOwnerId, isViewingSharedProfile, sharedPermissions } = useSharedProfile();
   const canManage = !isViewingSharedProfile || sharedPermissions?.add_transactions;
   const queryClient = useQueryClient();

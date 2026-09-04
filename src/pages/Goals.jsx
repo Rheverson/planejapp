@@ -1,6 +1,6 @@
 import { useIsDark } from "@/design/useTheme";
 import { mensagemDeErro } from "@/lib/erros";
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import EstadoErro from "@/components/common/EstadoErro";
 import { escreverVerificando, AVISOS } from "@/lib/escrita";
@@ -9,7 +9,7 @@ import { useSharedProfile } from "@/lib/SharedProfileContext";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { Plus, Target, TrendingUp, TrendingDown, PiggyBank, CheckCircle2 } from "lucide-react";
-import { parseISO, isWithinInterval, isBefore } from "date-fns";
+import { parseISO, isBefore } from "date-fns";
 import { toast } from "sonner";
 
 import GoalForm from "@/components/goals/GoalForm";
@@ -134,7 +134,6 @@ export default function Goals() {
   const cardBg  = dark ? "#0c0e13" : "#ffffff";
   const cardBrd = dark ? "rgba(255,255,255,0.07)" : "rgba(17,24,39,0.05)";
   const shadow  = dark ? "none" : "0 1px 3px rgba(17,24,39,0.04), 0 4px 12px rgba(17,24,39,0.05)";
-  const text    = dark ? "#e8edf5" : "#0f172a";
   const muted   = dark ? "#6b7a96" : "#64748b";
 
   // Seção de metas com label

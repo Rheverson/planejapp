@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { motion } from "framer-motion";
 import { TrendingUp, TrendingDown, Edit2, Trash2, PiggyBank } from "lucide-react";
 import { format, parseISO, differenceInDays } from "date-fns";

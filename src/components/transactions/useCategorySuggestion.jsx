@@ -748,32 +748,6 @@ const defaultPatterns = {
   }
 };
 
-// Mapeia para garantir compatibilidade com categorias do banco
-const categoryAliases = {
-  "alimentação": "alimentação",
-  "moradia": "moradia",
-  "transporte": "transporte",
-  "saúde": "saúde",
-  "educação": "educação",
-  "lazer": "lazer",
-  "streaming": "streaming",
-  "assinaturas": "assinaturas",
-  "telefone": "telefone",
-  "internet": "internet",
-  "compras": "compras",
-  "roupas": "roupas",
-  "beleza": "beleza",
-  "pet": "pet",
-  "presente": "presente",
-  "doação": "doação",
-  "cartão de crédito": "cartão de crédito",
-  "impostos": "impostos",
-  "viagem": "viagem",
-  "restaurante": "restaurante",
-  "energia": "energia",
-  "água": "água",
-};
-
 export function useCategorySuggestion(description, transactionType) {
   const [suggestion, setSuggestion] = useState(null);
   const [confidence, setConfidence] = useState(0);

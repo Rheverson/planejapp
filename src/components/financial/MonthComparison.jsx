@@ -1,27 +1,9 @@
 import { useIsDark } from "@/design/useTheme";
 import React, { useMemo } from "react";
 import { motion } from "framer-motion";
-import { useEffect, useState } from "react";
-import { TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { startOfMonth, endOfMonth, subMonths, parseISO, isWithinInterval } from "date-fns";
-import { ptBR } from "date-fns/locale";
 
 const fmt = (v) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
-const fmtPct = (v) => (v > 0 ? "+" : "") + v.toFixed(0) + "%";
-
-function DiffBadge({ current, prev }) {
-  if (!prev || prev === 0) return null;
-  const diff = ((current - prev) / Math.abs(prev)) * 100;
-  const isExpense = true; // para despesas: subir é ruim
-  const isPositive = diff < 0; // gastou menos = bom para despesa
-  const color = isPositive ? "#22c55e" : "#ef4444";
-  const Icon = diff === 0 ? Minus : diff < 0 ? TrendingDown : TrendingUp;
-  return (
-    <span style={{ fontSize: "0.58rem", fontWeight: 700, color, background: isPositive ? "rgba(34,197,94,0.1)" : "rgba(239,68,68,0.1)", borderRadius: 6, padding: "2px 5px", marginLeft: 4 }}>
-      {fmtPct(diff)}
-    </span>
-  );
-}
 
 export default function MonthComparison({ transactions, accounts, selectedDate }) {
   const dark = useIsDark();
