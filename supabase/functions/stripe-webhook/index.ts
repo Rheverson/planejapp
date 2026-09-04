@@ -3,7 +3,30 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2"
 import { EVENTO, MOTIVO, motivoDaMudanca } from "../_shared/eventos.ts"
 import Stripe from "https://esm.sh/stripe@13.11.0?deno-std=0.177.0"
 
-const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY")!, { apiVersion: "2023-10-16" })
+// ── Um cliente Stripe por modo ──────────────────────────────
+//
+// Havia UM cliente, o de producao, e ele era usado tambem no caminho da
+// indicacao. Como `recalcularDescontoIndicador` buscava a assinatura do
+// indicador SEM filtrar `is_test`, um `invoice.payment_succeeded` de
+// TESTE podia criar cupom real numa assinatura real: perda de receita
+// direta, disparada por um evento que nao custa nada para produzir.
+//
+// E a mesma classe do furo corrigido em 09c2ae5 (evento de teste
+// alcancando assinatura de producao), sobrevivendo neste ramo porque a
+// funcao do desconto nao recebia o modo.
+//
+// Agora o modo escolhe o cliente, e quem nao tem cliente para o proprio
+// modo nao fala com o Stripe.
+const stripeLive = new Stripe(Deno.env.get("STRIPE_SECRET_KEY")!, { apiVersion: "2023-10-16" })
+const chaveDeTeste = Deno.env.get("STRIPE_SECRET_KEY_TEST")
+const stripeTest = chaveDeTeste
+  ? new Stripe(chaveDeTeste, { apiVersion: "2023-10-16" })
+  : null
+
+/** O cliente do modo do evento. `null` em teste sem chave configurada. */
+function clienteDoModo(eTeste: boolean): Stripe | null {
+  return eTeste ? stripeTest : stripeLive
+}
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
@@ -106,7 +129,10 @@ serve(async (req) => {
   let ultimoErro = ""
   for (const [nome, segredo] of segredos) {
     try {
-      event = await stripe.webhooks.constructEventAsync(body, sig, segredo)
+      // Qualquer cliente serve aqui: `constructEventAsync` valida com o
+      // SEGREDO recebido, nao com a chave de API. O modo e decidido
+      // depois, por qual segredo aceitou o evento.
+      event = await stripeLive.webhooks.constructEventAsync(body, sig, segredo)
       modo = nome
       break
     } catch (err) {
@@ -288,7 +314,7 @@ serve(async (req) => {
         .update({ status: "cancelled" })
         .eq("referred_id", sub.user_id)
 
-      await recalcularDescontoIndicador(sub.user_id)
+      await recalcularDescontoIndicador(sub.user_id, eTeste)
 
       // Notifica o usuário que cancelou
       await sendNotification(
@@ -322,7 +348,7 @@ serve(async (req) => {
 
         if (referral) {
           // Recalcula desconto do indicador
-          await recalcularDescontoIndicador(referral.referrer_id)
+          await recalcularDescontoIndicador(referral.referrer_id, eTeste)
 
           // Notifica o indicado que pagou
           await sendNotification(
@@ -332,6 +358,35 @@ serve(async (req) => {
           )
         }
       }
+    }
+  }
+
+  // ── Cobranca recusada ────────────────────────────────────
+  //
+  // O evento ja era ASSINADO no endpoint e nao era TRATADO no codigo: o
+  // `past_due` so chegava ao banco pela via de
+  // `customer.subscription.updated`. Hoje funciona porque o Stripe
+  // costuma mandar os dois; e uma dependencia de comportamento de
+  // terceiro, nao uma garantia — e do outro lado dela esta o banner de
+  // cobranca e a queda para Free.
+  //
+  // Aqui o objeto e uma FATURA, nao uma assinatura: nao traz `status`
+  // nem `current_period_end`. Entao a unica coisa escrita e o
+  // `status`, e so para fatura de assinatura.
+  if (event.type === "invoice.payment_failed") {
+    if (obj.subscription) {
+      const antes = await linhaDoCliente()
+      const planoAntes = antes?.user_id ? await planoAgora(antes.user_id) : null
+
+      // Mesmo `alvo` das demais escritas: mesma linha, mesmo modo,
+      // evento mais novo. Uma falha atrasada nao derruba um pagamento
+      // que ja foi confirmado depois dela.
+      await alvo(supabase.from("subscriptions").update({
+        status: "past_due",
+        ultimo_evento_em: eventoEm,
+      }))
+
+      await registrarMudancaDePlano(antes, planoAntes, false)
     }
   }
 
@@ -375,7 +430,7 @@ serve(async (req) => {
 })
 
 // ── Recalcula desconto do indicador ─────────────────────
-async function recalcularDescontoIndicador(referrerId: string) {
+async function recalcularDescontoIndicador(referrerId: string, eTeste: boolean) {
   const { count } = await supabase
     .from("referrals")
     .select("*", { count: "exact", head: true })
@@ -390,13 +445,30 @@ async function recalcularDescontoIndicador(referrerId: string) {
   else if (activeCount === 2) discountPercent = 50
   else if (activeCount === 1) discountPercent = 25
 
+  // ISOLAMENTO. Duas travas, e cada uma sozinha ja barra o desastre:
+  //
+  //  1. a assinatura do indicador tem de ser do MESMO modo do evento.
+  //     Um invoice de teste procura assinatura de teste; a linha de um
+  //     usuario real (is_test = false) nao aparece, e a funcao retorna.
+  //  2. a chamada ao Stripe usa a chave daquele modo. Mesmo que a
+  //     primeira falhasse, um id de assinatura de teste nao existe na
+  //     conta LIVE e vice-versa.
   const { data: sub } = await supabase
     .from("subscriptions")
     .select("stripe_subscription_id")
     .eq("user_id", referrerId)
-    .single()
+    .eq("is_test", eTeste)
+    .maybeSingle()
 
   if (!sub?.stripe_subscription_id) return
+
+  const stripe = clienteDoModo(eTeste)
+  if (!stripe) {
+    // Modo de teste sem STRIPE_SECRET_KEY_TEST configurada: melhor nao
+    // aplicar desconto nenhum do que aplicar na conta errada.
+    console.warn("desconto nao aplicado: sem chave Stripe para o modo de teste")
+    return
+  }
 
   if (discountPercent === 0) {
     await stripe.subscriptions.update(sub.stripe_subscription_id, { discounts: [] })
