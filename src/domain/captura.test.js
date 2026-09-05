@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   OPERACAO, CONFIANCA, classificarOperacao, extrairParcela,
-  escolherContaDaCaptura, identificarDestinoProprio,
+  escolherContaDaCaptura, identificarDestinoProprio, conciliarCaptura,
   montarLancamentoCapturado,
 } from "./captura";
 import {
@@ -301,5 +301,138 @@ describe("destino próprio", () => {
   it("nome de conta curto demais não casa por acidente", () => {
     const curtas = [CONTA_A, { id: "cX", name: "BB", type: "bank" }];
     expect(identificarDestinoProprio("Pix para Bob", curtas, CONTA_A, NOME).interno).toBe(false);
+  });
+});
+
+// ══ Conciliação · os dois lados de um movimento só ═════════
+describe("conciliação entre os dois bancos", () => {
+  // O caso real: Pix de R$ 1,00 do Itaú para o Nubank gera DUAS
+  // notificações, de dois apps. Sem conciliar, o Nubank é creditado
+  // duas vezes e o mês ganha uma receita que não existiu.
+  const T = new Date("2026-09-05T14:02:00Z").getTime();
+  const emT = (delta) => new Date(T + delta).toISOString();
+
+  const saidaItau = {
+    id: "t1", type: "expense", amount: 1, account_id: "cItau",
+    captura_em: emT(0), captura_chave: "itau|1",
+  };
+  const entradaNubank = {
+    id: "t2", type: "income", amount: 1, account_id: "cNu",
+    captura_em: emT(0), captura_chave: "nu|1",
+  };
+
+  it("a saída chega primeiro: a entrada PROMOVE aquela linha a transferência", () => {
+    // O par revela o que o texto não revelava. "Rheverson" não bate com
+    // nome de conta nenhuma, mas saída de R$ 1 num banco e entrada de
+    // R$ 1 em outro, no mesmo minuto, é evidência muito mais forte.
+    const r = conciliarCaptura(
+      { type: "income", amount: 1, account_id: "cNu" },
+      [saidaItau], T + 30_000,
+    );
+    expect(r.acao).toBe("promover");
+    expect(r.alvo).toBe("t1");
+    expect(r.transfer_account_id).toBe("cNu");
+  });
+
+  it("a entrada chega primeiro: a saída vira transferência e o espelho sai", () => {
+    const r = conciliarCaptura(
+      { type: "expense", amount: 1, account_id: "cItau" },
+      [entradaNubank], T + 30_000,
+    );
+    expect(r.acao).toBe("transferir");
+    expect(r.transfer_account_id).toBe("cNu");
+    expect(r.remover).toBe("t2");
+  });
+
+  it("transferência já registrada: a entrada é descartada", () => {
+    // Aqui o nome casou e a saída já virou transfer. A notificação do
+    // outro banco é o MESMO dinheiro — creditar de novo dobraria.
+    const jaTransferido = {
+      id: "t3", type: "transfer", amount: 1,
+      account_id: "cItau", transfer_account_id: "cNu", captura_em: emT(0),
+    };
+    const r = conciliarCaptura(
+      { type: "income", amount: 1, account_id: "cNu" },
+      [jaTransferido], T + 20_000,
+    );
+    expect(r.acao).toBe("descartar");
+    expect(r.motivo).toBe("espelho_de_transferencia");
+  });
+
+  it("fora da janela NÃO concilia", () => {
+    // Mandar R$ 50 de manhã e receber R$ 50 à tarde são dois fatos
+    // independentes. Casar por dia criaria transferência fantasma.
+    const r = conciliarCaptura(
+      { type: "income", amount: 1, account_id: "cNu" },
+      [saidaItau], T + 40 * 60_000,
+    );
+    expect(r.acao).toBe("gravar");
+  });
+
+  it("valor diferente não concilia", () => {
+    const r = conciliarCaptura(
+      { type: "income", amount: 2, account_id: "cNu" },
+      [saidaItau], T + 30_000,
+    );
+    expect(r.acao).toBe("gravar");
+  });
+
+  it("mesma conta não é transferência", () => {
+    // Receber e gastar o mesmo valor na MESMA conta não é movimentação
+    // interna — são dois fatos.
+    const r = conciliarCaptura(
+      { type: "income", amount: 1, account_id: "cItau" },
+      [saidaItau], T + 30_000,
+    );
+    expect(r.acao).toBe("gravar");
+  });
+
+  it("compra no cartão nunca vira transferência", () => {
+    const compra = {
+      id: "t9", type: "expense", amount: 1, account_id: null,
+      credit_card_id: "k1", captura_em: emT(0),
+    };
+    const r = conciliarCaptura(
+      { type: "income", amount: 1, account_id: "cNu" },
+      [compra], T + 30_000,
+    );
+    expect(r.acao).toBe("gravar");
+  });
+
+  it("sem nada recente, grava normalmente", () => {
+    expect(conciliarCaptura({ type: "expense", amount: 1, account_id: "cItau" }, [], T).acao)
+      .toBe("gravar");
+  });
+});
+
+describe("a conciliação produz o saldo certo", () => {
+  it("um Pix entre bancos move o dinheiro UMA vez", () => {
+    const CONTA_ITAU = { id: "cItau", name: "Itaú", type: "bank", initial_balance: 100 };
+    const CONTA_NU = { id: "cNu", name: "Nubank", type: "bank", initial_balance: 50 };
+    const contas = [CONTA_ITAU, CONTA_NU];
+
+    // O que o sistema grava DEPOIS da conciliação: uma transferência só.
+    const conciliado = [{
+      type: "transfer", amount: 1, date: "2026-09-05", is_realized: true,
+      account_id: "cItau", transfer_account_id: "cNu",
+    }];
+
+    // O que gravaria SEM conciliar: transferência + entrada espelho.
+    const semConciliar = [
+      ...conciliado,
+      { type: "income", amount: 1, date: "2026-09-05", is_realized: true, account_id: "cNu" },
+    ];
+
+    const certo = calcularSaldosPorConta(contas, conciliado);
+    const errado = calcularSaldosPorConta(contas, semConciliar);
+
+    expect(certo.cItau).toBe(99);
+    expect(certo.cNu).toBe(51);
+    // Sem conciliar, o Nubank recebia duas vezes.
+    expect(errado.cNu).toBe(52);
+
+    const k = calcularKPIsMes(conciliado, contas, new Date("2026-09-05T12:00:00"));
+    expect(k.entradas).toBe(0);
+    expect(k.saidas).toBe(0);
   });
 });

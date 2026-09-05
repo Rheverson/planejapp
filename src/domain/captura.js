@@ -1,4 +1,8 @@
-import { calcularMesFatura } from "./financas";
+// Extensão explícita: o Vite resolve sem ela, o Node puro não. Os
+// scripts de QA carregam este módulo direto, sem passar pelo bundler —
+// e é assim que a regra testada é a MESMA que roda no app, em vez de
+// uma cópia no script.
+import { calcularMesFatura } from "./financas.js";
 
 // ============================================================
 // O que uma notificação bancária significa — em termos do domínio.
@@ -352,4 +356,122 @@ function descricaoDe(texto, banco) {
   const aposPreposicao = bruto.match(/(?:para|em|no|na|de)\s+([A-Za-zÀ-ÿ0-9][\wÀ-ÿ\s.&-]{2,40})/);
   const escolhido = (aposPreposicao ? aposPreposicao[1] : bruto).trim();
   return escolhido.slice(0, 60) || banco || "Transação";
+}
+
+// ============================================================
+// Conciliação: os dois lados de um movimento só.
+//
+// Uma transferência entre bancos gera DUAS notificações, de dois apps,
+// para um único movimento:
+//
+//   Itaú    "Pix enviado ... R$ 1,00"          → saída
+//   Nubank  "Transferência recebida ... R$ 1,00" → entrada
+//
+// Sem conciliar, o Nubank é creditado DUAS vezes — uma pela
+// transferência e outra pela entrada — e o mês ganha uma receita que
+// não existiu.
+//
+// E há uma segunda coisa aqui, que vale mais que a primeira: O PAR É O
+// SINAL. A notificação do Itaú sozinha não consegue dizer que é
+// interna — o favorecido é "Rheverson", que não bate com nome de conta
+// nenhuma. Mas saída de R$ 1,00 num banco e entrada de R$ 1,00 em outro,
+// trinta segundos depois, é evidência muito mais forte do que qualquer
+// leitura de texto.
+//
+// Então a conciliação não é só anti-duplicidade: é o melhor detector de
+// transferência interna que existe neste sistema.
+// ============================================================
+
+/** Dois lados do mesmo Pix chegam praticamente juntos. */
+export const JANELA_CONCILIACAO_MS = 5 * 60 * 1000;
+
+const emCentavos = (v) => Math.round(Number(v || 0) * 100);
+
+/**
+ * O que fazer com um lançamento capturado, à luz do que já existe.
+ *
+ * `recentes` são as linhas CAPTURADAS do mesmo usuário dentro da janela
+ * — quem chama já filtrou por índice. Devolve uma das quatro ações:
+ *
+ *   gravar      insere como está
+ *   descartar   é o espelho de algo já contabilizado
+ *   promover    uma linha existente vira a transferência; nada é inserido
+ *   transferir  insere como transferência e remove o espelho
+ */
+export function conciliarCaptura(candidato, recentes, agoraMs) {
+  const nada = { acao: "gravar" };
+  if (!candidato || candidato.type === "transfer") return nada;
+
+  const valor = emCentavos(candidato.amount);
+  if (!valor) return nada;
+
+  const dentroDaJanela = (linha) => {
+    const t = new Date(linha.captura_em).getTime();
+    return Number.isFinite(t) && Math.abs(agoraMs - t) <= JANELA_CONCILIACAO_MS;
+  };
+
+  const candidatas = (recentes || [])
+    .filter((l) => emCentavos(l.amount) === valor)
+    .filter(dentroDaJanela);
+
+  // ── Entrada ──────────────────────────────────────────────
+  if (candidato.type === "income") {
+    // 1. A transferência já foi registrada e já creditou esta conta.
+    //    Esta notificação é o mesmo dinheiro visto pelo outro app.
+    const jaCreditou = candidatas.find(
+      (l) => l.type === "transfer" && l.transfer_account_id === candidato.account_id,
+    );
+    if (jaCreditou) {
+      return { acao: "descartar", motivo: "espelho_de_transferencia", alvo: jaCreditou.id };
+    }
+
+    // 2. Existe uma saída capturada de mesmo valor, em OUTRA conta. É o
+    //    outro lado — e o par revela o que o texto não revelava.
+    const saida = candidatas.find(
+      (l) => l.type === "expense"
+        && l.account_id
+        && l.account_id !== candidato.account_id
+        && !l.credit_card_id,
+    );
+    if (saida) {
+      return {
+        acao: "promover",
+        alvo: saida.id,
+        transfer_account_id: candidato.account_id,
+        motivo: "par_saida_entrada",
+      };
+    }
+    return nada;
+  }
+
+  // ── Saída ────────────────────────────────────────────────
+  if (candidato.type === "expense" && !candidato.credit_card_id) {
+    const entrada = candidatas.find(
+      (l) => l.type === "income"
+        && l.account_id
+        && l.account_id !== candidato.account_id,
+    );
+    if (entrada) {
+      // A entrada chegou primeiro. Este lançamento vira a transferência
+      // completa, e o espelho sai — senão o destino ficaria creditado
+      // duas vezes.
+      return {
+        acao: "transferir",
+        transfer_account_id: entrada.account_id,
+        remover: entrada.id,
+        motivo: "par_entrada_saida",
+      };
+    }
+
+    // Uma transferência já registrada com origem nesta conta e mesmo
+    // valor: esta saída é o espelho dela.
+    const jaDebitou = candidatas.find(
+      (l) => l.type === "transfer" && l.account_id === candidato.account_id,
+    );
+    if (jaDebitou) {
+      return { acao: "descartar", motivo: "espelho_de_transferencia", alvo: jaDebitou.id };
+    }
+  }
+
+  return nada;
 }

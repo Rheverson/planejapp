@@ -4,7 +4,9 @@ import { App as AppNativo } from "@capacitor/app";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthContext";
 import { toast } from "sonner";
-import { montarLancamentoCapturado } from "@/domain/captura";
+import {
+  montarLancamentoCapturado, conciliarCaptura, JANELA_CONCILIACAO_MS,
+} from "@/domain/captura";
 
 // ============================================================
 // O plugin nativo, registrado como o Capacitor 8 exige.
@@ -314,10 +316,72 @@ export function useNotificationListener() {
     }
 
     const { lancamento, operacao } = resultado;
+    const instante = quando.toISOString();
+
+    // ── Os dois lados do mesmo movimento ────────────────────
+    //
+    // Uma transferência entre bancos gera DUAS notificações, de dois
+    // apps. Sem conciliar, o destino é creditado duas vezes e o mês
+    // ganha uma receita que não existiu.
+    //
+    // A consulta é uma janela de 5 minutos sobre o índice PARCIAL
+    // `transactions_captura_janela`, que só contém linhas capturadas —
+    // as manuais ficam de fora. Roda uma vez por notificação, nunca na
+    // abertura do app.
+    const desde = new Date(quando.getTime() - JANELA_CONCILIACAO_MS).toISOString();
+    const ate = new Date(quando.getTime() + JANELA_CONCILIACAO_MS).toISOString();
+    const { data: recentes } = await supabase
+      .from("transactions")
+      .select("id, type, amount, account_id, transfer_account_id, credit_card_id, captura_em")
+      .eq("user_id", user.id)
+      .not("captura_chave", "is", null)
+      .gte("captura_em", desde)
+      .lte("captura_em", ate);
+
+    const conciliacao = conciliarCaptura(lancamento, recentes || [], quando.getTime());
+
+    if (conciliacao.acao === "descartar") {
+      // O mesmo dinheiro já foi contabilizado pelo outro lado.
+      console.log("[captura] espelho descartado:", conciliacao.motivo, conciliacao.alvo);
+      return;
+    }
+
+    if (conciliacao.acao === "promover") {
+      // A saída já estava gravada como despesa. O par com esta entrada
+      // revela que era transferência interna — o que o texto sozinho
+      // não dizia.
+      const { error: erroPromocao } = await supabase.from("transactions")
+        .update({
+          type: "transfer",
+          transfer_account_id: conciliacao.transfer_account_id,
+          category: "transferencia",
+        })
+        .eq("id", conciliacao.alvo)
+        .eq("user_id", user.id);
+
+      if (erroPromocao) {
+        console.error("[captura] falha ao promover para transferência:", erroPromocao.message);
+        toast.error("Não consegui juntar os dois lados da transferência. Confira o lançamento.");
+        return;
+      }
+      console.log("[captura] par saída+entrada virou transferência:", conciliacao.alvo);
+      toast.success("Transferência entre suas contas registrada.");
+      return;
+    }
+
+    const paraGravar = conciliacao.acao === "transferir"
+      ? {
+        ...lancamento,
+        type: "transfer",
+        transfer_account_id: conciliacao.transfer_account_id,
+        category: "transferencia",
+      }
+      : lancamento;
 
     const { error } = await supabase.from("transactions").insert([{
       user_id: user.id,
-      ...lancamento,
+      captura_em: instante,
+      ...paraGravar,
     }]);
 
     if (error) {
@@ -336,6 +400,15 @@ export function useNotificationListener() {
         + "Lance manualmente.",
       );
       return;
+    }
+
+    // A entrada espelho já estava gravada; ela sai agora que a
+    // transferência ocupou o lugar dela. Depois do insert, nunca antes:
+    // se o insert falhasse, apagar aqui perderia o lançamento.
+    if (conciliacao.acao === "transferir" && conciliacao.remover) {
+      await supabase.from("transactions")
+        .delete().eq("id", conciliacao.remover).eq("user_id", user.id);
+      console.log("[captura] espelho removido:", conciliacao.remover);
     }
 
     setLastCapture({ description: lancamento.description, amount: valor, type: lancamento.type });
