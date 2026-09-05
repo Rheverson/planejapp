@@ -1,12 +1,10 @@
 import { useEffect, useState, useCallback } from "react";
 import { Capacitor, registerPlugin } from "@capacitor/core";
 import { App as AppNativo } from "@capacitor/app";
-import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthContext";
 import { toast } from "sonner";
-import {
-  montarLancamentoCapturado, conciliarCaptura, JANELA_CONCILIACAO_MS,
-} from "@/domain/captura";
+import { montarLancamentoCapturado, campoDaEscolha } from "@/domain/captura";
+import { carregarContextoCaptura, gravarCaptura, registrarPendente } from "@/lib/captura";
 
 // ============================================================
 // O plugin nativo, registrado como o Capacitor 8 exige.
@@ -290,125 +288,90 @@ export function useNotificationListener() {
     }
 
     // ── Contexto para o domínio decidir ───────────────────
-    const [{ data: contas }, { data: cartoes }, { data: perfil }] = await Promise.all([
-      supabase.from("accounts").select("id, name, type, is_active").eq("user_id", user.id),
-      supabase.from("credit_cards").select("id, name, closing_day, expense_date_mode, is_active")
-        .eq("user_id", user.id),
-      supabase.from("profiles").select("full_name").eq("id", user.id).maybeSingle(),
-    ]);
+    //
+    // Junto vem a memória de roteamento deste pacote: a resposta que o
+    // usuário já deu uma vez para o empate entre "Nubank" e "Nubank
+    // Jeni". Com ela, o empate não se repete.
+    const ctx = await carregarContextoCaptura(user.id, pacote);
 
     const resultado = montarLancamentoCapturado({
       banco, texto, valor, data, chave,
-      contas: contas || [],
-      cartoes: cartoes || [],
-      nomeUsuario: perfil?.full_name,
+      contas: ctx.contas,
+      cartoes: ctx.cartoes,
+      nomeUsuario: ctx.nomeUsuario,
+      roteamento: ctx.roteamento,
     });
 
+    const emReais = valor.toFixed(2).replace(".", ",");
+
     if (resultado.revisao) {
-      // NÃO cria nada. O motor antigo virava despesa aqui.
+      // NADA entra em `transactions`. O motor antigo virava despesa
+      // aqui; a Fase 7 fez virar um toast — honesto, mas a captura
+      // evaporava e a pessoa tinha que lançar tudo à mão de qualquer
+      // jeito.
+      //
+      // Agora a PERGUNTA fica guardada. Quem responde é quem sabe, uma
+      // vez, e a resposta vira regra.
       const { motivo, detalhe } = resultado.revisao;
-      console.warn("[captura] mandado para revisão:", { motivo, detalhe, banco, valor, texto });
-      toast.info(
-        `Vi ${valor.toFixed(2).replace(".", ",")} no ${banco}, mas não tenho certeza de como lançar. `
-        + "Registre manualmente.",
-      );
-      return;
-    }
+      console.warn("[captura] sem certeza:", { motivo, detalhe, banco, valor });
 
-    const { lancamento, operacao } = resultado;
-    const instante = quando.toISOString();
-
-    // ── Os dois lados do mesmo movimento ────────────────────
-    //
-    // Uma transferência entre bancos gera DUAS notificações, de dois
-    // apps. Sem conciliar, o destino é creditado duas vezes e o mês
-    // ganha uma receita que não existiu.
-    //
-    // A consulta é uma janela de 5 minutos sobre o índice PARCIAL
-    // `transactions_captura_janela`, que só contém linhas capturadas —
-    // as manuais ficam de fora. Roda uma vez por notificação, nunca na
-    // abertura do app.
-    const desde = new Date(quando.getTime() - JANELA_CONCILIACAO_MS).toISOString();
-    const ate = new Date(quando.getTime() + JANELA_CONCILIACAO_MS).toISOString();
-    const { data: recentes } = await supabase
-      .from("transactions")
-      .select("id, type, amount, account_id, transfer_account_id, credit_card_id, captura_em")
-      .eq("user_id", user.id)
-      .not("captura_chave", "is", null)
-      .gte("captura_em", desde)
-      .lte("captura_em", ate);
-
-    const conciliacao = conciliarCaptura(lancamento, recentes || [], quando.getTime());
-
-    if (conciliacao.acao === "descartar") {
-      // O mesmo dinheiro já foi contabilizado pelo outro lado.
-      console.log("[captura] espelho descartado:", conciliacao.motivo, conciliacao.alvo);
-      return;
-    }
-
-    if (conciliacao.acao === "promover") {
-      // A saída já estava gravada como despesa. O par com esta entrada
-      // revela que era transferência interna — o que o texto sozinho
-      // não dizia.
-      const { error: erroPromocao } = await supabase.from("transactions")
-        .update({
-          type: "transfer",
-          transfer_account_id: conciliacao.transfer_account_id,
-          category: "transferencia",
-        })
-        .eq("id", conciliacao.alvo)
-        .eq("user_id", user.id);
-
-      if (erroPromocao) {
-        console.error("[captura] falha ao promover para transferência:", erroPromocao.message);
-        toast.error("Não consegui juntar os dois lados da transferência. Confira o lançamento.");
+      if (!campoDaEscolha(motivo)) {
+        // Não é empate de destino. Nenhuma lista de contas resolve
+        // "não entendi a notificação" — para esses continua valendo o
+        // aviso, sem criar pendência que ninguém consegue responder.
+        toast.info(
+          `Vi ${emReais} no ${banco}, mas não tenho certeza de como lançar. `
+          + "Registre manualmente.",
+        );
         return;
       }
-      console.log("[captura] par saída+entrada virou transferência:", conciliacao.alvo);
+
+      const { erro, repetida } = await registrarPendente({
+        userId: user.id, chave, pacote, banco, texto, valor, data,
+        instanteMs: quando.getTime(), revisao: resultado.revisao,
+      });
+      if (erro) {
+        console.error("[captura] não consegui guardar a pendência:", erro.message);
+        toast.info(`Vi ${emReais} no ${banco}, mas não soube em qual conta lançar.`);
+        return;
+      }
+      if (repetida) return;
+
+      window.dispatchEvent(new CustomEvent("capturaPendente"));
+      toast.info(`Vi ${emReais} no ${banco}. Me diga em qual conta lançar.`);
+      return;
+    }
+
+    const { lancamento } = resultado;
+
+    // Daqui para baixo é o MESMO caminho que a resolução manual usa:
+    // concilia os dois lados e grava. Ver `src/lib/captura.js`.
+    const gravacao = await gravarCaptura({
+      userId: user.id,
+      lancamento,
+      instanteMs: quando.getTime(),
+      roteamento: ctx.roteamento,
+    });
+
+    if (gravacao.erro) {
+      console.error("[captura] banco recusou", {
+        codigo: gravacao.erro.code, mensagem: gravacao.erro.message, valor, banco,
+      });
+      toast.error(`Não consegui registrar ${emReais} do ${banco}. Lance manualmente.`);
+      return;
+    }
+
+    if (gravacao.acao === "repetida" || gravacao.acao === "descartar") {
+      console.log("[captura] já contabilizada:", gravacao.acao, gravacao.motivo || "");
+      return;
+    }
+
+    if (gravacao.acao === "promover") {
+      // A saída já estava gravada como despesa. O par com esta entrada
+      // revelou que era transferência interna — o que o texto sozinho
+      // não dizia.
       toast.success("Transferência entre suas contas registrada.");
       return;
-    }
-
-    const paraGravar = conciliacao.acao === "transferir"
-      ? {
-        ...lancamento,
-        type: "transfer",
-        transfer_account_id: conciliacao.transfer_account_id,
-        category: "transferencia",
-      }
-      : lancamento;
-
-    const { error } = await supabase.from("transactions").insert([{
-      user_id: user.id,
-      captura_em: instante,
-      ...paraGravar,
-    }]);
-
-    if (error) {
-      // 23505 = o índice único barrou: a mesma notificação já virou
-      // lançamento numa sessão anterior. Esperado, não é falha.
-      if (error.code === "23505") {
-        console.log("[captura] já registrada antes, ignorada:", chave.slice(0, 60));
-        return;
-      }
-      console.error("[captura] insert recusado pelo banco", {
-        codigo: error.code, mensagem: error.message, detalhe: error.details,
-        operacao, valor, banco,
-      });
-      toast.error(
-        `Não consegui registrar ${valor.toFixed(2).replace(".", ",")} do ${banco}. `
-        + "Lance manualmente.",
-      );
-      return;
-    }
-
-    // A entrada espelho já estava gravada; ela sai agora que a
-    // transferência ocupou o lugar dela. Depois do insert, nunca antes:
-    // se o insert falhasse, apagar aqui perderia o lançamento.
-    if (conciliacao.acao === "transferir" && conciliacao.remover) {
-      await supabase.from("transactions")
-        .delete().eq("id", conciliacao.remover).eq("user_id", user.id);
-      console.log("[captura] espelho removido:", conciliacao.remover);
     }
 
     setLastCapture({ description: lancamento.description, amount: valor, type: lancamento.type });

@@ -1,8 +1,9 @@
 import { describe, it, expect } from "vitest";
 import {
   OPERACAO, CONFIANCA, classificarOperacao, extrairParcela,
-  escolherContaDaCaptura, identificarDestinoProprio, conciliarCaptura,
-  montarLancamentoCapturado,
+  escolherContaDaCaptura, escolherCartaoDaCaptura, identificarDestinoProprio,
+  conciliarCaptura, montarLancamentoCapturado, campoDaEscolha,
+  ESCOLHAS_MEMORIZAVEIS,
 } from "./captura";
 import {
   calcularSaldosPorConta, calcularKPIsMes, ehCompraNoCartao, ehPagamentoDeFatura,
@@ -62,6 +63,15 @@ describe("a ordem em que as palavras são testadas", () => {
 
   it("“creditado” é entrada, não cartão de crédito", () => {
     expect(classificarOperacao("Valor creditado na sua conta").operacao).toBe(OPERACAO.ENTRADA);
+  });
+
+  it("o feminino conta: “Transferência recebida” é entrada", () => {
+    // É o texto que o Nubank manda de verdade. Com "recebido" na lista
+    // e "recebida" fora dela, a notificação real caía em
+    // `operacao_desconhecida` e ia inteira para revisão.
+    expect(classificarOperacao("Transferência recebida").operacao).toBe(OPERACAO.ENTRADA);
+    expect(classificarOperacao("Transferência enviada").operacao).toBe(OPERACAO.SAIDA);
+    expect(classificarOperacao("Compra estornada").operacao).toBe(OPERACAO.ESTORNO);
   });
 
   it("texto sem padrão nenhum não vira despesa", () => {
@@ -434,5 +444,205 @@ describe("a conciliação produz o saldo certo", () => {
     const k = calcularKPIsMes(conciliado, contas, new Date("2026-09-05T12:00:00"));
     expect(k.entradas).toBe(0);
     expect(k.saidas).toBe(0);
+  });
+});
+
+// ══ O desempate com memória ════════════════════════════════
+//
+// O caso real: o dono tem "Nubank" (dele) e "Nubank Jeni" (da
+// Jeniffer). Uma notificação de `com.nu.production` casa com as duas, o
+// domínio se recusa a chutar — e até aqui isso era um beco sem saída.
+//
+// A regra que o usuário responde uma vez desfaz o empate para sempre. E
+// ela vem ANTES do casamento por nome de propósito: é o único sinal que
+// saiu de alguém que SABE a resposta, e é por ID, então sobrevive a
+// renomear a conta.
+
+const NU_MEU = { id: "nuMeu", name: "Nubank", type: "bank", initial_balance: 100 };
+const NU_JENI = { id: "nuJeni", name: "Nubank Jeni", type: "bank", initial_balance: 200 };
+const ITAU = { id: "itau", name: "Itaú", type: "bank", initial_balance: 300 };
+const DOIS_NUBANK = [NU_MEU, NU_JENI, ITAU];
+
+describe("empate entre contas com o nome do banco", () => {
+  it("sem regra, NÃO escolhe e devolve os dois candidatos", () => {
+    const r = escolherContaDaCaptura(DOIS_NUBANK, "Nubank");
+    expect(r.conta).toBeNull();
+    expect(r.opcoes).toEqual(["nuMeu", "nuJeni"]);
+  });
+
+  it("a regra desfaz o empate", () => {
+    const r = escolherContaDaCaptura(DOIS_NUBANK, "Nubank", "nuJeni");
+    expect(r.conta.id).toBe("nuJeni");
+    expect(r.confianca).toBe(CONFIANCA.ALTA);
+    expect(r.lembrada).toBe(true);
+  });
+
+  it("a regra é por ID: continua certa depois de renomear a conta", () => {
+    // Tirar "Nubank" do nome da própria conta faz o casamento por nome
+    // escolher "Nubank Jeni" sozinho, com confiança alta e errado — o
+    // dinheiro dele indo para a conta dela.
+    const renomeada = [{ ...NU_MEU, name: "Conta principal" }, NU_JENI, ITAU];
+    expect(escolherContaDaCaptura(renomeada, "Nubank").conta?.id).toBe("nuJeni");
+    expect(escolherContaDaCaptura(renomeada, "Nubank", "nuMeu").conta.id).toBe("nuMeu");
+  });
+
+  it("regra apontando para conta apagada não se aplica — a pergunta volta", () => {
+    const r = escolherContaDaCaptura(DOIS_NUBANK, "Nubank", "fantasma");
+    expect(r.conta).toBeNull();
+    expect(r.opcoes).toEqual(["nuMeu", "nuJeni"]);
+  });
+
+  it("regra apontando para conta desativada também não", () => {
+    const contas = [{ ...NU_MEU, is_active: false }, NU_JENI, ITAU];
+    expect(escolherContaDaCaptura(contas, "Nubank", "nuMeu").conta.id).toBe("nuJeni");
+  });
+
+  it("Banco é rótulo de banco desconhecido, não nome de banco", () => {
+    // Sem esta guarda, uma conta "Banco do Brasil" contém "banco" e
+    // seria escolhida com confiança ALTA para qualquer notificação de
+    // pacote não reconhecido.
+    const contas = [{ id: "bb", name: "Banco do Brasil", type: "bank" }, ITAU];
+    const r = escolherContaDaCaptura(contas, "Banco");
+    expect(r.conta).toBeNull();
+    expect(r.opcoes).toEqual(["bb", "itau"]);
+  });
+});
+
+describe("empate entre cartões", () => {
+  // Os cartões reais do app: o texto do banco nunca contém o apelido
+  // que o usuário deu ao cartão aqui dentro.
+  const NU_RHEVE = { id: "kR", name: "Nubank Rheve", closing_day: 13 };
+  const NU_J = { id: "kJ", name: "Nubank Jeni", closing_day: 15 };
+  const ITAU_CARD = { id: "kI", name: "Crédito Itaú Rheverson ", closing_day: 3 };
+  const TRES = [NU_RHEVE, NU_J, ITAU_CARD];
+  const TEXTO = "Compra aprovada no crédito de R$ 50,00 em PADARIA";
+
+  it("o nome do cartão carregando o nome do banco resolve sozinho", () => {
+    const r = escolherCartaoDaCaptura(TRES, TEXTO, "Itau");
+    expect(r.cartao.id).toBe("kI");
+    expect(r.confianca).toBe(CONFIANCA.ALTA);
+  });
+
+  it("dois cartões do mesmo banco empatam, e os candidatos são só eles", () => {
+    const r = escolherCartaoDaCaptura(TRES, TEXTO, "Nubank");
+    expect(r.cartao).toBeNull();
+    expect(r.opcoes).toEqual(["kR", "kJ"]);
+  });
+
+  it("a regra desfaz o empate do cartão", () => {
+    expect(escolherCartaoDaCaptura(TRES, TEXTO, "Nubank", "kR").cartao.id).toBe("kR");
+  });
+
+  it("o texto nomeando o cartão ganha da varredura por banco", () => {
+    const r = escolherCartaoDaCaptura(TRES, "Compra no Nubank Jeni", "Nubank");
+    expect(r.cartao.id).toBe("kJ");
+  });
+});
+
+describe("o roteamento atravessa montarLancamentoCapturado", () => {
+  const montarNu = (texto, roteamento) => montarLancamentoCapturado({
+    banco: "Nubank", texto, valor: 30, data: "2026-09-05", chave: "k|9",
+    contas: DOIS_NUBANK, cartoes: [], nomeUsuario: NOME, roteamento,
+  });
+
+  it("sem regra, a entrada do Nubank vira revisão com as opções", () => {
+    const r = montarNu("Transferência recebida");
+    expect(r.lancamento).toBeUndefined();
+    expect(r.revisao.motivo).toBe("conta_indefinida");
+    expect(r.revisao.opcoes).toEqual(["nuMeu", "nuJeni"]);
+  });
+
+  it("com regra, a mesma notificação vira receita na conta certa", () => {
+    const r = montarNu("Transferência recebida", { conta: "nuMeu" });
+    expect(r.revisao).toBeUndefined();
+    expect(r.lancamento.type).toBe("income");
+    expect(r.lancamento.account_id).toBe("nuMeu");
+  });
+
+  it("a regra de CARTÃO não roteia uma operação de CONTA", () => {
+    // Por isso `tipo_destino` entra na chave da regra: o mesmo pacote
+    // fala dos dois assuntos.
+    const r = montarNu("Transferência recebida", { cartao: "kR" });
+    expect(r.revisao.motivo).toBe("conta_indefinida");
+  });
+
+  it("a regra escolhe a conta e a transferência interna segue funcionando", () => {
+    const r = montarNu("Pix enviado para Itaú", { conta: "nuMeu" });
+    expect(r.lancamento.type).toBe("transfer");
+    expect(r.lancamento.account_id).toBe("nuMeu");
+    expect(r.lancamento.transfer_account_id).toBe("itau");
+  });
+});
+
+describe("destino da transferência interna", () => {
+  it("a escolha do usuário fecha a transferência sem destino", () => {
+    const r = identificarDestinoProprio(
+      "Pix enviado para Rheverson Gois", DOIS_NUBANK, NU_MEU, NOME, "itau",
+    );
+    expect(r.interno).toBe(true);
+    expect(r.destino.id).toBe("itau");
+  });
+
+  it("sem escolha, sabe que é interno mas devolve os candidatos", () => {
+    const r = identificarDestinoProprio(
+      "Pix enviado para Rheverson Gois", DOIS_NUBANK, NU_MEU, NOME,
+    );
+    expect(r.interno).toBe(true);
+    expect(r.destino).toBeNull();
+    expect(r.opcoes).toEqual(["nuJeni", "itau"]);
+  });
+
+  it("destino escolhido NÃO é memorizável — muda a cada Pix", () => {
+    expect(ESCOLHAS_MEMORIZAVEIS.has("conta")).toBe(true);
+    expect(ESCOLHAS_MEMORIZAVEIS.has("cartao")).toBe(true);
+    expect(ESCOLHAS_MEMORIZAVEIS.has("destino")).toBe(false);
+  });
+});
+
+describe("quais empates viram pergunta", () => {
+  it("os três motivos de destino têm campo de resposta", () => {
+    expect(campoDaEscolha("conta_indefinida")).toBe("conta");
+    expect(campoDaEscolha("cartao_indefinido")).toBe("cartao");
+    expect(campoDaEscolha("transferencia_sem_destino")).toBe("destino");
+  });
+
+  it("nao entendi a notificacao NÃO vira pergunta", () => {
+    // Nenhuma lista de contas responde isso. Oferecer uma pergunta sem
+    // resposta possível é pior do que não perguntar.
+    expect(campoDaEscolha("operacao_desconhecida")).toBeNull();
+    expect(campoDaEscolha("valor_invalido")).toBeNull();
+    expect(campoDaEscolha("estorno_em_cartao")).toBeNull();
+  });
+});
+
+describe("o efeito dominó: resolver o empate reencontra o outro lado", () => {
+  // O caso que motivou tudo. O Itaú notifica na hora e vira despesa. O
+  // Nubank notifica trinta segundos depois, empata entre duas contas e
+  // fica esperando. O usuário responde HORAS DEPOIS.
+  //
+  // A conciliação da resposta tem de correr no instante da NOTIFICAÇÃO,
+  // não no de agora — senão a janela de 5 minutos cai num deserto, o
+  // par não é encontrado, e o Nubank é creditado duas vezes.
+  const T = new Date("2026-09-05T14:00:00Z").getTime();
+  const HORAS_DEPOIS = T + 6 * 60 * 60 * 1000;
+
+  const saidaItau = {
+    id: "tx1", type: "expense", amount: 1, account_id: "itau",
+    credit_card_id: null, captura_em: new Date(T).toISOString(),
+  };
+  const entradaNubank = {
+    type: "income", amount: 1, account_id: "nuMeu", date: "2026-09-05",
+  };
+
+  it("no instante da notificação, o par é encontrado e promovido", () => {
+    const d = conciliarCaptura(entradaNubank, [saidaItau], T + 30000);
+    expect(d.acao).toBe("promover");
+    expect(d.alvo).toBe("tx1");
+    expect(d.transfer_account_id).toBe("nuMeu");
+  });
+
+  it("no instante de AGORA, o par se perde e o dinheiro dobraria", () => {
+    const d = conciliarCaptura(entradaNubank, [saidaItau], HORAS_DEPOIS);
+    expect(d.acao).toBe("gravar");
   });
 });

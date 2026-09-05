@@ -19,6 +19,7 @@ import ReferralInviteModal from "@/components/referral/ReferralInviteModal";
 import TransactionItem from "@/components/transactions/TransactionItem";
 import TransactionForm from "@/components/transactions/TransactionForm";
 import { usePaywall } from "@/components/planos/usePaywall";
+import CapturasPendentes from "@/components/captura/CapturasPendentes";
 import { vibrar } from "@/lib/vibrar";
 import TransferForm from "@/components/transactions/TransferForm";
 import MonthSelector from "@/components/common/MonthSelector";
@@ -393,6 +394,12 @@ export default function Home() {
 
       {/* ── CONTEÚDO ──────────────────────────────────────── */}
       <div style={{ padding: "14px 14px 0", display: "flex", flexDirection: "column", gap: 10 }}>
+
+        {/* Capturas que precisam de uma resposta.
+            Fica ANTES dos KPIs de propósito: enquanto ela existe, os
+            números abaixo estão incompletos — tem dinheiro visto e não
+            lançado. Some sozinha quando a caixa esvazia. */}
+        {!isViewingSharedProfile && <CapturasPendentes />}
 
         {/* KPIs */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>

@@ -65,15 +65,28 @@ const contem = (texto, termos) => termos.some((t) => texto.includes(t));
 // A ordem é a regra. O motor antigo perguntava "é despesa?" primeiro, e
 // `EXPENSE_KEYWORDS` continha "pagamento" e "compra". Resultado:
 // "Pagamento recebido" virava despesa, e "Estorno de compra" também.
-const ESTORNO   = ["estorno", "estornado", "reembolso", "devolucao", "devolvido", "cancelamento"];
+// Os termos são RADICAIS, não palavras inteiras, porque o português
+// concorda em gênero e o banco escolhe o gênero pelo substantivo:
+//
+//   "Pix recebido"              masculino
+//   "Transferência recebida"    feminino — e é ESTE o texto que o
+//                               Nubank manda de verdade
+//
+// Com "recebido" na lista e "recebida" fora dela, a notificação real de
+// transferência recebida caía em `operacao_desconhecida` e ia inteira
+// para revisão. O mesmo valia para estornada, devolvida, enviada e
+// debitada.
+const ESTORNO   = ["estorno", "estornad", "reembolso", "devolucao", "devolvid", "cancelamento"];
 const FATURA    = ["fatura", "invoice"];
 const PAGAR     = ["pagamento", "pagou", "pago", "paga "];
-const ENTRADA   = ["recebido", "recebeu", "recebemos", "creditado", "deposito",
-                   "depositado", "entrou", "entrada de"];
-const CREDITO   = ["credito", "cartao", "cartão"];
+const ENTRADA   = ["recebid", "recebeu", "recebemos", "creditad", "deposito",
+                   "depositad", "entrou", "entrada de"];
+// "cartão" não entra: `normalizar` tira o til, então esse termo nunca
+// casaria com nada.
+const CREDITO   = ["credito", "cartao"];
 const DEBITO    = ["debito", "na funcao debito"];
-const SAIDA     = ["enviado", "enviou", "transferencia enviada", "pix enviado",
-                   "compra", "saque", "debitado", "cobranca", "pagamento de"];
+const SAIDA     = ["enviad", "enviou", "compra", "saque", "debitad",
+                   "cobranca", "pagamento de"];
 
 /**
  * O que a notificação diz que aconteceu.
@@ -130,28 +143,76 @@ export function contasElegiveis(contas) {
   return (contas || []).filter((c) => c.is_active !== false && c.type !== "investment");
 }
 
+// ============================================================
+// A memória de roteamento.
+//
+// Quando o nome não desempata — o usuário tem "Nubank" e "Nubank Jeni"
+// —, quem responde é o humano, uma vez. A resposta é guardada por
+// PACOTE do aplicativo (`captura_roteamento`) e chega aqui já resolvida,
+// como um id.
+//
+// Ela vem ANTES do casamento por nome, e isso é deliberado: é o único
+// sinal do sistema que saiu de alguém que SABE a resposta — todo o
+// resto é inferência sobre texto que o banco escreveu. E ela é por ID,
+// então continua certa depois que o usuário renomeia a conta; o
+// casamento por nome, não. Renomear "Nubank" para "Nu" faria a
+// notificação do Nubank casar com "Nubank Jeni" — sozinha, e com
+// confiança alta.
+//
+// A regra nunca decide o que a operação SIGNIFICA. Ela só escolhe entre
+// contas do próprio usuário, então o pior erro possível é o dinheiro
+// certo na conta errada — visível e corrigível.
+// ============================================================
+
+/**
+ * "Banco" é o rótulo de quando NÃO sabemos qual banco é: `bancoDoPacote`
+ * não reconheceu o pacote e o hook cai nesse genérico.
+ *
+ * Ele não pode ser usado para casar nome. Uma conta chamada "Banco do
+ * Brasil" contém "banco", e seria escolhida com confiança ALTA para uma
+ * notificação de origem desconhecida.
+ */
+const BANCO_GENERICO = "banco";
+
+function alvoDoBanco(banco) {
+  const t = normalizar(banco);
+  return t.length >= 3 && t !== BANCO_GENERICO ? t : null;
+}
+
 /**
  * A conta que corresponde ao banco da notificação.
  *
  * ANTES caía na conta mais antiga quando nada casava — em silêncio. Uma
  * compra do Itaú entrava na "Carteira" e ninguém ficava sabendo.
  *
- * Agora só devolve conta quando o nome casa. Uma conta só também vale:
- * não há para onde errar.
+ * Quando não dá para decidir, devolve `opcoes` com os candidatos, para
+ * a tela oferecer os prováveis antes da lista inteira.
  */
-export function escolherContaDaCaptura(contas, banco) {
+export function escolherContaDaCaptura(contas, banco, contaLembrada) {
   const elegiveis = contasElegiveis(contas);
   if (!elegiveis.length) return { conta: null, confianca: CONFIANCA.NENHUMA, motivo: "sem conta cadastrada" };
 
-  if (banco) {
-    const alvo = normalizar(banco);
+  if (contaLembrada) {
+    const lembrada = elegiveis.find((c) => c.id === contaLembrada);
+    // Regra apontando para conta apagada ou desativada simplesmente não
+    // se aplica, e a pergunta volta — que é o certo. Rotear para uma
+    // conta que não existe mais some com o lançamento.
+    if (lembrada) return { conta: lembrada, confianca: CONFIANCA.ALTA, lembrada: true };
+  }
+
+  const alvo = alvoDoBanco(banco);
+  if (alvo) {
     const casadas = elegiveis.filter((c) => {
       const nome = normalizar(c.name);
       return nome.includes(alvo) || alvo.includes(nome);
     });
     if (casadas.length === 1) return { conta: casadas[0], confianca: CONFIANCA.ALTA };
     if (casadas.length > 1) {
-      return { conta: null, confianca: CONFIANCA.NENHUMA, motivo: `${casadas.length} contas com o nome do banco` };
+      return {
+        conta: null, confianca: CONFIANCA.NENHUMA,
+        motivo: `${casadas.length} contas com o nome do banco`,
+        opcoes: casadas.map((c) => c.id),
+      };
     }
   }
 
@@ -161,26 +222,58 @@ export function escolherContaDaCaptura(contas, banco) {
     conta: null,
     confianca: CONFIANCA.NENHUMA,
     motivo: `nenhuma conta com o nome "${banco || "?"}" entre ${elegiveis.length}`,
+    opcoes: elegiveis.map((c) => c.id),
   };
 }
 
-/** Mesmo critério para cartão: casa pelo nome ou é o único. */
-export function escolherCartaoDaCaptura(cartoes, texto, banco) {
+/**
+ * O cartão da compra.
+ *
+ * A regra antiga era uma só: o texto da notificação precisa CONTER o
+ * nome do cartão. Contra os cartões que existem de verdade neste app —
+ * "Nubank Rheve", "Nubank Jeni", "Crédito Itaú Rheverson" — ela não casa
+ * nunca: o banco escreve "compra aprovada no crédito", não o apelido que
+ * o usuário deu ao cartão aqui dentro. Com três cartões cadastrados,
+ * TODA compra no cartão estava indo para revisão.
+ *
+ * Agora vale também o caminho inverso, o mesmo que as contas já usavam:
+ * o nome do cartão pode conter o nome do banco. "Crédito Itaú Rheverson"
+ * contém "itau" e é o único — resolve sozinho. Os dois Nubank continuam
+ * empatados, e é exatamente aí que a memória entra.
+ */
+export function escolherCartaoDaCaptura(cartoes, texto, banco, cartaoLembrado) {
   const ativos = (cartoes || []).filter((c) => c.is_active !== false);
   if (!ativos.length) return { cartao: null, confianca: CONFIANCA.NENHUMA, motivo: "sem cartão cadastrado" };
 
+  if (cartaoLembrado) {
+    const lembrado = ativos.find((c) => c.id === cartaoLembrado);
+    if (lembrado) return { cartao: lembrado, confianca: CONFIANCA.ALTA, lembrada: true };
+  }
+
+  // 1. O texto nomeia o cartão. É o sinal mais forte que existe: ele
+  //    fala DESTA compra, não de todas.
   const t = normalizar(`${texto || ""} ${banco || ""}`);
-  const casados = ativos.filter((c) => {
+  const nomeados = ativos.filter((c) => {
     const nome = normalizar(c.name);
     return nome && t.includes(nome);
   });
-  if (casados.length === 1) return { cartao: casados[0], confianca: CONFIANCA.ALTA };
+  if (nomeados.length === 1) return { cartao: nomeados[0], confianca: CONFIANCA.ALTA };
+
+  // 2. O nome do cartão carrega o nome do banco.
+  const alvo = alvoDoBanco(banco);
+  const doBanco = alvo ? ativos.filter((c) => normalizar(c.name).includes(alvo)) : [];
+  if (doBanco.length === 1) return { cartao: doBanco[0], confianca: CONFIANCA.ALTA };
+
   if (ativos.length === 1) return { cartao: ativos[0], confianca: CONFIANCA.MEDIA };
 
+  const candidatos = doBanco.length || nomeados.length ? [...doBanco, ...nomeados] : ativos;
   return {
     cartao: null,
     confianca: CONFIANCA.NENHUMA,
-    motivo: `${ativos.length} cartões e nenhum identificado na notificação`,
+    motivo: doBanco.length > 1
+      ? `${doBanco.length} cartões com o nome do banco`
+      : `${ativos.length} cartões e nenhum identificado na notificação`,
+    opcoes: [...new Set(candidatos.map((c) => c.id))],
   };
 }
 
@@ -195,10 +288,20 @@ export function escolherCartaoDaCaptura(cartoes, texto, banco) {
  * `interno: true` sem destino: quem chama manda para revisão. Uma
  * transferência sem `transfer_account_id` sumiria com o dinheiro no
  * `calcularSaldosPorConta`.
+ *
+ * `destinoEscolhido` é a resposta do usuário para ESTA notificação, e ao
+ * contrário da conta e do cartão ela NÃO é memorizada: "para qual das
+ * minhas contas eu mandei este Pix" muda a cada Pix. Guardar isso como
+ * regra rotearia todas as transferências futuras para o mesmo lugar.
  */
-export function identificarDestinoProprio(texto, contas, origem, nomeUsuario) {
+export function identificarDestinoProprio(texto, contas, origem, nomeUsuario, destinoEscolhido) {
   const t = normalizar(texto);
   const candidatas = contasElegiveis(contas).filter((c) => c.id !== origem?.id);
+
+  if (destinoEscolhido) {
+    const escolhida = candidatas.find((c) => c.id === destinoEscolhido);
+    if (escolhida) return { interno: true, destino: escolhida };
+  }
 
   const porNome = candidatas.filter((c) => {
     const nome = normalizar(c.name);
@@ -214,20 +317,61 @@ export function identificarDestinoProprio(texto, contas, origem, nomeUsuario) {
 
   if (pareceEuMesmo) {
     if (candidatas.length === 1) return { interno: true, destino: candidatas[0] };
-    return { interno: true, destino: null, motivo: "transferência interna sem destino identificável" };
+    return {
+      interno: true, destino: null,
+      motivo: "transferência interna sem destino identificável",
+      opcoes: (porNome.length ? porNome : candidatas).map((c) => c.id),
+    };
   }
 
   return { interno: false };
 }
 
+// ============================================================
+// Quais empates uma escolha do usuário resolve.
+//
+// Nem toda revisão é uma pergunta respondível. "Não entendi a
+// notificação" e "o valor veio inválido" não viram uma lista de contas
+// para escolher — só entra na caixa de pendentes o que uma escolha de
+// DESTINO resolve. O resto continua como está: nada é criado, e o
+// usuário lança à mão.
+//
+// O valor de cada motivo diz em qual campo a resposta entra, e é o
+// mesmo nome usado em `roteamento`.
+// ============================================================
+export const MOTIVOS_RESOLVIVEIS = {
+  conta_indefinida: "conta",
+  cartao_indefinido: "cartao",
+  transferencia_sem_destino: "destino",
+};
+
+/** Em qual campo do roteamento a escolha do usuário entra — ou null. */
+export function campoDaEscolha(motivo) {
+  return MOTIVOS_RESOLVIVEIS[motivo] || null;
+}
+
+/**
+ * Escolhas que valem para SEMPRE, e viram regra em `captura_roteamento`.
+ *
+ * `destino` fica de fora de propósito: ele responde "para qual conta
+ * minha foi ESTE Pix", que muda a cada Pix.
+ */
+export const ESCOLHAS_MEMORIZAVEIS = new Set(["conta", "cartao"]);
+
 /**
  * Traduz a notificação num lançamento que o domínio entende.
  *
- * Devolve `{ lancamento }` ou `{ revisao: { motivo, detalhe } }`.
+ * Devolve `{ lancamento }` ou `{ revisao: { motivo, detalhe, opcoes } }`.
  * Nunca devolve um palpite.
+ *
+ * `roteamento` é `{ conta, cartao, destino }` — ids já resolvidos por
+ * quem chama, vindos da memória (`captura_roteamento`) ou da resposta
+ * que o usuário acabou de dar na caixa de pendentes. É o MESMO caminho
+ * nos dois casos: resolver uma pendente é rodar esta função de novo,
+ * inteira, com o empate desfeito.
  */
 export function montarLancamentoCapturado({
-  banco, texto, valor, data, chave, contas, cartoes, nomeUsuario,
+  banco, texto, valor, data, chave, contas, cartoes, nomeUsuario, roteamento = {},
 }) {
   if (!(Number(valor) > 0)) {
     return { revisao: { motivo: "valor_invalido", detalhe: String(valor) } };
@@ -250,8 +394,9 @@ export function montarLancamentoCapturado({
 
   // ── Cartão de crédito ───────────────────────────────────
   if (operacao === OPERACAO.COMPRA_CREDITO) {
-    const { cartao, confianca, motivo: porQue } = escolherCartaoDaCaptura(cartoes, texto, banco);
-    if (!cartao) return { revisao: { motivo: "cartao_indefinido", detalhe: porQue } };
+    const { cartao, confianca, motivo: porQue, opcoes } =
+      escolherCartaoDaCaptura(cartoes, texto, banco, roteamento.cartao);
+    if (!cartao) return { revisao: { motivo: "cartao_indefinido", detalhe: porQue, opcoes } };
 
     const parcela = extrairParcela(texto);
     return {
@@ -277,8 +422,9 @@ export function montarLancamentoCapturado({
   }
 
   // Daqui para baixo tudo mexe em conta.
-  const { conta, confianca, motivo: porQue } = escolherContaDaCaptura(contas, banco);
-  if (!conta) return { revisao: { motivo: "conta_indefinida", detalhe: porQue } };
+  const { conta, confianca, motivo: porQue, opcoes } =
+    escolherContaDaCaptura(contas, banco, roteamento.conta);
+  if (!conta) return { revisao: { motivo: "conta_indefinida", detalhe: porQue, opcoes } };
 
   const comum = {
     ...base,
@@ -316,7 +462,7 @@ export function montarLancamentoCapturado({
   // ── Saída: pode ser transferência interna ───────────────
   if (operacao === OPERACAO.SAIDA || operacao === OPERACAO.COMPRA_DEBITO) {
     const destino = operacao === OPERACAO.SAIDA
-      ? identificarDestinoProprio(texto, contas, conta, nomeUsuario)
+      ? identificarDestinoProprio(texto, contas, conta, nomeUsuario, roteamento.destino)
       : { interno: false };
 
     if (destino.interno && destino.destino) {
@@ -337,7 +483,13 @@ export function montarLancamentoCapturado({
     if (destino.interno) {
       // Sabemos que é interno e não para onde. Uma transferência sem
       // destino sumiria com o dinheiro no cálculo do saldo.
-      return { revisao: { motivo: "transferencia_sem_destino", detalhe: destino.motivo } };
+      return {
+        revisao: {
+          motivo: "transferencia_sem_destino",
+          detalhe: destino.motivo,
+          opcoes: destino.opcoes,
+        },
+      };
     }
 
     return {
