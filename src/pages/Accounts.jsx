@@ -487,6 +487,7 @@ export default function Accounts() {
             }
             setEditAccount(null); setShowForm(true);
           }}
+          aria-label="Adicionar conta"
           className="fixed bottom-24 right-5 bg-violet-700 text-white rounded-full shadow-lg shadow-violet-700/30 flex items-center justify-center z-40"
           style={{ width: 52, height: 52 }}
         >

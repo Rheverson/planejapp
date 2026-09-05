@@ -315,6 +315,7 @@ export default function Goals() {
             }
             setEditGoal(null); setShowForm(true);
           }}
+          aria-label="Adicionar meta"
           style={{ position: "fixed", bottom: 88, right: 20, width: 52, height: 52, background: "linear-gradient(135deg,#6d28d9,#4338ca)", border: "none", borderRadius: "50%", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 0 24px rgba(109,40,217,0.5),0 4px 14px rgba(0,0,0,0.25)", zIndex: 40 }}
         >
           <Plus size={21} color="#fff" />

@@ -9,19 +9,24 @@
     <title>Planeje App</title>
 
     <!--
-      As fontes da marca nunca eram carregadas: 'Cabinet Grotesk' aparecia
-      como font-family em 32 arquivos e 'Outfit' nos containers de página,
-      mas não havia nenhum <link> nem @font-face — o app inteiro renderizava
-      na fonte do sistema, com os pesos 800/900 sintetizados pelo navegador.
-      Cabinet Grotesk é da Fontshare (não existe no Google Fonts).
+      As fontes da marca são servidas pelo PRÓPRIO app.
+
+      Vinham de fonts.googleapis.com e api.fontshare.com. No navegador
+      funciona; no APK a primeira pintura acontece na fonte do sistema e,
+      sem rede, a marca nunca aparece — justamente no cenário que este app
+      mais atende: mercado, fila, ônibus.
+
+      Os arquivos ficam em public/fonts e são gerados por
+      scripts/baixar-fontes.mjs. Só o subconjunto latino: 8 arquivos,
+      216 kB.
+
+      O preload é dos dois pesos que aparecem na PRIMEIRA tela — o corpo
+      em Outfit 400 e os números em Cabinet 800. Sem ele o texto pisca na
+      fonte do sistema antes de trocar.
     -->
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link rel="preconnect" href="https://api.fontshare.com" crossorigin />
-    <link rel="stylesheet"
-          href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap" />
-    <link rel="stylesheet"
-          href="https://api.fontshare.com/v2/css?f[]=cabinet-grotesk@700,800,900&display=swap" />
+    <link rel="preload" href="/fonts/outfit-400.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/fonts/cabinet-grotesk-800.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="stylesheet" href="/fonts/fontes.css" />
     <script>
       (function() {
         var params = new URLSearchParams(window.location.search);

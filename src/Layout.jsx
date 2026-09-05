@@ -252,7 +252,8 @@ export default function Layout({ children, currentPageName }) {
             <motion.button
               whileTap={{ scale: 0.92 }} whileHover={{ scale: 1.05 }}
               onClick={() => navigate("/AIInsights")}
-              className={`absolute bottom-6 w-14 h-14 rounded-2xl flex items-center justify-center border-none cursor-pointer ${isAIActive ? "finn-glow-active" : "finn-glow"}`}
+              aria-label="Conversar com o Finn"
+            className={`absolute bottom-6 w-14 h-14 rounded-2xl flex items-center justify-center border-none cursor-pointer ${isAIActive ? "finn-glow-active" : "finn-glow"}`}
               style={{ background: "linear-gradient(135deg, #1d4ed8 0%, #3730a3 60%, #4c1d95 100%)" }}
             >
               {isAIActive && (

@@ -7,8 +7,12 @@ android {
         applicationId "com.planeje.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        // versionCode SOBE a cada build que voce for instalar. O Android
+        // recusa instalar por cima quando o numero nao aumenta — era o
+        // que obrigava a desinstalar (e perder o estado) a cada teste.
+        // versionName e o que aparece para o usuario.
+        versionCode 2
+        versionName "1.1"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
