@@ -379,6 +379,40 @@ export function useNotificationListener() {
     }));
   }, [user]);
 
+  // ── Recolhe o que foi capturado com o app fechado ───────
+  //
+  // O serviço nativo roda mesmo sem o app aberto — que é o caso comum:
+  // a pessoa está no app do banco fazendo o Pix. Quando não há ponte
+  // para o JavaScript, a transação fica guardada em disco pelo Android.
+  // Aqui ela é recolhida e processada como se tivesse chegado ao vivo.
+  //
+  // Roda ao abrir E ao voltar do segundo plano, porque a captura pode
+  // ter acontecido enquanto o app estava minimizado.
+  const recolherPendentes = useCallback(async () => {
+    if (!isAvailable || !user?.id) return;
+    try {
+      const { pendentes } = await NotificationListener.drainPending();
+      if (!Array.isArray(pendentes) || !pendentes.length) return;
+      console.log(`[captura] ${pendentes.length} transação(ões) capturada(s) com o app fechado`);
+      for (const p of pendentes) {
+        await processNotification(p);
+      }
+    } catch (err) {
+      console.warn("[captura] não consegui recolher a fila:", err?.message);
+    }
+  }, [isAvailable, user?.id, processNotification]);
+
+  useEffect(() => { recolherPendentes(); }, [recolherPendentes]);
+
+  useEffect(() => {
+    if (!isAvailable) return;
+    let ouvinte;
+    AppNativo.addListener("appStateChange", ({ isActive }) => {
+      if (isActive) recolherPendentes();
+    }).then((l) => { ouvinte = l; }).catch(() => {});
+    return () => ouvinte?.remove?.();
+  }, [isAvailable, recolherPendentes]);
+
   // Escuta notificações vindas do plugin nativo
   useEffect(() => {
     if (!isAvailable || !permissionGranted) return;

@@ -1,7 +1,9 @@
 package com.planeje.app;
 
 import android.content.ActivityNotFoundException;
+import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.net.Uri;
 import android.provider.Settings;
 import android.text.TextUtils;
@@ -12,6 +14,9 @@ import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
+
+import org.json.JSONArray;
+import org.json.JSONException;
 
 @CapacitorPlugin(name = "NotificationListener")
 public class NotificationPlugin extends Plugin {
@@ -115,11 +120,65 @@ public class NotificationPlugin extends Plugin {
         return false;
     }
 
-    // Chamado pelo BankNotificationService quando detecta transação bancária
-    // Envia o evento para o JavaScript via Capacitor
-    public static void sendNotification(JSObject data) {
-        if (instance != null) {
-            instance.notifyListeners("bankTransaction", data);
+    // ============================================================
+    // Entrega da transacao capturada
+    //
+    // O servico de notificacoes roda mesmo com o app fechado — e e
+    // justamente esse o caso comum: a pessoa esta no app do banco
+    // fazendo o Pix, nao no PlanejeApp.
+    //
+    // Antes, quando `instance` era nula (sem UI aberta), o evento
+    // simplesmente sumia. A captura falhava exatamente quando mais
+    // importava, e sem deixar rastro.
+    //
+    // Agora sao dois caminhos: entrega ao vivo quando ha ponte, e fila
+    // em disco quando nao ha. O app recolhe a fila ao abrir.
+    // ============================================================
+
+    private static final String PREFS = "captura_pendente";
+    private static final String CHAVE = "transacoes";
+
+    /** Devolve false quando nao havia ponte para entregar. */
+    public static boolean sendNotification(JSObject data) {
+        if (instance == null) return false;
+        // `true` = retem o evento ate alguem escutar. A UI pode estar de
+        // pe sem o ouvinte do JS ainda registrado.
+        instance.notifyListeners("bankTransaction", data, true);
+        return true;
+    }
+
+    /** Guarda a transacao para o app recolher na proxima abertura. */
+    public static void guardarPendente(Context ctx, JSObject data) {
+        try {
+            SharedPreferences prefs = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+            JSONArray fila = new JSONArray(prefs.getString(CHAVE, "[]"));
+            // Teto para o caso de o app ficar semanas sem abrir: guardar
+            // sem limite viraria uma fila infinita em disco.
+            if (fila.length() >= 50) return;
+            fila.put(data);
+            prefs.edit().putString(CHAVE, fila.toString()).apply();
+        } catch (JSONException e) {
+            Log.w(TAG_PLUGIN, "nao consegui guardar a transacao: " + e.getMessage());
         }
+    }
+
+    /** O app chama ao abrir: devolve o que ficou guardado e limpa. */
+    @PluginMethod
+    public void drainPending(PluginCall call) {
+        SharedPreferences prefs = getContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        String bruto = prefs.getString(CHAVE, "[]");
+        // Limpa ANTES de responder: se o app cair no meio do
+        // processamento, o pior e perder uma captura — melhor do que
+        // relancar o mesmo gasto na proxima abertura, e de novo, e de
+        // novo.
+        prefs.edit().remove(CHAVE).apply();
+
+        JSObject result = new JSObject();
+        try {
+            result.put("pendentes", new JSONArray(bruto));
+        } catch (JSONException e) {
+            result.put("pendentes", new JSONArray());
+        }
+        call.resolve(result);
     }
 }

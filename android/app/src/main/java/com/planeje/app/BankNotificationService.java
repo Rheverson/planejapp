@@ -16,20 +16,47 @@ public class BankNotificationService extends NotificationListenerService {
 
     private static final String TAG = "BankNotifService";
 
-    // Bancos suportados (package names)
+    // Bancos suportados, casados por PREFIXO.
+    //
+    // Antes a comparacao era `pkg.equals(packageName)` — igualdade
+    // exata — sobre uma lista com varios nomes errados:
+    //
+    //   "br.com.bradesco"          o app e "com.bradesco"
+    //   "br.com.santander.benio"   o atual e "com.santander.app"
+    //   "br.com.meiorapagamentos"  nao existe; o Mercado Pago e
+    //                              "com.mercadopago.wallet"
+    //   "br.gov.caixa.facil"       a CAIXA e "br.com.gabba.Caixa"
+    //
+    // Ou seja: varios bancos NUNCA seriam reconhecidos, e a notificacao
+    // era descartada sem deixar rastro. Prefixo tambem cobre as
+    // variantes que os bancos publicam ("com.itau.iti",
+    // "com.nu.production.debug").
     private static final String[] BANK_PACKAGES = {
-        "com.nu.production",              // Nubank
-        "com.itau",                       // Itaú
-        "br.com.bradesco",               // Bradesco
-        "br.com.bb.android",             // Banco do Brasil
-        "br.com.santander.benio",        // Santander
-        "com.c6bank.app",                // C6 Bank
-        "br.com.intermedium",            // Inter
-        "com.picpay",                    // PicPay
-        "br.com.meiorapagamentos",       // Mercado Pago
-        "br.com.originalbank",           // Original
-        "com.caixa.tem",                 // Caixa Tem
-        "br.gov.caixa.facil",            // Caixa
+        "com.nu",                   // Nubank (com.nu.production)
+        "com.itau",                 // Itau, iti
+        "com.bradesco",             // Bradesco
+        "br.com.bradesco",          // variante antiga
+        "br.com.bb",                // Banco do Brasil
+        "com.santander",            // Santander
+        "br.com.santander",         // variante antiga
+        "com.c6bank",               // C6
+        "br.com.intermedium",       // Inter
+        "com.picpay",               // PicPay
+        "com.mercadopago",          // Mercado Pago
+        "br.com.gabba.Caixa",       // CAIXA
+        "com.caixa",                // Caixa Tem
+        "br.gov.caixa",             // variantes da Caixa
+        "br.com.original",          // Original
+        "com.nubank",               // variante
+        "br.com.willbank",          // Will
+        "com.neon",                 // Neon
+        "br.com.bancopan",          // Pan
+        "com.xp.investimentos",     // XP
+        "br.com.btgpactual",        // BTG
+        "com.paypal.android",       // PayPal
+        "br.com.sicredi",           // Sicredi
+        "com.sicoob",               // Sicoob
+        "br.com.banrisul",          // Banrisul
     };
 
     // Padrões para extrair valor (R$ 50,00 / R$50.00 / 50,00)
@@ -53,6 +80,7 @@ public class BankNotificationService extends NotificationListenerService {
         String packageName = sbn.getPackageName();
 
         if (!isBankNotification(packageName)) return;
+        Log.d(TAG, "notificacao de banco recebida: " + packageName);
 
         Notification notification = sbn.getNotification();
         Bundle extras = notification.extras;
@@ -70,7 +98,12 @@ public class BankNotificationService extends NotificationListenerService {
 
         // Extrai valor
         double value = extractValue(fullText);
-        if (value <= 0) return;
+        if (value <= 0) {
+            // Descarte silencioso era a regra aqui. Sem log, uma
+            // notificacao com formato novo sumia sem deixar pista.
+            Log.w(TAG, "sem valor reconhecido em [" + packageName + "] " + fullText);
+            return;
+        }
 
         // Identifica tipo
         String type = detectType(fullText);
@@ -89,13 +122,25 @@ public class BankNotificationService extends NotificationListenerService {
         data.put("description", description);
         data.put("timestamp", System.currentTimeMillis());
 
-        // Envia para o plugin Capacitor
-        NotificationPlugin.sendNotification(data);
+        // Envia para o plugin Capacitor.
+        //
+        // Se o app nao estiver aberto, `instance` e nula e o evento se
+        // perdia PARA SEMPRE — justamente no caso mais comum: a pessoa
+        // esta no app do banco fazendo o Pix, nao no PlanejeApp. A
+        // captura ia embora exatamente quando mais importava.
+        //
+        // Agora, quando nao ha ponte, a transacao fica guardada e o app
+        // recolhe na proxima vez que abrir.
+        if (!NotificationPlugin.sendNotification(data)) {
+            Log.d(TAG, "app fechado — guardando para a proxima abertura");
+            NotificationPlugin.guardarPendente(this, data);
+        }
     }
 
     private boolean isBankNotification(String packageName) {
+        if (packageName == null) return false;
         for (String pkg : BANK_PACKAGES) {
-            if (pkg.equals(packageName)) return true;
+            if (packageName.startsWith(pkg)) return true;
         }
         return false;
     }
