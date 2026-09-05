@@ -1,7 +1,26 @@
 import { useEffect, useState, useCallback } from "react";
+import { Capacitor, registerPlugin } from "@capacitor/core";
+import { App as AppNativo } from "@capacitor/app";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthContext";
 import { toast } from "sonner";
+
+// ============================================================
+// O plugin nativo, registrado como o Capacitor 8 exige.
+//
+// O hook fazia `const { Plugins } = await import("@capacitor/core")` e
+// lia `Plugins.NotificationListener`. Esse objeto `Plugins` FOI REMOVIDO
+// do Capacitor na versão 3 — o projeto está na 8. Ele era `undefined`,
+// então:
+//
+//   - `isAvailable` nunca virava true, e o banner que pede a permissão
+//     de leitura de notificações NUNCA aparecia na tela;
+//   - `requestPermission()` estourava e o catch engolia;
+//   - o ouvinte jamais era registrado.
+//
+// Era por isso que, mesmo com o serviço nativo compilado e funcionando,
+// o app nunca pedia nada e nunca capturava nada.
+const NotificationListener = registerPlugin("NotificationListener");
 
 // Padrões de extração para bancos brasileiros
 const BANK_PATTERNS = [
@@ -160,38 +179,65 @@ export function useNotificationListener() {
   const [lastCapture, setLastCapture] = useState(null);
   const [isAvailable, setIsAvailable] = useState(false);
 
-  // Verifica se o plugin Capacitor está disponível (só no APK)
+  /** Pergunta ao Android se a permissão está concedida. */
+  const conferirPermissao = useCallback(async () => {
+    try {
+      const { granted } = await NotificationListener.isPermissionGranted();
+      setPermissionGranted(!!granted);
+      return !!granted;
+    } catch {
+      return false;
+    }
+  }, []);
+
+  // O plugin só existe no APK. `registerPlugin` devolve um proxy que
+  // aceita a chamada em qualquer lugar e estoura na hora de executar —
+  // então não basta ele existir: é preciso PERGUNTAR e ver se responde.
   useEffect(() => {
-    const checkAvailability = async () => {
+    const checar = async () => {
+      if (!Capacitor.isNativePlatform() ||
+          !Capacitor.isPluginAvailable("NotificationListener")) {
+        setIsAvailable(false);
+        return;
+      }
       try {
-        const { Plugins } = await import("@capacitor/core");
-        if (Plugins?.NotificationListener) {
-          setIsAvailable(true);
-          const { granted } = await Plugins.NotificationListener.isPermissionGranted();
-          setPermissionGranted(granted);
-        }
-      } catch {
-        // Rodando no browser — plugin não disponível
+        const { granted } = await NotificationListener.isPermissionGranted();
+        setIsAvailable(true);
+        setPermissionGranted(!!granted);
+      } catch (err) {
+        console.warn("[captura] plugin nativo não respondeu:", err?.message);
         setIsAvailable(false);
       }
     };
-    checkAvailability();
+    checar();
   }, []);
 
   // Pede permissão ao usuário
   const requestPermission = useCallback(async () => {
     try {
-      const { Plugins } = await import("@capacitor/core");
-      await Plugins.NotificationListener.requestPermission();
-      // Android abre a tela de configurações — verifica depois
-      setTimeout(async () => {
-        const { granted } = await Plugins.NotificationListener.isPermissionGranted();
-        setPermissionGranted(granted);
-      }, 3000);
+      await NotificationListener.requestPermission();
     } catch (err) {
-      console.error("Erro ao pedir permissão:", err);
+      console.error("[captura] não consegui abrir as configurações:", err?.message);
     }
   }, []);
+
+  // ── Quando o app volta, confere de novo ─────────────────
+  //
+  // `requestPermission` abre a tela de configurações do ANDROID e o app
+  // vai para segundo plano. Antes havia um `setTimeout` de 3 segundos
+  // para reconferir — que é chute: quem leva 10s para achar o PlanejeApp
+  // na lista de "acesso a notificações" voltava com o app achando que a
+  // permissão não foi dada.
+  //
+  // O sinal certo é o app voltar ao primeiro plano.
+  useEffect(() => {
+    if (!isAvailable) return;
+    let ouvinte;
+    AppNativo.addListener("appStateChange", ({ isActive }) => {
+      if (isActive) conferirPermissao();
+    }).then((l) => { ouvinte = l; }).catch(() => {});
+    return () => ouvinte?.remove?.();
+  }, [isAvailable, conferirPermissao]);
 
   // Processa notificação capturada e salva no Supabase
   const processNotification = useCallback(async (notification) => {
@@ -318,13 +364,12 @@ export function useNotificationListener() {
     let cleanup;
     const setup = async () => {
       try {
-        const { Plugins } = await import("@capacitor/core");
         // "bankTransaction" é o nome que `NotificationPlugin.java`
         // emite. O hook escutava "notificationReceived", que o lado
         // nativo nunca dispara — o ouvinte existia e jamais era
         // chamado. Era este o motivo de a captura não funcionar nem
         // depois de a permissão ser concedida.
-        const listener = await Plugins.NotificationListener.addListener(
+        const listener = await NotificationListener.addListener(
           "bankTransaction",
           processNotification
         );

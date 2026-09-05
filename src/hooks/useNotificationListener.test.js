@@ -15,6 +15,22 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // ============================================================
 
 const from = vi.fn();
+// `vi.hoisted` porque `vi.mock` é içado acima das declarações do
+// arquivo: um `const` comum aqui daria "Cannot access before
+// initialization" na hora de montar o mock.
+const { registrarPlugin } = vi.hoisted(() => ({
+  registrarPlugin: vi.fn(() => ({
+    isPermissionGranted: () => Promise.resolve({ granted: false }),
+    requestPermission: () => Promise.resolve({ opened: true }),
+    addListener: () => Promise.resolve({ remove: () => {} }),
+  })),
+}));
+
+vi.mock("@capacitor/core", () => ({
+  registerPlugin: (...a) => registrarPlugin(...a),
+  Capacitor: { isNativePlatform: () => false, isPluginAvailable: () => false },
+}));
+vi.mock("@capacitor/app", () => ({ App: { addListener: () => Promise.resolve({ remove: () => {} }) } }));
 vi.mock("@/lib/supabase", () => ({ supabase: { from: (...a) => from(...a) } }));
 vi.mock("@/lib/AuthContext", () => ({ useAuth: () => ({ user: null }) }));
 vi.mock("sonner", () => ({ toast: { error: vi.fn() } }));
@@ -35,6 +51,21 @@ function comContas(contas, error = null) {
 }
 
 beforeEach(() => from.mockReset());
+
+describe("o plugin é registrado do jeito que o Capacitor 8 exige", () => {
+  it("usa registerPlugin com o nome que o Java anuncia", () => {
+    // O hook lia `Plugins.NotificationListener` — objeto REMOVIDO do
+    // Capacitor na versão 3, e o projeto está na 8. Era `undefined`, e o
+    // resultado é que `isAvailable` nunca virava true: o banner que pede
+    // a permissão de leitura de notificações nunca aparecia, e o ouvinte
+    // nunca era registrado. Uma API que some sem quebrar o build custa
+    // caro justamente por isso.
+    //
+    // "NotificationListener" precisa ser idêntico ao
+    // @CapacitorPlugin(name = ...) de NotificationPlugin.java.
+    expect(registrarPlugin).toHaveBeenCalledWith("NotificationListener");
+  });
+});
 
 describe("a mesma notificação chegando duas vezes", () => {
   // `onNotificationPosted` dispara na postagem E em cada atualização da
