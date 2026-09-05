@@ -113,6 +113,12 @@ public class BankNotificationService extends NotificationListenerService {
 
         // Monta objeto para enviar ao JavaScript
         JSObject data = new JSObject();
+        // A CHAVE do Android. `sbn.getKey()` e estavel entre as
+        // ATUALIZACOES da mesma notificacao (pacote + id + tag +
+        // usuario) — e a atualizacao e justamente o que duplicava:
+        // "Pix processando" e "Pix enviado para Joao" tem textos
+        // diferentes e sao a MESMA operacao.
+        data.put("key", sbn.getKey());
         data.put("bank", getBankName(packageName));
         data.put("package", packageName);
         data.put("title", title);

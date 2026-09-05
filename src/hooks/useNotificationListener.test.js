@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 
 // ============================================================
 // A escolha da conta na captura automática.
@@ -14,7 +14,6 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // percebe. Por isso estes testes.
 // ============================================================
 
-const from = vi.fn();
 // `vi.hoisted` porque `vi.mock` é içado acima das declarações do
 // arquivo: um `const` comum aqui daria "Cannot access before
 // initialization" na hora de montar o mock.
@@ -31,26 +30,13 @@ vi.mock("@capacitor/core", () => ({
   Capacitor: { isNativePlatform: () => false, isPluginAvailable: () => false },
 }));
 vi.mock("@capacitor/app", () => ({ App: { addListener: () => Promise.resolve({ remove: () => {} }) } }));
-vi.mock("@/lib/supabase", () => ({ supabase: { from: (...a) => from(...a) } }));
+vi.mock("@/lib/supabase", () => ({ supabase: { from: () => ({}) } }));
 vi.mock("@/lib/AuthContext", () => ({ useAuth: () => ({ user: null }) }));
 vi.mock("sonner", () => ({ toast: { error: vi.fn() } }));
 
 import {
-  normalizar, bancoDoPacote, escolherConta, jaCapturada, JANELA_REPETICAO,
+  normalizar, bancoDoPacote, jaCapturada, JANELA_REPETICAO, paraDataLocal,
 } from "./useNotificationListener";
-
-/** Simula a cadeia .select().eq().neq().order() do supabase-js. */
-function comContas(contas, error = null) {
-  const cadeia = {
-    select: () => cadeia,
-    eq: () => cadeia,
-    neq: () => cadeia,
-    order: () => Promise.resolve({ data: contas, error }),
-  };
-  from.mockReturnValue(cadeia);
-}
-
-beforeEach(() => from.mockReset());
 
 describe("o plugin é registrado do jeito que o Capacitor 8 exige", () => {
   it("usa registerPlugin com o nome que o Java anuncia", () => {
@@ -119,59 +105,21 @@ describe("acento não pode atrapalhar o casamento", () => {
   });
 });
 
-describe("em qual conta o lançamento entra", () => {
-  it("casa o banco com a conta de mesmo nome", async () => {
-    comContas([
-      { id: "a1", name: "Conta Principal", type: "bank", created_at: "2026-01-01" },
-      { id: "a2", name: "Nubank", type: "bank", created_at: "2026-02-01" },
-    ]);
-    const conta = await escolherConta("u1", "Nubank");
-    expect(conta.id).toBe("a2");
+// A escolha de conta saiu daqui: virou `escolherContaDaCaptura` em
+// `src/domain/captura.js`, com regra MAIS ESTRITA — não cai mais na
+// conta mais antiga em silêncio. Os testes vivem junto da regra, em
+// `captura.test.js`.
+
+describe("a data é a da notificação, não a de hoje", () => {
+  it("usa o fuso do aparelho, não UTC", () => {
+    // `toISOString()` é UTC: um Pix às 22h de sexta em Brasília já é
+    // sábado lá. No fim do mês, jogaria o lançamento para o mês
+    // seguinte — o mesmo erro que já corrigimos no Finn.
+    const sexta22h = new Date(2026, 8, 4, 22, 30);
+    expect(paraDataLocal(sexta22h)).toBe("2026-09-04");
   });
 
-  it("casa mesmo com acento e nome composto", async () => {
-    comContas([
-      { id: "a1", name: "Carteira", type: "wallet", created_at: "2026-01-01" },
-      { id: "a2", name: "Cartão Itaú", type: "bank", created_at: "2026-02-01" },
-    ]);
-    expect((await escolherConta("u1", "Itau")).id).toBe("a2");
-  });
-
-  it("sem nome parecido, cai na conta mais antiga", async () => {
-    // A mais antiga é, na prática, a principal: foi a primeira que a
-    // pessoa cadastrou.
-    comContas([
-      { id: "a1", name: "Carteira", type: "wallet", created_at: "2026-01-01" },
-      { id: "a2", name: "Poupança", type: "bank", created_at: "2026-02-01" },
-    ]);
-    expect((await escolherConta("u1", "Bradesco")).id).toBe("a1");
-  });
-
-  it("banco genérico não força casamento estranho", async () => {
-    comContas([
-      { id: "a1", name: "Carteira", type: "wallet", created_at: "2026-01-01" },
-    ]);
-    expect((await escolherConta("u1", null)).id).toBe("a1");
-  });
-
-  it("conta encerrada não recebe lançamento", async () => {
-    // `is_active` nulo é linha antiga, e nulo é ativa — a mesma regra do
-    // resto do app.
-    comContas([
-      { id: "a1", name: "Nubank", type: "bank", is_active: false, created_at: "2026-01-01" },
-      { id: "a2", name: "Carteira", type: "wallet", is_active: null, created_at: "2026-02-01" },
-    ]);
-    const conta = await escolherConta("u1", "Nubank");
-    expect(conta.id).toBe("a2");
-  });
-
-  it("sem conta nenhuma devolve null, para quem chama avisar", async () => {
-    comContas([]);
-    expect(await escolherConta("u1", "Nubank")).toBe(null);
-  });
-
-  it("erro de leitura devolve null em vez de estourar", async () => {
-    comContas(null, { message: "sem rede" });
-    expect(await escolherConta("u1", "Nubank")).toBe(null);
+  it("data inválida não derruba a captura", () => {
+    expect(paraDataLocal(NaN)).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 });

@@ -4,6 +4,7 @@ import { App as AppNativo } from "@capacitor/app";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthContext";
 import { toast } from "sonner";
+import { montarLancamentoCapturado } from "@/domain/captura";
 
 // ============================================================
 // O plugin nativo, registrado como o Capacitor 8 exige.
@@ -52,14 +53,6 @@ function extractAmount(text) {
   return null;
 }
 
-// Extrai a descrição (quem/onde)
-function extractDescription(title, body) {
-  // Tenta pegar o nome do estabelecimento ou pessoa
-  const full = `${title} ${body}`;
-  const match = full.match(/(?:no|em|para|de)\s+([A-Z][a-zA-Z\s]{2,30})/);
-  return match ? match[1].trim() : title || "Transação automática";
-}
-
 // ============================================================
 // De qual banco veio a notificacao.
 //
@@ -81,6 +74,21 @@ const BANCOS_POR_PACOTE = {
   "com.mercadopago":        "Mercado Pago",
 };
 
+/**
+ * "2026-09-05" no fuso do aparelho.
+ *
+ * `toISOString()` é UTC: um Pix às 22h de sexta em Brasília já é sábado
+ * lá, e o lançamento cairia no dia seguinte — bem no fim do mês, cairia
+ * no mês seguinte. É o mesmo erro que já corrigimos no Finn.
+ */
+export function paraDataLocal(quando) {
+  const d = quando instanceof Date ? quando : new Date(quando);
+  if (Number.isNaN(d.getTime())) return new Date().toISOString().slice(0, 10);
+  const mes = String(d.getMonth() + 1).padStart(2, "0");
+  const dia = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${mes}-${dia}`;
+}
+
 /** Sem acento, minusculo: "Itaú" e "itau" precisam casar. */
 export function normalizar(texto) {
   return String(texto || "")
@@ -94,53 +102,6 @@ export function bancoDoPacote(packageName) {
   const chave = Object.keys(BANCOS_POR_PACOTE)
     .find((pkg) => String(packageName || "").includes(pkg));
   return chave ? BANCOS_POR_PACOTE[chave] : null;
-}
-
-/**
- * Em qual conta o lancamento capturado entra.
- *
- * O banco exige `account_id` ou `credit_card_id` (CHECK
- * `transactions_precisa_de_origem`), e a notificacao nao diz nada sobre
- * conta. Entao:
- *
- *   1. tenta casar o nome do banco com o nome de uma conta do usuario —
- *      quem tem "Nubank" cadastrado recebe ali;
- *   2. senao, cai na conta mais antiga, que na pratica e a principal.
- *
- * Contas de INVESTIMENTO ficam fora dos dois caminhos: um gasto de
- * mercado caindo na caixinha estraga o calculo de aporte, e conta de
- * investimento diz onde o dinheiro esta, nao o que foi feito com ele.
- *
- * Devolve `null` quando o usuario nao tem conta nenhuma — e aí nao ha
- * onde lancar, e quem chama avisa.
- */
-export async function escolherConta(userId, banco) {
-  const { data: contas, error } = await supabase
-    .from("accounts")
-    .select("id, name, type, is_active, created_at")
-    .eq("user_id", userId)
-    .neq("type", "investment")
-    .order("created_at", { ascending: true });
-
-  if (error) {
-    console.error("[captura] nao consegui ler as contas:", error.message);
-    return null;
-  }
-
-  // `is_active` pode ser nulo em linha antiga, e nulo e ativa.
-  const ativas = (contas || []).filter((c) => c.is_active !== false);
-  if (!ativas.length) return null;
-
-  if (banco) {
-    const alvo = normalizar(banco);
-    const porNome = ativas.find((c) => {
-      const nome = normalizar(c.name);
-      return nome.includes(alvo) || alvo.includes(nome);
-    });
-    if (porNome) return porNome;
-  }
-
-  return ativas[0];
 }
 
 // ============================================================
@@ -261,121 +222,125 @@ export function useNotificationListener() {
     return () => ouvinte?.remove?.();
   }, [isAvailable, conferirPermissao]);
 
-  // Processa notificação capturada e salva no Supabase
+  // ============================================================
+  // Da notificação ao lançamento.
+  //
+  // Este hook NÃO decide mais o que a operação significa. Ele reúne o
+  // contexto (contas, cartões, nome do titular), entrega a
+  // `montarLancamentoCapturado` — que fala a língua de `financas.js` —
+  // e grava o que voltar. Quando o domínio diz "não sei", nada é
+  // criado: um gasto inventado é pior do que um gasto que faltou.
+  // ============================================================
   const processNotification = useCallback(async (notification) => {
     if (!user?.id) return;
 
-    // ── O que o plugin nativo REALMENTE manda ───────────────
-    //
-    // `BankNotificationService` envia `package`, `text`, e já vem com
-    // `amount`, `type` e `description` extraídos em Java. Este hook lia
-    // `packageName` e `body` — nomes que não existem no payload — e
-    // reextraía tudo de um texto que nunca recebia.
-    //
-    // Os dois nomes são aceitos para o caso de o lado nativo mudar.
     const {
-      package: pacoteNativo = "",
-      packageName = "",
-      title = "",
-      text = "",
-      body = "",
+      package: pacoteNativo = "", packageName = "",
+      title = "", text = "", body = "",
       amount: valorNativo,
-      type: tipoNativo,
       description: descricaoNativa,
       bank: bancoNativo,
+      key: chaveNativa,
       timestamp,
     } = notification;
 
     const pacote = pacoteNativo || packageName;
-    const texto = text || body;
+    const texto = [title, text || body, descricaoNativa].filter(Boolean).join(" ");
 
-    // Filtra apenas apps bancários. A lista de pacotes agora vive em
-    // BANCOS_POR_PACOTE — antes eram duas listas que podiam divergir.
     const bancoConhecido = bancoDoPacote(pacote);
-    if (!bancoConhecido) {
-      // App desconhecido: só segue se a notificação falar em dinheiro.
-      if (!texto.includes("R$") && !title.includes("R$")) return;
-    }
+    if (!bancoConhecido && !texto.includes("R$")) return;
 
-    // O Java já fez a extração. O regex daqui vira RESERVA, para quando
-    // o nativo não reconhecer o formato — e não o caminho principal,
-    // como era antes.
-    const extraido = extractAmount(`${title} ${texto}`);
+    const extraido = extractAmount(texto);
     const valor = Number(valorNativo) > 0 ? Number(valorNativo) : extraido?.amount;
-    if (!valor || valor <= 0) return;
-    if (valor > 50000) return; // Valor suspeito
-
-    const tipo = tipoNativo === "expense" || tipoNativo === "income"
-      ? tipoNativo
-      : (extraido?.type || "expense");
-
-    const extracted = { amount: valor, type: tipo, bank: extraido?.bank || "Banco" };
-    const description = descricaoNativa || extractDescription(title, texto);
-
-    // ── A mesma notificação, de novo ────────────────────────
-    const assinatura = `${pacote}|${title}|${texto}|${valor}`;
-    if (jaCapturada(assinatura, Number(timestamp) || Date.now())) {
-      console.warn("[captura] notificação repetida ignorada:", assinatura.slice(0, 60));
+    if (!valor || valor <= 0) {
+      console.warn("[captura] sem valor reconhecido:", texto.slice(0, 80));
+      return;
+    }
+    if (valor > 50000) {
+      console.warn("[captura] valor acima do teto, ignorado:", valor);
       return;
     }
 
-    const today = new Date().toISOString().split("T")[0];
+    const banco = bancoConhecido || bancoNativo || "Banco";
 
-    // ── Em qual conta isso entra ────────────────────────────
+    // ── A data é a da NOTIFICAÇÃO, não a de agora ─────────
     //
-    // O banco EXIGE conta ou cartão (CHECK
-    // `transactions_precisa_de_origem`). Este insert não mandava nem um
-    // nem outro: toda captura era rejeitada, e como o código só olhava
-    // o caminho de sucesso, falhava em silêncio — sem lançamento, sem
-    // banner, sem aviso. O usuário nunca soube.
-    const banco = bancoConhecido || bancoNativo || extracted.bank;
-    const conta = await escolherConta(user.id, banco);
+    // Uma captura que ficou na fila é recolhida quando o app abre — que
+    // pode ser dois dias depois. Usar `new Date()` jogaria o Pix de
+    // sexta para o domingo, e o fechamento do mês sairia errado quando
+    // a virada pega no meio.
+    const quando = Number(timestamp) > 0 ? new Date(Number(timestamp)) : new Date();
+    const data = paraDataLocal(quando);
 
-    if (!conta) {
-      console.error("[captura] usuário sem conta ativa; lançamento descartado", {
-        banco, valor: extracted.amount,
-      });
-      toast.error("Cadastre uma conta para o app registrar seus gastos sozinho.");
+    // ── A chave que sobrevive à atualização do texto ──────
+    //
+    // `sbn.getKey()` é o mesmo para todas as ATUALIZAÇÕES da mesma
+    // notificação. O dia entra junto porque o Android reaproveita id
+    // depois que a notificação é dispensada.
+    const chave = `${chaveNativa || `${pacote}|${valor}`}|${data}`;
+
+    // Trava em memória: evita ida ao banco no caso mais comum, que é a
+    // atualização chegar segundos depois. A trava DEFINITIVA é o índice
+    // único `transactions_captura_unica`, que sobrevive a reinício.
+    if (jaCapturada(chave, Number(timestamp) || Date.now())) {
+      console.warn("[captura] repetida, ignorada:", chave.slice(0, 60));
       return;
     }
 
-    // Salva no Supabase
+    // ── Contexto para o domínio decidir ───────────────────
+    const [{ data: contas }, { data: cartoes }, { data: perfil }] = await Promise.all([
+      supabase.from("accounts").select("id, name, type, is_active").eq("user_id", user.id),
+      supabase.from("credit_cards").select("id, name, closing_day, expense_date_mode, is_active")
+        .eq("user_id", user.id),
+      supabase.from("profiles").select("full_name").eq("id", user.id).maybeSingle(),
+    ]);
+
+    const resultado = montarLancamentoCapturado({
+      banco, texto, valor, data, chave,
+      contas: contas || [],
+      cartoes: cartoes || [],
+      nomeUsuario: perfil?.full_name,
+    });
+
+    if (resultado.revisao) {
+      // NÃO cria nada. O motor antigo virava despesa aqui.
+      const { motivo, detalhe } = resultado.revisao;
+      console.warn("[captura] mandado para revisão:", { motivo, detalhe, banco, valor, texto });
+      toast.info(
+        `Vi ${valor.toFixed(2).replace(".", ",")} no ${banco}, mas não tenho certeza de como lançar. `
+        + "Registre manualmente.",
+      );
+      return;
+    }
+
+    const { lancamento, operacao } = resultado;
+
     const { error } = await supabase.from("transactions").insert([{
       user_id: user.id,
-      account_id: conta.id,
-      description,
-      amount: extracted.amount,
-      type: extracted.type,
-      category: extracted.type === "income" ? "salário" : "outros",
-      date: today,
-      is_realized: true,
-      notes: `Capturado automaticamente via ${banco}`,
+      ...lancamento,
     }]);
 
     if (error) {
-      // Falhar calado num app de dinheiro é pior do que falhar. Quem não
-      // sabe que a captura não aconteceu não lança à mão, e o mês fecha
-      // errado.
+      // 23505 = o índice único barrou: a mesma notificação já virou
+      // lançamento numa sessão anterior. Esperado, não é falha.
+      if (error.code === "23505") {
+        console.log("[captura] já registrada antes, ignorada:", chave.slice(0, 60));
+        return;
+      }
       console.error("[captura] insert recusado pelo banco", {
-        codigo: error.code,
-        mensagem: error.message,
-        detalhe: error.details,
-        conta: conta.id,
-        valor: extracted.amount,
-        banco,
+        codigo: error.code, mensagem: error.message, detalhe: error.details,
+        operacao, valor, banco,
       });
       toast.error(
-        `Não consegui registrar ${extracted.type === "income" ? "a entrada" : "o gasto"} `
-        + `de R$ ${extracted.amount.toFixed(2).replace(".", ",")} do ${banco}. `
+        `Não consegui registrar ${valor.toFixed(2).replace(".", ",")} do ${banco}. `
         + "Lance manualmente.",
       );
       return;
     }
 
-    setLastCapture({ description, amount: extracted.amount, type: extracted.type });
-    // Dispara evento para atualizar o Home
+    setLastCapture({ description: lancamento.description, amount: valor, type: lancamento.type });
     window.dispatchEvent(new CustomEvent("transactionCaptured", {
-      detail: { description, amount: extracted.amount, type: extracted.type }
+      detail: { description: lancamento.description, amount: valor, type: lancamento.type },
     }));
   }, [user]);
 
