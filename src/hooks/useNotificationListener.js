@@ -215,9 +215,31 @@ export function useNotificationListener() {
   // Pede permissão ao usuário
   const requestPermission = useCallback(async () => {
     try {
-      await NotificationListener.requestPermission();
+      // O Java agora responde o que REALMENTE aconteceu. Antes ele dizia
+      // `opened: true` sempre — inclusive quando não abria nada — e o
+      // usuário tocava e ficava sem pista nenhuma.
+      const r = await NotificationListener.requestPermission();
+
+      if (r?.alreadyEnabled) {
+        // Já estava ligado e o app é que estava desatualizado.
+        setPermissionGranted(true);
+        toast.success("A captura automática já está ativa.");
+        return;
+      }
+      if (r?.opened === false) {
+        toast.error(
+          "Não consegui abrir as configurações do Android. "
+          + "Vá em Ajustes › Notificações › Acesso a notificações e ligue o PlanejeApp.",
+        );
+        return;
+      }
+      if (r?.via === "app_details") {
+        // Plano B: caiu na tela de detalhes do app, não na lista certa.
+        toast.info("Toque em “Notificações” e ative o acesso do PlanejeApp.");
+      }
     } catch (err) {
-      console.error("[captura] não consegui abrir as configurações:", err?.message);
+      console.error("[captura] falha ao pedir permissão:", err?.message);
+      toast.error("Não consegui abrir as configurações. Tente pelos Ajustes do Android.");
     }
   }, []);
 

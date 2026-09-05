@@ -7,6 +7,7 @@ import PhoneVerificationModal from "@/components/profile/PhoneVerificationModal"
 import { useNotificationListener } from "@/hooks/useNotificationListener";
 import { usePlano } from "@/lib/usePlano";
 import AvisoPagamento from "@/components/planos/AvisoPagamento";
+import ConviteCaptura from "@/components/captura/ConviteCaptura";
 
 const navItems = [
   { name: "Home",       icon: Home,          page: "Home"         },
@@ -32,6 +33,30 @@ export default function Layout({ children, currentPageName }) {
 
   const { showPhoneModal, setShowPhoneModal } = usePhoneVerification();
   const { permissionGranted, requestPermission, isAvailable } = useNotificationListener();
+
+  // ── O convite da captura automática ─────────────────────
+  //
+  // Abre SOZINHO na primeira vez, porque é o momento em que a promessa
+  // do app ("nunca mais digite um gasto") pode ser cumprida. Uma vez só:
+  // quem fechou já respondeu, e reabrir a cada tela ensina a pessoa a
+  // dispensar qualquer coisa que apareça sem ler.
+  //
+  // Depois de dispensado, sobra a faixa fina no topo — que agora abre o
+  // convite, e não dispara a permissão às cegas como antes.
+  const [conviteAberto, setConviteAberto] = useState(false);
+  const podeConvidar = isAvailable && !permissionGranted;
+
+  useEffect(() => {
+    if (!podeConvidar) return;
+    if (localStorage.getItem("convite_captura_visto") === "true") return;
+    const t = setTimeout(() => setConviteAberto(true), 900);
+    return () => clearTimeout(t);
+  }, [podeConvidar]);
+
+  const fecharConvite = () => {
+    localStorage.setItem("convite_captura_visto", "true");
+    setConviteAberto(false);
+  };
 
   const [showCaptureBanner, setShowCaptureBanner] = useState(false);
   const [captureInfo, setCaptureInfo] = useState(null);
@@ -96,7 +121,7 @@ export default function Layout({ children, currentPageName }) {
         {isAvailable && !permissionGranted && (
           <motion.div
             initial={{ y: -60 }} animate={{ y: 0 }} exit={{ y: -60 }}
-            onClick={requestPermission}
+            onClick={() => setConviteAberto(true)}
             style={{
               position: "fixed", top: 0, left: 0, right: 0, zIndex: 100,
               background: "linear-gradient(135deg,#1d4ed8,#3730a3)",
@@ -106,9 +131,19 @@ export default function Layout({ children, currentPageName }) {
             }}>
             <Sparkles size={14} color="#fff" />
             <span style={{ color: "#fff", fontSize: "0.78rem", fontWeight: 600, fontFamily: "'Cabinet Grotesk',sans-serif" }}>
-              ⚡ Toque para ativar captura automática de transações
+              Ativar captura automática de gastos
             </span>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {conviteAberto && (
+          <ConviteCaptura
+            aberto={conviteAberto}
+            onFechar={fecharConvite}
+            onAtivar={() => { fecharConvite(); requestPermission(); }}
+          />
         )}
       </AnimatePresence>
 
