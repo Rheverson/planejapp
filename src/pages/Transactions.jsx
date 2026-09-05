@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { useSearchParams } from "react-router-dom";
 import { useMonth } from "@/lib/MonthContext";
 import RealizarPrevisaoModal from "@/components/transactions/RealizarPrevisaoModal";
+import { vibrar } from "@/lib/vibrar";
 import TransactionItem from "@/components/transactions/TransactionItem";
 import TransactionForm from "@/components/transactions/TransactionForm";
 import MonthSelector from "@/components/common/MonthSelector";
@@ -132,6 +133,7 @@ export default function Transactions() {
       }
     },
     onSuccess: (_, data) => {
+      vibrar.sucesso();
       queryClient.invalidateQueries({ queryKey: ["transactions", activeOwnerId] });
       setShowForm(false);
       toast.success(data?.is_recurring ? "Recorrência criada!" : "Transação criada!");
@@ -175,7 +177,7 @@ export default function Transactions() {
         );
       }
     },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["transactions", activeOwnerId] }); setEditTransaction(null); setShowForm(false); setRecurringModal(null); toast.success("Atualizado!"); },
+    onSuccess: () => { vibrar.sucesso(); queryClient.invalidateQueries({ queryKey: ["transactions", activeOwnerId] }); setEditTransaction(null); setShowForm(false); setRecurringModal(null); toast.success("Atualizado!"); },
     onError: (err) => toast.error(mensagemDeErro(err)),
   });
 
@@ -213,7 +215,7 @@ export default function Transactions() {
         );
       }
     },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["transactions", activeOwnerId] }); setDeleteId(null); setRecurringModal(null); toast.success("Excluído!"); },
+    onSuccess: () => { vibrar.remocao(); queryClient.invalidateQueries({ queryKey: ["transactions", activeOwnerId] }); setDeleteId(null); setRecurringModal(null); toast.success("Excluído!"); },
     onError: (err) => toast.error(mensagemDeErro(err)),
   });
 
@@ -639,7 +641,7 @@ export default function Transactions() {
       {/* FAB */}
       {canAdd && (
         <motion.button whileTap={{ scale: 0.88 }} whileHover={{ scale: 1.06 }}
-          onClick={() => { setEditTransaction(null); setShowForm(true); }}
+          onClick={() => { vibrar.toque(); setEditTransaction(null); setShowForm(true); }}
           aria-label="Adicionar transação"
           style={{ position: "fixed", bottom: 88, right: 20, width: 52, height: 52, background: "linear-gradient(135deg,#1d4ed8,#3730a3)", border: "none", borderRadius: "50%", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 0 24px rgba(29,78,216,0.5),0 4px 14px rgba(0,0,0,0.25)", zIndex: 40 }}>
           <Plus size={21} color="#fff" />

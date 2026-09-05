@@ -22,6 +22,7 @@ import {
 import { calcularProgressoMeta } from "@/domain/financas";
 import { useLimite } from "@/lib/usePlano";
 import { usePaywall, AvisoDeLimite } from "@/components/planos/usePaywall";
+import { vibrar } from "@/lib/vibrar";
 
 export default function Goals() {
   const dark = useIsDark();
@@ -310,9 +311,11 @@ export default function Goals() {
           onClick={() => {
             // Checa antes de abrir o formulário.
             if (!limiteMetas.permitido) {
+              vibrar.aviso();
               paywall.abrir("metas", limiteMetas.atual, limiteMetas.limite);
               return;
             }
+            vibrar.toque();
             setEditGoal(null); setShowForm(true);
           }}
           aria-label="Adicionar meta"

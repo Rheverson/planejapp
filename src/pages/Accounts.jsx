@@ -22,6 +22,7 @@ import { calcularSaldosPorConta, calcularTotaisDeSaldo, contasAtivas, ehContaAti
 import { escreverVerificando, AVISOS } from "@/lib/escrita";
 import { useLimite } from "@/lib/usePlano";
 import { usePaywall, AvisoDeLimite } from "@/components/planos/usePaywall";
+import { vibrar } from "@/lib/vibrar";
 
 const iconMap    = { bank: Building2, wallet: Wallet, digital: Smartphone, investment: TrendingUp, other: MoreHorizontal };
 const typeLabels = { bank: "Conta Bancária", wallet: "Carteira", digital: "Conta Digital", investment: "Investimentos", other: "Outros" };
@@ -482,9 +483,11 @@ export default function Accounts() {
             // Checa antes de abrir: preencher um formulário inteiro
             // para descobrir no fim que não cabia é a pior versão disto.
             if (!limiteContas.permitido) {
+              vibrar.aviso();
               paywall.abrir("contas", limiteContas.atual, limiteContas.limite);
               return;
             }
+            vibrar.toque();
             setEditAccount(null); setShowForm(true);
           }}
           aria-label="Adicionar conta"
